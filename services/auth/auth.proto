@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package auth;
+
+service AuthService {
+  rpc ValidateApiKey(ValidateApiKeyRequest) returns (ValidateApiKeyResponse);
+}
+
+message ValidateApiKeyRequest {
+  string api_key = 1;
+}
+
+message ValidateApiKeyResponse {
+  bool valid = 1;
+  int64 project_id = 2;
+  int64 account_id = 3;
+  string jwt_token = 4;
+  
+  // Rate limiting
+  bool rate_limited = 5;
+  int32 rate_limit_remaining = 6;
+  int32 retry_after = 7;
+}
