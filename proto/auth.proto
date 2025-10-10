@@ -1,0 +1,125 @@
+syntax = "proto3";
+
+package auth;
+
+service AuthService {
+  // Account operations
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+  rpc Login(LoginRequest) returns (LoginResponse);
+  rpc GetAccount(GetAccountRequest) returns (GetAccountResponse);
+  
+  // Project operations
+  rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse);
+  rpc GetProjects(GetProjectsRequest) returns (GetProjectsResponse);
+  
+  // API key operations
+  rpc CreateApiKey(CreateApiKeyRequest) returns (CreateApiKeyResponse);
+  rpc ValidateApiKey(ValidateApiKeyRequest) returns (ValidateApiKeyResponse);
+  rpc RevokeApiKey(RevokeApiKeyRequest) returns (RevokeApiKeyResponse);
+}
+
+// ==================== Account Messages ====================
+
+message RegisterRequest {
+  string email = 1;
+  string password = 2;
+  string plan = 3;
+}
+
+message RegisterResponse {
+  int64 account_id = 1;
+  string email = 2;
+  string plan = 3;
+}
+
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message LoginResponse {
+  int64 account_id = 1;
+  string email = 2;
+  string plan = 3;
+}
+
+message GetAccountRequest {
+  int64 account_id = 1;
+}
+
+message GetAccountResponse {
+  int64 account_id = 1;
+  string email = 2;
+  string plan = 3;
+  string status = 4;
+}
+
+// ==================== Project Messages ====================
+
+message CreateProjectRequest {
+  int64 account_id = 1;
+  string name = 2;
+  string slug = 3;
+  string environment = 4;
+}
+
+message CreateProjectResponse {
+  int64 project_id = 1;
+  string name = 2;
+  string slug = 3;
+  string environment = 4;
+  int32 retention_days = 5;
+  int64 daily_quota = 6;
+}
+
+message GetProjectsRequest {
+  int64 account_id = 1;
+}
+
+message ProjectInfo {
+  int64 project_id = 1;
+  string name = 2;
+  string slug = 3;
+  string environment = 4;
+  int32 retention_days = 5;
+  int64 daily_quota = 6;
+}
+
+message GetProjectsResponse {
+  repeated ProjectInfo projects = 1;
+}
+
+// ==================== API Key Messages ====================
+
+message CreateApiKeyRequest {
+  int64 project_id = 1;
+  string name = 2;
+}
+
+message CreateApiKeyResponse {
+  int64 key_id = 1;
+  string full_key = 2;  // Only returned once!
+  string key_prefix = 3;
+}
+
+message ValidateApiKeyRequest {
+  string api_key = 1;
+}
+
+message ValidateApiKeyResponse {
+  bool valid = 1;
+  int64 project_id = 2;
+  int64 daily_quota = 3;
+  int32 retention_days = 4;
+  int32 rate_limit_per_minute = 5;
+  int32 rate_limit_per_hour = 6;
+  string error_message = 7;
+}
+
+message RevokeApiKeyRequest {
+  int64 key_id = 1;
+}
+
+message RevokeApiKeyResponse {
+  bool success = 1;
+}
