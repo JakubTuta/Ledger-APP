@@ -1,5 +1,5 @@
 import secrets
-from datetime import datetime
+from datetime import datetime, timezone
 
 import auth_service.config as config
 import auth_service.models as models
@@ -36,6 +36,9 @@ class AuthService:
     ) -> models.Account:
         """Register new account."""
 
+        if not self._validate_password(password):
+            raise ValueError("Password does not meet complexity requirements")
+
         result = await session.execute(
             select(models.Account).where(models.Account.email == email)
         )
@@ -66,6 +69,9 @@ class AuthService:
     ) -> models.Account:
         """Verify credentials and return account."""
 
+        if not self._validate_password(password):
+            raise ValueError("Invalid credentials")
+
         result = await session.execute(
             select(models.Account).where(
                 models.Account.email == email, models.Account.status == "active"
@@ -92,6 +98,12 @@ class AuthService:
             select(models.Account).where(models.Account.id == account_id)
         )
         return result.scalar_one_or_none()
+
+    def _validate_password(self, password: str) -> bool:
+        """Validate password strength."""
+        if len(password) < 8 or len(password) > 64:
+            return False
+        return True
 
     # ==================== Projects ====================
 
@@ -216,14 +228,16 @@ class AuthService:
 
         for key_record in api_keys:
             if bcrypt.checkpw(api_key.encode(), key_record.key_hash.encode()):
-                if key_record.expires_at and key_record.expires_at < datetime.utcnow():
+                if key_record.expires_at and key_record.expires_at < datetime.now(
+                    timezone.utc
+                ):
                     return (False, None, {"error": "API key expired"})
 
                 project = await self.get_project_by_id(session, key_record.project_id)
                 if not project:
                     return (False, None, {"error": "Project not found"})
 
-                key_record.last_used_at = datetime.utcnow()
+                key_record.last_used_at = datetime.now(timezone.utc)
                 await session.commit()
 
                 project_info = {
