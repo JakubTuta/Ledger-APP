@@ -10,7 +10,6 @@ class TestApiKeyEndpoints(BaseGrpcTest):
 
     async def test_create_api_key(self):
         """Test creating an API key."""
-
         account = await self.stub.Register(
             auth_pb2.RegisterRequest(
                 email="apikey@example.com", password="password123", plan="free"
@@ -36,11 +35,10 @@ class TestApiKeyEndpoints(BaseGrpcTest):
         assert len(response.full_key) > 40
         assert response.key_prefix == response.full_key[:20]
 
-        print(f"Created API key: {response.full_key[:30]}...")
+        print(f"✅ Created API key: {response.full_key[:30]}...")
 
     async def test_validate_api_key_success(self):
         """Test validating a valid API key."""
-
         account = await self.stub.Register(
             auth_pb2.RegisterRequest(
                 email="validate@example.com", password="password123", plan="pro"
@@ -68,11 +66,10 @@ class TestApiKeyEndpoints(BaseGrpcTest):
         assert response.daily_quota > 0
         assert response.retention_days > 0
 
-        print(f"API key validated for project: {response.project_id}")
+        print(f"✅ API key validated for project: {response.project_id}")
 
     async def test_validate_invalid_api_key(self):
         """Test validating an invalid API key."""
-
         request = auth_pb2.ValidateApiKeyRequest(
             api_key="ak_live_invalid_key_does_not_exist"
         )
@@ -81,11 +78,10 @@ class TestApiKeyEndpoints(BaseGrpcTest):
         assert response.valid is False
         assert "invalid" in response.error_message.lower()
 
-        print(f"Correctly rejected invalid API key")
+        print(f"✅ Correctly rejected invalid API key")
 
     async def test_revoke_api_key(self):
         """Test revoking an API key."""
-
         account = await self.stub.Register(
             auth_pb2.RegisterRequest(
                 email="revoke@example.com", password="password123", plan="free"
@@ -122,5 +118,4 @@ class TestApiKeyEndpoints(BaseGrpcTest):
         )
         assert validate_response.valid is False
 
-        print(f"API key successfully revoked")
-        print(f"API key successfully revoked")
+        print(f"✅ API key successfully revoked")
