@@ -13,6 +13,7 @@ services:
       - "${AUTH_DB_PORT}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./database_schema/init_auth_db.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${AUTH_DB_USER}"]
       interval: 10s
@@ -38,9 +39,16 @@ services:
       retries: 5
     networks:
       - backend
-    command: redis-server --maxmemory 2gb --maxmemory-policy allkeys-lru --appendonly yes --requirepass ${REDIS_PASSWORD}
+    command: >
+      redis-server
+      --maxmemory 2gb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+      --bind 0.0.0.0
+      --protected-mode no
 
-  # ==================== Auth Service ====================
+  # ==================== Auth Service (gRPC) ====================
   auth-service:
     build:
       context: ./services/auth
@@ -48,6 +56,10 @@ services:
     container_name: auth-service
     restart: unless-stopped
     env_file: .env
+    environment:
+      # Override host names for Docker network
+      AUTH_DB_HOST: postgres
+      REDIS_HOST: redis
     depends_on:
       postgres:
         condition: service_healthy
@@ -57,12 +69,65 @@ services:
       - "${AUTH_GRPC_PORT}:50051"
     networks:
       - backend
+    volumes:
+      # Mount for development (hot reload)
+      - ./services/auth/auth_service:/app/auth_service:ro
     command: python -m auth_service.main
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import grpc; channel = grpc.insecure_channel('localhost:50051'); channel.close()",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ==================== Gateway Service (REST) ====================
+  gateway:
+    build:
+      context: ./services/gateway
+      dockerfile: Dockerfile
+    container_name: gateway-service
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Override host names for Docker network
+      REDIS_HOST: redis
+      AUTH_SERVICE_HOST: auth-service
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "${GATEWAY_HTTP_PORT}:8000"
+    networks:
+      - backend
+    volumes:
+      # Mount for development (hot reload)
+      - ./services/gateway/gateway_service:/app/gateway_service:ro
+    command: >
+      uvicorn gateway_service.main:app
+      --host 0.0.0.0
+      --port 8000
+      --workers ${GATEWAY_WORKERS}
+      --log-level info
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 networks:
   backend:
     driver: bridge
+    name: ledger-network
 
 volumes:
   postgres_data:
+    name: ledger-postgres-data
   redis_data:
+    name: ledger-redis-data

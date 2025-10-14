@@ -1,0 +1,72 @@
+﻿Ledger-APP
+|   .env
+|   .env.example
+|   .gitignore
+|   docker-compose.yaml
+|   
++---database_schema
+|       init_auth_db.sql
+|       
++---diagrams
+|       architecture.drawio
+|       database.drawio
+|       workflow.drawio
+|       
++---proto
+|       auth.proto
+|       
++---scripts
+|       Make.ps1
+|       Makefile
+|       
++---services
+|   +---auth
+|   |   |   .dockerignore
+|   |   |   alembic.ini
+|   |   |   Dockerfile
+|   |   |   requirements.txt
+|   |   |               
+|   |   +---alembic
+|   |   |   |   env.py
+|   |   |   |   script.py.mako
+|   |   |   |   
+|   |   |   \---versions
+|   |   |           .gitkeep
+|   |   |           2025_10_10_2303-a2dd1ac4850d_initial_schema.py
+|   |   |           
+|   |   +---auth_service
+|   |   |   |   config.py
+|   |   |   |   database.py
+|   |   |   |   exceptions.py
+|   |   |   |   main.py
+|   |   |   |   models.py
+|   |   |   |   __init__.py
+|   |   |   |   
+|   |   |   +---grpc
+|   |   |   |   |   servicers.py
+|   |   |   |   |   __init__.py
+|   |   |   |           
+|   |   |   +---proto
+|   |   |   |   |   auth_pb2.py
+|   |   |   |   |   auth_pb2.pyi
+|   |   |   |   |   auth_pb2_grpc.py
+|   |   |   |   |   __init__.py
+|   |   |   |           
+|   |   |   +---services
+|   |   |   |   |   auth_service.py
+|   |   |   |   |   __init__.py
+|   |   |   |   
+|   |   |           
+|   |   \---tests
+|   |       |   db_setup.py
+|   |       |   test_api_keys.py
+|   |       |   test_base.py
+|   |       |   test_integration.py
+|   |       |   test_login.py
+|   |       |   test_projects.py
+|   |       |   test_register.py
+|   |       |   __init__.py
+|   |               
+|   \---gateway
+|           main.py
+|           requirements.txt

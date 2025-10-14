@@ -1,0 +1,28 @@
+# Web Framework
+fastapi==0.119.0
+uvicorn[standard]==0.37.0
+
+# gRPC Client
+grpcio==1.75.1
+grpcio-tools==1.75.1
+protobuf==6.32.1
+
+# Redis Client
+redis[hiredis]==6.4.0
+
+# HTTP Client (for health checks, external APIs)
+httpx==0.28.1
+
+# Configuration & Validation
+pydantic==2.12.0
+pydantic-settings==2.11.0
+python-dotenv==1.1.1
+
+# Security
+python-jose[cryptography]==3.5.0
+passlib[bcrypt]==1.7.4
+
+# Testing
+pytest==8.4.2
+pytest-asyncio==1.2.0
+pytest-cov==7.0.0
