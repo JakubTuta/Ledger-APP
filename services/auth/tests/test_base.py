@@ -1,90 +1,55 @@
-import asyncio
+import os
 
 import pytest_asyncio
-from auth_service import database
-from auth_service.config import settings
-from auth_service.grpc.servicers import AuthServicer
-from auth_service.proto import auth_pb2_grpc
-from grpc import aio
-from redis.asyncio import Redis
-
-from .db_setup import (
-    clear_test_database,
-    get_test_db,
-    setup_test_database,
-    teardown_test_database,
-)
-
-
-def pytest_configure(config):
-    """Called before any tests run."""
-    asyncio.run(setup_test_database())
-
-
-def pytest_unconfigure(config):
-    """Called after all tests complete."""
-    asyncio.run(teardown_test_database())
+import auth_service.database as database
+import auth_service.config as config
+import auth_service.grpc.servicers as servicers
+import auth_service.proto.auth_pb2_grpc as auth_pb2_grpc
+import grpc.aio as grpc_aio
+import redis.asyncio as redis_async
 
 
 class BaseGrpcTest:
-    """Base class for gRPC endpoint tests."""
-
     @pytest_asyncio.fixture(autouse=True)
-    async def setup_method(self):
-        """Setup before each test."""
-        self.test_db_manager = await get_test_db()
+    async def setup_method(self, test_db_manager):
+        self.test_db_manager = test_db_manager
 
-        await clear_test_database()
+        test_redis_host = os.getenv("TEST_REDIS_HOST", "localhost")
+        redis_password = config.settings.REDIS_PASSWORD
+        redis_db = config.settings.REDIS_DB
 
-        self.db_session = await self.test_db_manager.get_session()
+        if redis_password:
+            test_redis_url = f"redis://:{redis_password}@{test_redis_host}:{config.settings.REDIS_PORT}/{redis_db}"
+        else:
+            test_redis_url = f"redis://{test_redis_host}:{config.settings.REDIS_PORT}/{redis_db}"
 
-        self.redis = Redis.from_url(settings.REDIS_URL, decode_responses=False)
-        try:
-            await self.redis.flushdb()
-        except:
-            pass
+        self.redis = redis_async.Redis.from_url(test_redis_url, decode_responses=False)
+        await self.redis.flushdb()
 
         database._session_factory = self.test_db_manager.session_factory
         database._engine = self.test_db_manager.engine
 
-        self.server = aio.server()
+        self.server = grpc_aio.server()
         auth_pb2_grpc.add_AuthServiceServicer_to_server(
-            AuthServicer(self.redis), self.server
+            servicers.AuthServicer(self.redis), self.server
         )
         port = self.server.add_insecure_port("localhost:0")
         await self.server.start()
 
-        self.channel = aio.insecure_channel(f"localhost:{port}")
+        self.channel = grpc_aio.insecure_channel(f"localhost:{port}")
         self.stub = auth_pb2_grpc.AuthServiceStub(self.channel)
 
         yield
 
         try:
-            if hasattr(self, "stub"):
-                del self.stub
-        except:
+            await self.channel.close()
+        except Exception:
             pass
-
         try:
-            if hasattr(self, "channel"):
-                await self.channel.close()
-        except:
+            await self.server.stop(0)
+        except Exception:
             pass
-
         try:
-            if hasattr(self, "server"):
-                await self.server.stop(0)
-        except:
-            pass
-
-        try:
-            if hasattr(self, "db_session"):
-                await self.db_session.close()
-        except:
-            pass
-
-        try:
-            if hasattr(self, "redis"):
-                await self.redis.aclose()
-        except:
+            await self.redis.aclose()
+        except Exception:
             pass

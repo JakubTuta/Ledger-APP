@@ -5,3 +5,5 @@ diagrams/*.png
 project_overview/
 .vscode/
 .pytest_cache/
+CLAUDE.md
+.claude/

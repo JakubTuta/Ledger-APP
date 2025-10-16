@@ -32,6 +32,7 @@ class AuthService:
         session: AsyncSession,
         email: str,
         password: str,
+        name: str,
         plan: str = "free",
     ) -> models.Account:
         """Register new account."""
@@ -52,6 +53,7 @@ class AuthService:
         account = models.Account(
             email=email,
             password_hash=password_hash,
+            name=name,
             plan=plan,
             status="active",
         )
@@ -214,10 +216,12 @@ class AuthService:
                 int(cached[b"project_id"]),
                 {
                     "project_id": int(cached[b"project_id"]),
+                    "account_id": int(cached.get(b"account_id", 0)),
                     "daily_quota": int(cached[b"daily_quota"]),
                     "retention_days": int(cached[b"retention_days"]),
                     "rate_limit_per_minute": int(cached[b"rate_limit_per_minute"]),
                     "rate_limit_per_hour": int(cached[b"rate_limit_per_hour"]),
+                    "current_usage": int(cached.get(b"current_usage", 0)),
                 },
             )
 
@@ -242,10 +246,12 @@ class AuthService:
 
                 project_info = {
                     "project_id": project.id,
+                    "account_id": project.account_id,
                     "daily_quota": project.daily_quota,
                     "retention_days": project.retention_days,
                     "rate_limit_per_minute": key_record.rate_limit_per_minute,
                     "rate_limit_per_hour": key_record.rate_limit_per_hour,
+                    "current_usage": 0,  # TODO: Get from daily_usage table
                 }
 
                 await self.redis.hset(cache_key, mapping=project_info)

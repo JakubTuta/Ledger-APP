@@ -17,14 +17,16 @@ class RegisterRequest(_message.Message):
     def __init__(self, email: _Optional[str] = ..., password: _Optional[str] = ..., plan: _Optional[str] = ...) -> None: ...
 
 class RegisterResponse(_message.Message):
-    __slots__ = ("account_id", "email", "plan")
+    __slots__ = ("account_id", "email", "plan", "name")
     ACCOUNT_ID_FIELD_NUMBER: _ClassVar[int]
     EMAIL_FIELD_NUMBER: _ClassVar[int]
     PLAN_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
     account_id: int
     email: str
     plan: str
-    def __init__(self, account_id: _Optional[int] = ..., email: _Optional[str] = ..., plan: _Optional[str] = ...) -> None: ...
+    name: str
+    def __init__(self, account_id: _Optional[int] = ..., email: _Optional[str] = ..., plan: _Optional[str] = ..., name: _Optional[str] = ...) -> None: ...
 
 class LoginRequest(_message.Message):
     __slots__ = ("email", "password")
@@ -35,14 +37,16 @@ class LoginRequest(_message.Message):
     def __init__(self, email: _Optional[str] = ..., password: _Optional[str] = ...) -> None: ...
 
 class LoginResponse(_message.Message):
-    __slots__ = ("account_id", "email", "plan")
+    __slots__ = ("account_id", "email", "plan", "access_token")
     ACCOUNT_ID_FIELD_NUMBER: _ClassVar[int]
     EMAIL_FIELD_NUMBER: _ClassVar[int]
     PLAN_FIELD_NUMBER: _ClassVar[int]
+    ACCESS_TOKEN_FIELD_NUMBER: _ClassVar[int]
     account_id: int
     email: str
     plan: str
-    def __init__(self, account_id: _Optional[int] = ..., email: _Optional[str] = ..., plan: _Optional[str] = ...) -> None: ...
+    access_token: str
+    def __init__(self, account_id: _Optional[int] = ..., email: _Optional[str] = ..., plan: _Optional[str] = ..., access_token: _Optional[str] = ...) -> None: ...
 
 class GetAccountRequest(_message.Message):
     __slots__ = ("account_id",)
@@ -51,16 +55,20 @@ class GetAccountRequest(_message.Message):
     def __init__(self, account_id: _Optional[int] = ...) -> None: ...
 
 class GetAccountResponse(_message.Message):
-    __slots__ = ("account_id", "email", "plan", "status")
+    __slots__ = ("account_id", "email", "plan", "status", "name", "created_at")
     ACCOUNT_ID_FIELD_NUMBER: _ClassVar[int]
     EMAIL_FIELD_NUMBER: _ClassVar[int]
     PLAN_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    CREATED_AT_FIELD_NUMBER: _ClassVar[int]
     account_id: int
     email: str
     plan: str
     status: str
-    def __init__(self, account_id: _Optional[int] = ..., email: _Optional[str] = ..., plan: _Optional[str] = ..., status: _Optional[str] = ...) -> None: ...
+    name: str
+    created_at: str
+    def __init__(self, account_id: _Optional[int] = ..., email: _Optional[str] = ..., plan: _Optional[str] = ..., status: _Optional[str] = ..., name: _Optional[str] = ..., created_at: _Optional[str] = ...) -> None: ...
 
 class CreateProjectRequest(_message.Message):
     __slots__ = ("account_id", "name", "slug", "environment")
@@ -143,22 +151,26 @@ class ValidateApiKeyRequest(_message.Message):
     def __init__(self, api_key: _Optional[str] = ...) -> None: ...
 
 class ValidateApiKeyResponse(_message.Message):
-    __slots__ = ("valid", "project_id", "daily_quota", "retention_days", "rate_limit_per_minute", "rate_limit_per_hour", "error_message")
+    __slots__ = ("valid", "project_id", "account_id", "daily_quota", "retention_days", "rate_limit_per_minute", "rate_limit_per_hour", "current_usage", "error_message")
     VALID_FIELD_NUMBER: _ClassVar[int]
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    ACCOUNT_ID_FIELD_NUMBER: _ClassVar[int]
     DAILY_QUOTA_FIELD_NUMBER: _ClassVar[int]
     RETENTION_DAYS_FIELD_NUMBER: _ClassVar[int]
     RATE_LIMIT_PER_MINUTE_FIELD_NUMBER: _ClassVar[int]
     RATE_LIMIT_PER_HOUR_FIELD_NUMBER: _ClassVar[int]
+    CURRENT_USAGE_FIELD_NUMBER: _ClassVar[int]
     ERROR_MESSAGE_FIELD_NUMBER: _ClassVar[int]
     valid: bool
     project_id: int
+    account_id: int
     daily_quota: int
     retention_days: int
     rate_limit_per_minute: int
     rate_limit_per_hour: int
+    current_usage: int
     error_message: str
-    def __init__(self, valid: bool = ..., project_id: _Optional[int] = ..., daily_quota: _Optional[int] = ..., retention_days: _Optional[int] = ..., rate_limit_per_minute: _Optional[int] = ..., rate_limit_per_hour: _Optional[int] = ..., error_message: _Optional[str] = ...) -> None: ...
+    def __init__(self, valid: bool = ..., project_id: _Optional[int] = ..., account_id: _Optional[int] = ..., daily_quota: _Optional[int] = ..., retention_days: _Optional[int] = ..., rate_limit_per_minute: _Optional[int] = ..., rate_limit_per_hour: _Optional[int] = ..., current_usage: _Optional[int] = ..., error_message: _Optional[str] = ...) -> None: ...
 
 class RevokeApiKeyRequest(_message.Message):
     __slots__ = ("key_id",)

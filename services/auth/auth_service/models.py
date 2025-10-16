@@ -33,6 +33,7 @@ class Account(database.Base):
         VARCHAR(255), unique=True, nullable=False, index=True
     )
     password_hash: Mapped[str] = mapped_column(CHAR(60), nullable=False)
+    name: Mapped[str] = mapped_column(VARCHAR(255), nullable=False)
 
     plan: Mapped[str] = mapped_column(VARCHAR(20), default="free", nullable=False)
     status: Mapped[str] = mapped_column(VARCHAR(20), default="active", nullable=False)

@@ -6,6 +6,7 @@ CREATE TABLE accounts (
     id BIGSERIAL PRIMARY KEY,
     email VARCHAR(255) NOT NULL,
     password_hash CHAR(60) NOT NULL,
+    name VARCHAR(255) NOT NULL,
     plan VARCHAR(20) DEFAULT 'free',
     status VARCHAR(20) DEFAULT 'active',
     created_at TIMESTAMPTZ DEFAULT NOW(),

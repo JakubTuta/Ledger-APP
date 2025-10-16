@@ -1,61 +1,59 @@
 import asyncio
+import os
 
-from auth_service.config import settings
-from auth_service.database import Base
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+import auth_service.config as config
+import auth_service.database as database
+import sqlalchemy
+import sqlalchemy.ext.asyncio as sa_async
+import sqlalchemy.pool as sa_pool
 
+TEST_DB_HOST = os.getenv("TEST_DB_HOST", "localhost")
+TEST_DB_NAME = "test_auth_db"
 TEST_DB_URL = (
-    f"postgresql+asyncpg://{settings.AUTH_DB_USER}:{settings.AUTH_DB_PASSWORD}"
-    f"@{settings.AUTH_DB_HOST}:{settings.AUTH_DB_PORT}/test_auth_db"
+    f"postgresql+asyncpg://{config.settings.AUTH_DB_USER}:{config.settings.AUTH_DB_PASSWORD}"
+    f"@{TEST_DB_HOST}:{config.settings.AUTH_DB_PORT}/{TEST_DB_NAME}"
 )
 
 
 class TestDatabase:
-    """Simple test database manager."""
-
     def __init__(self):
         self.engine = None
         self.session_factory = None
 
     async def create_engine(self):
-        """Create database engine."""
-        self.engine = create_async_engine(TEST_DB_URL, echo=False)
-        self.session_factory = async_sessionmaker(
-            self.engine, class_=AsyncSession, expire_on_commit=False
+        self.engine = sa_async.create_async_engine(
+            TEST_DB_URL,
+            echo=False,
+            poolclass=sa_pool.NullPool,
+            connect_args={"server_settings": {"application_name": "auth_test"}},
+        )
+        self.session_factory = sa_async.async_sessionmaker(
+            self.engine,
+            class_=sa_async.AsyncSession,
+            expire_on_commit=False,
         )
 
     async def create_tables(self):
-        """Create all tables."""
         async with self.engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+            await conn.run_sync(database.Base.metadata.create_all)
         print("Tables created")
 
     async def drop_tables(self):
-        """Drop all tables."""
         async with self.engine.begin() as conn:
-            await conn.run_sync(Base.metadata.drop_all)
+            await conn.run_sync(database.Base.metadata.drop_all)
         print("Tables dropped")
 
     async def clear_tables(self):
-        """Clear all data from tables."""
-        await self.engine.dispose()
-
+        if not self.engine:
+            return
         async with self.engine.begin() as conn:
-            await conn.execute(text("SET session_replication_role = 'replica';"))
-
-            for table in reversed(Base.metadata.sorted_tables):
-                await conn.execute(table.delete())
-
-            await conn.execute(text("SET session_replication_role = 'origin';"))
-        print("Tables cleared")
-
-    async def get_session(self) -> AsyncSession:
-        """Get a new database session."""
-        return self.session_factory()
+            table_names = [t.name for t in reversed(database.Base.metadata.sorted_tables)]
+            if table_names:
+                await conn.execute(
+                    sqlalchemy.text(f"TRUNCATE TABLE {', '.join(table_names)} RESTART IDENTITY CASCADE")
+                )
 
     async def close(self):
-        """Close engine."""
         if self.engine:
             await self.engine.dispose()
 
@@ -64,7 +62,6 @@ _test_db = None
 
 
 async def get_test_db():
-    """Get or create test database instance."""
     global _test_db
     if _test_db is None:
         _test_db = TestDatabase()
@@ -73,13 +70,11 @@ async def get_test_db():
 
 
 async def setup_test_database():
-    """Setup test database (run once before all tests)."""
     db = await get_test_db()
     await db.create_tables()
 
 
 async def teardown_test_database():
-    """Teardown test database (run once after all tests)."""
     global _test_db
     if _test_db:
         await _test_db.drop_tables()
@@ -88,23 +83,18 @@ async def teardown_test_database():
 
 
 async def clear_test_database():
-    """Clear test database (run before each test)."""
     db = await get_test_db()
     await db.clear_tables()
 
 
 if __name__ == "__main__":
-
     async def test():
         print("Creating tables...")
         await setup_test_database()
-
         print("Clearing tables...")
         await clear_test_database()
-
         print("Dropping tables...")
         await teardown_test_database()
-
         print("Database setup works!")
 
     asyncio.run(test())

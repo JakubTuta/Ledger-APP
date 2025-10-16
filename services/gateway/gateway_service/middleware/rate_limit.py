@@ -55,8 +55,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
             return response
 
-        except HTTPException:
-            raise
+        except HTTPException as exc:
+            from starlette.responses import JSONResponse
+
+            return JSONResponse(
+                status_code=exc.status_code,
+                content={"detail": exc.detail},
+                headers=getattr(exc, "headers", None),
+            )
         except Exception as e:
             logger.error(f"Rate limit middleware error: {e}", exc_info=True)
             return await call_next(request)

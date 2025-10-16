@@ -29,11 +29,9 @@ class RedisClient:
                 encoding="utf-8",
                 decode_responses=self.decode_responses,
                 max_connections=self.max_connections,
-                # Socket settings for performance
                 socket_timeout=config.settings.REDIS_TIMEOUT,
                 socket_connect_timeout=config.settings.REDIS_TIMEOUT,
                 socket_keepalive=True,
-                # Retry logic
                 retry_on_timeout=True,
                 health_check_interval=30,
             )

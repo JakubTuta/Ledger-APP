@@ -25,7 +25,13 @@ class RegisterRequest(pydantic.BaseModel):
     @pydantic.field_validator("email")
     @classmethod
     def validate_email(cls, v: str) -> str:
-        if "@" not in v or "." not in v.split("@")[1]:
+        import re
+
+        pattern = r"^[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]@[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]\.[a-zA-Z]{2,}$"
+
+        if ".." in v:
+            raise ValueError("Invalid email format: consecutive dots not allowed")
+        if not re.match(pattern, v):
             raise ValueError("Invalid email format")
 
         return v.lower()

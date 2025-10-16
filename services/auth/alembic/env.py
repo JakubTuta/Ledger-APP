@@ -3,7 +3,6 @@ from logging.config import fileConfig
 
 import auth_service.config as auth_service_config
 import auth_service.database as database
-import auth_service.models  # noqa: F401 - Import models to register them with SQLAlchemy
 from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
@@ -16,7 +15,6 @@ if config.config_file_name is not None:
 
 target_metadata = database.Base.metadata
 
-# Set database URL from environment
 config.set_main_option("sqlalchemy.url", auth_service_config.settings.AUTH_DATABASE_URL)
 
 

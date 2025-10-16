@@ -61,14 +61,22 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
             return await call_next(request)
 
-        except fastapi.HTTPException:
-            raise
+        except fastapi.HTTPException as exc:
+            from starlette.responses import JSONResponse
+
+            return JSONResponse(
+                status_code=exc.status_code,
+                content={"detail": exc.detail},
+                headers=getattr(exc, "headers", None),
+            )
 
         except Exception as e:
             logger.error(f"Auth middleware error: {e}", exc_info=True)
-            raise fastapi.HTTPException(
+            from starlette.responses import JSONResponse
+
+            return JSONResponse(
                 status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Authentication service error",
+                content={"detail": "Authentication service error"},
             )
 
     def _is_public_path(self, path: str) -> bool:

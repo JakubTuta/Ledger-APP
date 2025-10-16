@@ -25,6 +25,7 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     session=session,
                     email=request.email,
                     password=request.password,
+                    name=request.email.split("@")[0],
                     plan=request.plan or "free",
                 )
 
@@ -32,6 +33,7 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     account_id=account.id,
                     email=account.email,
                     plan=account.plan,
+                    name=account.name,
                 )
 
         except ValueError as e:
@@ -58,10 +60,13 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     password=request.password,
                 )
 
+                access_token = f"token_{account.id}_{account.email}"
+
                 return auth_pb2.LoginResponse(
                     account_id=account.id,
                     email=account.email,
                     plan=account.plan,
+                    access_token=access_token,
                 )
 
         except ValueError as e:
@@ -97,6 +102,8 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     email=account.email,
                     plan=account.plan,
                     status=account.status,
+                    name=account.name,
+                    created_at=account.created_at.isoformat(),
                 )
 
         except Exception as e:
@@ -226,10 +233,12 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                 return auth_pb2.ValidateApiKeyResponse(
                     valid=True,
                     project_id=project_id,
+                    account_id=info.get("account_id", 0),
                     daily_quota=info["daily_quota"],
                     retention_days=info["retention_days"],
                     rate_limit_per_minute=info["rate_limit_per_minute"],
                     rate_limit_per_hour=info["rate_limit_per_hour"],
+                    current_usage=info.get("current_usage", 0),
                 )
 
         except Exception as e:

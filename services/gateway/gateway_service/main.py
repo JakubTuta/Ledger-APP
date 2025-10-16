@@ -62,6 +62,8 @@ gateway_app = GatewayApp()
 @contextlib.asynccontextmanager
 async def lifespan(app: fastapi.FastAPI) -> typing.AsyncIterator[None]:
     await gateway_app.startup()
+    app.state.grpc_pool = gateway_app.grpc_pool
+    app.state.redis_client = gateway_app.redis_client
     yield
     await gateway_app.shutdown()
 
@@ -98,6 +100,13 @@ async def deep_health_check():
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
+    if isinstance(exc, fastapi.HTTPException):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail},
+            headers=getattr(exc, "headers", None),
+        )
+
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
     return JSONResponse(
         status_code=500, content={"error": "Internal server error", "detail": str(exc)}

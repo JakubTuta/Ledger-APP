@@ -30,6 +30,7 @@ message RegisterResponse {
   int64 account_id = 1;
   string email = 2;
   string plan = 3;
+  string name = 4;
 }
 
 message LoginRequest {
@@ -41,6 +42,7 @@ message LoginResponse {
   int64 account_id = 1;
   string email = 2;
   string plan = 3;
+  string access_token = 4;
 }
 
 message GetAccountRequest {
@@ -52,6 +54,8 @@ message GetAccountResponse {
   string email = 2;
   string plan = 3;
   string status = 4;
+  string name = 5;
+  string created_at = 6;
 }
 
 // ==================== Project Messages ====================
@@ -109,11 +113,13 @@ message ValidateApiKeyRequest {
 message ValidateApiKeyResponse {
   bool valid = 1;
   int64 project_id = 2;
-  int64 daily_quota = 3;
-  int32 retention_days = 4;
-  int32 rate_limit_per_minute = 5;
-  int32 rate_limit_per_hour = 6;
-  string error_message = 7;
+  int64 account_id = 3;
+  int64 daily_quota = 4;
+  int32 retention_days = 5;
+  int32 rate_limit_per_minute = 6;
+  int32 rate_limit_per_hour = 7;
+  int64 current_usage = 8;
+  string error_message = 9;
 }
 
 message RevokeApiKeyRequest {
