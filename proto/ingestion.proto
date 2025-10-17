@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+package ingestion;
+
+// ==================== Log Ingestion Service ====================
+
+service IngestionService {
+    // Ingest a single log entry
+    rpc IngestLog(IngestLogRequest) returns (IngestLogResponse);
+
+    // Ingest a batch of log entries
+    rpc IngestLogBatch(IngestLogBatchRequest) returns (IngestLogBatchResponse);
+
+    // Get queue depth for a project
+    rpc GetQueueDepth(QueueDepthRequest) returns (QueueDepthResponse);
+}
+
+// ==================== Messages ====================
+
+message LogEntry {
+    // Temporal data
+    string timestamp = 1;  // ISO 8601 format
+
+    // Log classification
+    string level = 2;  // debug, info, warning, error, critical
+    string log_type = 3;  // console, logger, exception, network, database, custom
+    string importance = 4;  // critical, high, standard, low
+
+    // Content
+    optional string message = 5;
+    optional string error_type = 6;
+    optional string error_message = 7;
+    optional string stack_trace = 8;
+
+    // Metadata
+    optional string environment = 9;
+    optional string release = 10;
+    optional string sdk_version = 11;
+    optional string platform = 12;
+    optional string platform_version = 13;
+
+    // Custom attributes (JSON string)
+    optional string attributes = 14;
+}
+
+message IngestLogRequest {
+    int64 project_id = 1;
+    LogEntry log = 2;
+}
+
+message IngestLogResponse {
+    bool success = 1;
+    string message = 2;
+    optional string error = 3;
+}
+
+message IngestLogBatchRequest {
+    int64 project_id = 1;
+    repeated LogEntry logs = 2;
+}
+
+message IngestLogBatchResponse {
+    bool success = 1;
+    int32 queued = 2;
+    int32 failed = 3;
+    optional string error = 4;
+}
+
+message QueueDepthRequest {
+    int64 project_id = 1;
+}
+
+message QueueDepthResponse {
+    int64 depth = 1;
+}

@@ -7,7 +7,7 @@ import gateway_service.config as config
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from gateway_service.middleware import auth, circuit_breaker, rate_limit
-from gateway_service.routes import api_key_routes, auth_routes, project_routes
+from gateway_service.routes import api_key_routes, auth_routes, ingestion_routes, project_routes
 from gateway_service.services import grpc_pool, redis_client
 
 logging.basicConfig(
@@ -37,6 +37,12 @@ class GatewayApp:
         await self.grpc_pool.add_service(
             service_name="auth",
             address=config.settings.AUTH_SERVICE_URL,
+            pool_size=10,
+        )
+
+        await self.grpc_pool.add_service(
+            service_name="ingestion",
+            address=config.settings.INGESTION_SERVICE_URL,
             pool_size=10,
         )
 
@@ -147,6 +153,7 @@ def include_router(router, prefix: str = ""):
 include_router(auth_routes.router, prefix="/api/v1")
 include_router(project_routes.router, prefix="/api/v1")
 include_router(api_key_routes.router, prefix="/api/v1")
+include_router(ingestion_routes.router, prefix="/api/v1")
 
 
 if __name__ == "__main__":

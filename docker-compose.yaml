@@ -1,5 +1,5 @@
 services:
-  # ==================== PostgreSQL ====================
+  # ==================== PostgreSQL (Auth DB) ====================
   postgres:
     image: postgres:15-alpine
     container_name: auth-postgres
@@ -9,13 +9,62 @@ services:
       POSTGRES_DB: ${AUTH_DB_NAME}
       POSTGRES_USER: ${AUTH_DB_USER}
       POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD}
+      # OLTP optimizations
+      POSTGRES_SHARED_BUFFERS: 256MB
+      POSTGRES_WORK_MEM: 8MB
+      POSTGRES_MAINTENANCE_WORK_MEM: 64MB
+      POSTGRES_EFFECTIVE_CACHE_SIZE: 1GB
+      POSTGRES_CHECKPOINT_TIMEOUT: 5min
     ports:
       - "${AUTH_DB_PORT}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database_schema/init_auth_db.sql:/docker-entrypoint-initdb.d/init.sql
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${AUTH_DB_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend
+
+  # ==================== PostgreSQL (Logs DB) ====================
+  postgres-logs:
+    image: postgres:15-alpine
+    container_name: logs-postgres
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_DB: ${LOGS_DB_NAME}
+      POSTGRES_USER: ${LOGS_DB_USER}
+      POSTGRES_PASSWORD: ${LOGS_DB_PASSWORD}
+      # Time-series / bulk write optimizations
+      POSTGRES_SHARED_BUFFERS: 1GB
+      POSTGRES_WORK_MEM: 64MB
+      POSTGRES_MAINTENANCE_WORK_MEM: 512MB
+      POSTGRES_EFFECTIVE_CACHE_SIZE: 4GB
+      POSTGRES_CHECKPOINT_TIMEOUT: 30min
+      POSTGRES_MAX_WAL_SIZE: 4GB
+      POSTGRES_AUTOVACUUM_MAX_WORKERS: 4
+    ports:
+      - "${LOGS_DB_PORT}:5432"
+    volumes:
+      - postgres_logs_data:/var/lib/postgresql/data
+      - ./database_schema/init_logs_db.sql:/docker-entrypoint-initdb.d/init.sql
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+        reservations:
+          memory: 2G
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${LOGS_DB_USER}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -97,6 +146,7 @@ services:
       # Override host names for Docker network
       REDIS_HOST: redis
       AUTH_SERVICE_HOST: auth-service
+      INGESTION_SERVICE_HOST: ingestion
     depends_on:
       auth-service:
         condition: service_healthy
@@ -121,6 +171,69 @@ services:
       timeout: 5s
       retries: 3
 
+  # ==================== Ingestion Service (gRPC) ====================
+  ingestion:
+    build:
+      context: ./services/ingestion
+      dockerfile: Dockerfile
+    container_name: ingestion-service
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Override host names for Docker network
+      REDIS_HOST: redis
+      LOGS_DB_HOST: postgres-logs
+    depends_on:
+      postgres-logs:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "${INGESTION_GRPC_PORT}:50052"
+    networks:
+      - backend
+    volumes:
+      # Mount for development (hot reload)
+      - ./services/ingestion/ingestion_service:/app/ingestion_service:ro
+    command: python -m ingestion_service.main
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import grpc; channel = grpc.insecure_channel('localhost:50052'); channel.close()",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ==================== Storage Workers ====================
+  ingestion-worker:
+    build:
+      context: ./services/ingestion
+      dockerfile: Dockerfile
+    container_name: ingestion-worker
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Override host names for Docker network
+      REDIS_HOST: redis
+      LOGS_DB_HOST: postgres-logs
+    depends_on:
+      postgres-logs:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ingestion:
+        condition: service_started
+    networks:
+      - backend
+    volumes:
+      # Mount for development (hot reload)
+      - ./services/ingestion/ingestion_service:/app/ingestion_service:ro
+    command: python -m ingestion_service.worker
+
 networks:
   backend:
     driver: bridge
@@ -129,5 +242,7 @@ networks:
 volumes:
   postgres_data:
     name: ledger-postgres-data
+  postgres_logs_data:
+    name: ledger-postgres-logs-data
   redis_data:
     name: ledger-redis-data

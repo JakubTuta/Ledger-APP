@@ -66,22 +66,32 @@ function Show-Help {
     Write-Host "  logs         - View logs (default: all services)"
     Write-Host "  logs-auth    - View auth service logs"
     Write-Host "  logs-gateway - View gateway service logs"
+    Write-Host "  logs-ingestion - View ingestion service logs"
+    Write-Host "  logs-worker  - View worker logs"
     Write-Host "  restart      - Restart all services"
     Write-Host "  ps           - Show service status"
     Write-Host "  build        - Build Docker images"
     Write-Host "  build-auth   - Build auth service image"
     Write-Host "  build-gateway - Build gateway service image"
-    Write-Host "  db-migrate   - Generate new migration"
-    Write-Host "  db-upgrade   - Apply migrations"
-    Write-Host "  db-downgrade - Rollback last migration"
-    Write-Host "  db-shell     - Open database shell"
+    Write-Host "  build-ingestion - Build ingestion service image"
+    Write-Host "  db-migrate   - Generate new auth DB migration"
+    Write-Host "  db-upgrade   - Apply auth DB migrations"
+    Write-Host "  db-downgrade - Rollback last auth DB migration"
+    Write-Host "  db-shell     - Open auth database shell"
+    Write-Host "  logs-db-migrate - Generate new logs DB migration"
+    Write-Host "  logs-db-upgrade - Apply logs DB migrations"
+    Write-Host "  logs-db-downgrade - Rollback last logs DB migration"
+    Write-Host "  logs-db-shell - Open logs database shell"
     Write-Host "  redis-cli    - Open Redis CLI"
     Write-Host "  redis-flush  - Flush all Redis data"
     Write-Host "  test         - Run all tests"
     Write-Host "  test-auth    - Run auth service tests"
     Write-Host "  test-gateway - Run gateway service tests"
+    Write-Host "  test-ingestion - Run ingestion service tests"
     Write-Host "  dev-auth     - Run auth service locally"
     Write-Host "  dev-gateway  - Run gateway service locally"
+    Write-Host "  dev-ingestion - Run ingestion service locally"
+    Write-Host "  dev-worker   - Run storage worker locally"
     Write-Host "  health       - Check service health"
     Write-Host "  clean        - Clean generated files"
     Write-Host "  clean-all    - Clean everything including Docker volumes"
@@ -119,12 +129,21 @@ function Setup {
     Push-Location services\gateway
     & $pip install -r requirements.txt
     Pop-Location
-    
+
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Failed to install gateway dependencies" -ForegroundColor Red
         exit 1
     }
-    
+
+    Push-Location services\ingestion
+    & $pip install -r requirements.txt
+    Pop-Location
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Failed to install ingestion dependencies" -ForegroundColor Red
+        exit 1
+    }
+
     # Compile protobuf files
     Compile-Proto
     
@@ -246,6 +265,16 @@ function Show-GatewayLogs {
     docker-compose logs -f gateway
 }
 
+function Show-IngestionLogs {
+    Write-Host "Showing ingestion service logs (Ctrl+C to exit)..." -ForegroundColor Cyan
+    docker-compose logs -f ingestion
+}
+
+function Show-WorkerLogs {
+    Write-Host "Showing storage worker logs (Ctrl+C to exit)..." -ForegroundColor Cyan
+    docker-compose logs -f ingestion-worker
+}
+
 function Restart-Services {
     Write-Host "Restarting services..." -ForegroundColor Cyan
     Stop-Services
@@ -284,11 +313,23 @@ function Build-AuthImage {
 function Build-GatewayImage {
     Write-Host "Building gateway service Docker image..." -ForegroundColor Cyan
     docker-compose build gateway
-    
+
     if ($LASTEXITCODE -eq 0) {
         Write-Host "Gateway service build complete" -ForegroundColor Green
     } else {
         Write-Host "Gateway service build failed" -ForegroundColor Red
+        exit 1
+    }
+}
+
+function Build-IngestionImage {
+    Write-Host "Building ingestion service Docker images..." -ForegroundColor Cyan
+    docker-compose build ingestion ingestion-worker
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "Ingestion service build complete" -ForegroundColor Green
+    } else {
+        Write-Host "Ingestion service build failed" -ForegroundColor Red
         exit 1
     }
 }
@@ -364,9 +405,85 @@ function Open-DatabaseShell {
     Load-EnvFile
     $dbUser = $env:AUTH_DB_USER
     $dbName = $env:AUTH_DB_NAME
-    
+
     Write-Host "Opening database shell..." -ForegroundColor Cyan
     docker-compose exec postgres psql -U $dbUser -d $dbName
+}
+
+function Create-LogsMigration {
+    if (-not (Test-Path "venv")) {
+        Write-Host "Virtual environment not found. Run '.\Make.ps1 setup' first." -ForegroundColor Red
+        exit 1
+    }
+
+    $message = Read-Host "Migration message"
+
+    if ([string]::IsNullOrWhiteSpace($message)) {
+        Write-Host "Migration message cannot be empty" -ForegroundColor Red
+        exit 1
+    }
+
+    Write-Host "Creating logs migration: $message" -ForegroundColor Cyan
+    $python = Get-VenvPython
+    Push-Location services\ingestion
+    & $python -m alembic revision --autogenerate -m $message
+    Pop-Location
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "Logs migration created" -ForegroundColor Green
+    } else {
+        Write-Host "Failed to create logs migration" -ForegroundColor Red
+        exit 1
+    }
+}
+
+function Apply-LogsMigrations {
+    if (-not (Test-Path "venv")) {
+        Write-Host "Virtual environment not found. Run '.\Make.ps1 setup' first." -ForegroundColor Red
+        exit 1
+    }
+
+    Write-Host "Applying logs migrations..." -ForegroundColor Cyan
+    $python = Get-VenvPython
+    Push-Location services\ingestion
+    & $python -m alembic upgrade head
+    Pop-Location
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "Logs migrations applied" -ForegroundColor Green
+    } else {
+        Write-Host "Failed to apply logs migrations" -ForegroundColor Red
+        exit 1
+    }
+}
+
+function Downgrade-LogsMigration {
+    if (-not (Test-Path "venv")) {
+        Write-Host "Virtual environment not found. Run '.\Make.ps1 setup' first." -ForegroundColor Red
+        exit 1
+    }
+
+    Write-Host "Rolling back last logs migration..." -ForegroundColor Cyan
+    $python = Get-VenvPython
+    Push-Location services\ingestion
+    & $python -m alembic downgrade -1
+    Pop-Location
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "Logs migration rolled back" -ForegroundColor Green
+    } else {
+        Write-Host "Failed to rollback logs migration" -ForegroundColor Red
+        exit 1
+    }
+}
+
+function Open-LogsDatabase {
+    Load-EnvFile
+    $dbUser = $env:LOGS_DB_USER
+    $dbName = $env:LOGS_DB_NAME
+
+    Write-Host "Opening logs database shell..." -ForegroundColor Cyan
+    docker-compose exec postgres-logs psql -U $dbUser -d $dbName
 }
 
 function Open-RedisShell {
@@ -419,8 +536,14 @@ function Run-Tests {
     & $python -m pytest tests/ -v
     $gatewayResult = $LASTEXITCODE
     Pop-Location
-    
-    if ($authResult -eq 0 -and $gatewayResult -eq 0) {
+
+    Write-Host "Testing ingestion service..." -ForegroundColor Cyan
+    Push-Location services\ingestion
+    & $python -m pytest tests/ -v
+    $ingestionResult = $LASTEXITCODE
+    Pop-Location
+
+    if ($authResult -eq 0 -and $gatewayResult -eq 0 -and $ingestionResult -eq 0) {
         Write-Host "All tests passed" -ForegroundColor Green
     } else {
         Write-Host "Some tests failed" -ForegroundColor Red
@@ -453,17 +576,37 @@ function Run-GatewayTests {
         Write-Host "Virtual environment not found. Run '.\Make.ps1 setup' first." -ForegroundColor Red
         exit 1
     }
-    
+
     Write-Host "Running gateway service tests..." -ForegroundColor Cyan
     $python = Get-VenvPython
     Push-Location services\gateway
     & $python -m pytest tests/ -v
     Pop-Location
-    
+
     if ($LASTEXITCODE -eq 0) {
         Write-Host "Gateway tests passed" -ForegroundColor Green
     } else {
         Write-Host "Gateway tests failed" -ForegroundColor Red
+        exit 1
+    }
+}
+
+function Run-IngestionTests {
+    if (-not (Test-Path "venv")) {
+        Write-Host "Virtual environment not found. Run '.\Make.ps1 setup' first." -ForegroundColor Red
+        exit 1
+    }
+
+    Write-Host "Running ingestion service tests..." -ForegroundColor Cyan
+    $python = Get-VenvPython
+    Push-Location services\ingestion
+    & $python -m pytest tests/ -v
+    Pop-Location
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "Ingestion tests passed" -ForegroundColor Green
+    } else {
+        Write-Host "Ingestion tests failed" -ForegroundColor Red
         exit 1
     }
 }
@@ -486,17 +629,49 @@ function Run-DevGateway {
         Write-Host "Virtual environment not found. Run '.\Make.ps1 setup' first." -ForegroundColor Red
         exit 1
     }
-    
+
     Load-EnvFile
     $port = $env:GATEWAY_HTTP_PORT
     if ([string]::IsNullOrWhiteSpace($port)) {
         $port = "8000"
     }
-    
+
     Write-Host "Running gateway service locally on port $port..." -ForegroundColor Cyan
     $python = Get-VenvPython
     Push-Location services\gateway
     & $python -m uvicorn gateway_service.main:app --reload --port $port
+    Pop-Location
+}
+
+function Run-DevIngestion {
+    if (-not (Test-Path "venv")) {
+        Write-Host "Virtual environment not found. Run '.\Make.ps1 setup' first." -ForegroundColor Red
+        exit 1
+    }
+
+    Load-EnvFile
+    $port = $env:INGESTION_HTTP_PORT
+    if ([string]::IsNullOrWhiteSpace($port)) {
+        $port = "8001"
+    }
+
+    Write-Host "Running ingestion service locally on port $port..." -ForegroundColor Cyan
+    $python = Get-VenvPython
+    Push-Location services\ingestion
+    & $python -m uvicorn ingestion_service.main:app --reload --port $port
+    Pop-Location
+}
+
+function Run-DevWorker {
+    if (-not (Test-Path "venv")) {
+        Write-Host "Virtual environment not found. Run '.\Make.ps1 setup' first." -ForegroundColor Red
+        exit 1
+    }
+
+    Write-Host "Running storage worker locally..." -ForegroundColor Cyan
+    $python = Get-VenvPython
+    Push-Location services\ingestion
+    & $python -m ingestion_service.worker
     Pop-Location
 }
 
@@ -589,34 +764,44 @@ function Clean-All {
 # ==================== Command Router ====================
 
 switch ($Command.ToLower()) {
-    "help"          { Show-Help }
-    "setup"         { Setup }
-    "proto"         { Compile-Proto }
-    "up"            { Start-Services }
-    "down"          { Stop-Services }
-    "logs"          { Show-Logs }
-    "logs-auth"     { Show-AuthLogs }
-    "logs-gateway"  { Show-GatewayLogs }
-    "restart"       { Restart-Services }
-    "ps"            { Show-Status }
-    "build"         { Build-Images }
-    "build-auth"    { Build-AuthImage }
-    "build-gateway" { Build-GatewayImage }
-    "db-migrate"    { Create-Migration }
-    "db-upgrade"    { Apply-Migrations }
-    "db-downgrade"  { Downgrade-Migration }
-    "db-shell"      { Open-DatabaseShell }
-    "redis-cli"     { Open-RedisShell }
-    "redis-flush"   { Flush-Redis }
-    "test"          { Run-Tests }
-    "test-auth"     { Run-AuthTests }
-    "test-gateway"  { Run-GatewayTests }
-    "dev-auth"      { Run-DevAuth }
-    "dev-gateway"   { Run-DevGateway }
-    "health"        { Check-Health }
-    "load-test"     { Run-LoadTest }
-    "clean"         { Clean-Files }
-    "clean-all"     { Clean-All }
+    "help"                { Show-Help }
+    "setup"               { Setup }
+    "proto"               { Compile-Proto }
+    "up"                  { Start-Services }
+    "down"                { Stop-Services }
+    "logs"                { Show-Logs }
+    "logs-auth"           { Show-AuthLogs }
+    "logs-gateway"        { Show-GatewayLogs }
+    "logs-ingestion"      { Show-IngestionLogs }
+    "logs-worker"         { Show-WorkerLogs }
+    "restart"             { Restart-Services }
+    "ps"                  { Show-Status }
+    "build"               { Build-Images }
+    "build-auth"          { Build-AuthImage }
+    "build-gateway"       { Build-GatewayImage }
+    "build-ingestion"     { Build-IngestionImage }
+    "db-migrate"          { Create-Migration }
+    "db-upgrade"          { Apply-Migrations }
+    "db-downgrade"        { Downgrade-Migration }
+    "db-shell"            { Open-DatabaseShell }
+    "logs-db-migrate"     { Create-LogsMigration }
+    "logs-db-upgrade"     { Apply-LogsMigrations }
+    "logs-db-downgrade"   { Downgrade-LogsMigration }
+    "logs-db-shell"       { Open-LogsDatabase }
+    "redis-cli"           { Open-RedisShell }
+    "redis-flush"         { Flush-Redis }
+    "test"                { Run-Tests }
+    "test-auth"           { Run-AuthTests }
+    "test-gateway"        { Run-GatewayTests }
+    "test-ingestion"      { Run-IngestionTests }
+    "dev-auth"            { Run-DevAuth }
+    "dev-gateway"         { Run-DevGateway }
+    "dev-ingestion"       { Run-DevIngestion }
+    "dev-worker"          { Run-DevWorker }
+    "health"              { Check-Health }
+    "load-test"           { Run-LoadTest }
+    "clean"               { Clean-Files }
+    "clean-all"           { Clean-All }
     default {
         Write-Host "Unknown command: $Command" -ForegroundColor Red
         Write-Host ""

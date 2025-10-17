@@ -356,7 +356,7 @@ class TestApiKeyValidation(BaseGatewayTest):
         """Test various API key formats."""
         valid_keys = [
             "ak_test_1234567890abcdef",
-            "ak_live_abcdef1234567890",
+            "ledger_abcdef1234567890",
             "test_key_with_underscores",
         ]
 

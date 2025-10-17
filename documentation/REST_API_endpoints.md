@@ -16,9 +16,10 @@ This document provides comprehensive documentation for the Ledger Gateway Servic
 2. [Authentication Endpoints](#authentication-endpoints)
 3. [Project Management Endpoints](#project-management-endpoints)
 4. [API Key Management Endpoints](#api-key-management-endpoints)
-5. [Common Response Codes](#common-response-codes)
-6. [Error Handling](#error-handling)
-7. [Rate Limiting](#rate-limiting)
+5. [Log Ingestion Endpoints](#log-ingestion-endpoints)
+6. [Common Response Codes](#common-response-codes)
+7. [Error Handling](#error-handling)
+8. [Rate Limiting](#rate-limiting)
 
 ---
 
@@ -470,6 +471,183 @@ Authorization: Bearer <access_token>
 
 ---
 
+## Log Ingestion Endpoints
+
+### Ingest Single Log
+
+**Endpoint:** `POST /api/v1/ingest/single`
+
+**Description:** Ingest a single log entry into the system. Logs are queued for asynchronous processing.
+
+**Authentication:** Required (API Key)
+
+**Request Headers:**
+```
+Authorization: Bearer <api_key>
+Content-Type: application/json
+```
+
+**Request Body:**
+
+```json
+{
+  "timestamp": "2025-10-17T10:00:00Z",
+  "level": "info",
+  "log_type": "console",
+  "importance": "standard",
+  "message": "Application started successfully",
+  "environment": "production",
+  "release": "v1.2.3",
+  "sdk_version": "1.0.0",
+  "platform": "python",
+  "platform_version": "3.12.0",
+  "attributes": {
+    "user_id": "123",
+    "request_id": "req_abc"
+  }
+}
+```
+
+**Field Requirements:**
+- `timestamp` (string, required): ISO 8601 format timestamp
+- `level` (string, required): One of `debug`, `info`, `warning`, `error`, `critical`
+- `log_type` (string, required): One of `console`, `logger`, `exception`, `custom`
+- `importance` (string, required): One of `low`, `standard`, `high`
+- `message` (string, optional): Log message (max 10,000 characters)
+- `error_type` (string, optional): Error class name for exceptions
+- `error_message` (string, optional): Error message (max 5,000 characters)
+- `stack_trace` (string, optional): Stack trace (max 50,000 characters)
+- `environment` (string, optional): e.g., `production`, `staging`, `dev`
+- `release` (string, optional): Release version
+- `sdk_version` (string, optional): SDK version
+- `platform` (string, optional): Platform name (e.g., `python`, `node`, `java`)
+- `platform_version` (string, optional): Platform version
+- `attributes` (object, optional): Custom attributes (max 100KB serialized)
+
+**Response:**
+
+```json
+{
+  "accepted": 1,
+  "rejected": 0,
+  "message": "Log accepted for processing"
+}
+```
+
+**Status Codes:**
+- `202 Accepted` - Log queued for processing
+- `400 Bad Request` - Invalid log entry
+- `401 Unauthorized` - Missing or invalid API key
+- `429 Too Many Requests` - Rate limit exceeded
+- `503 Service Unavailable` - Queue full (includes `Retry-After: 60` header)
+
+---
+
+### Ingest Log Batch
+
+**Endpoint:** `POST /api/v1/ingest/batch`
+
+**Description:** Ingest multiple log entries in a single request for better performance.
+
+**Authentication:** Required (API Key)
+
+**Request Headers:**
+```
+Authorization: Bearer <api_key>
+Content-Type: application/json
+```
+
+**Request Body:**
+
+```json
+{
+  "logs": [
+    {
+      "timestamp": "2025-10-17T10:00:00Z",
+      "level": "info",
+      "log_type": "console",
+      "importance": "standard",
+      "message": "Request started"
+    },
+    {
+      "timestamp": "2025-10-17T10:00:01Z",
+      "level": "error",
+      "log_type": "exception",
+      "importance": "high",
+      "message": "Database connection failed",
+      "error_type": "ConnectionError",
+      "error_message": "Failed to connect to database",
+      "stack_trace": "Traceback (most recent call last):\n  File app.py, line 42"
+    }
+  ]
+}
+```
+
+**Field Requirements:**
+- `logs` (array, required): Array of log objects (max 1,000 logs per batch)
+- Each log object follows the same schema as single log ingestion
+
+**Response:**
+
+```json
+{
+  "accepted": 98,
+  "rejected": 2,
+  "errors": [
+    "Log 5: Invalid timestamp format",
+    "Log 12: Message exceeds maximum length"
+  ]
+}
+```
+
+**Response Fields:**
+- `accepted` (integer): Number of logs successfully queued
+- `rejected` (integer): Number of logs that failed validation
+- `errors` (array, nullable): Error messages for rejected logs
+
+**Status Codes:**
+- `202 Accepted` - Batch processed (may include partial failures)
+- `400 Bad Request` - Empty batch or all logs invalid
+- `401 Unauthorized` - Missing or invalid API key
+- `429 Too Many Requests` - Rate limit exceeded
+- `503 Service Unavailable` - Queue full (includes `Retry-After: 60` header)
+
+---
+
+### Get Queue Depth
+
+**Endpoint:** `GET /api/v1/queue/depth`
+
+**Description:** Get the current queue depth for your project. Useful for monitoring backpressure.
+
+**Authentication:** Required (API Key)
+
+**Request Headers:**
+```
+Authorization: Bearer <api_key>
+```
+
+**Response:**
+
+```json
+{
+  "project_id": 1,
+  "queue_depth": 1500
+}
+```
+
+**Response Fields:**
+- `project_id` (integer): Your project ID
+- `queue_depth` (integer): Number of logs currently queued for processing
+
+**Status Codes:**
+- `200 OK` - Queue depth retrieved successfully
+- `401 Unauthorized` - Missing or invalid API key
+- `429 Too Many Requests` - Rate limit exceeded
+- `500 Internal Server Error` - Failed to retrieve queue depth
+
+---
+
 ## Common Response Codes
 
 | Status Code | Description |
@@ -597,12 +775,17 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
 ### API Key (Service Authentication)
 
-Used for log ingestion and service-to-service communication (future phases):
+Used for log ingestion endpoints:
 
 **Header:**
 ```
-X-API-Key: ldg_proj_1_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0
+Authorization: Bearer ldg_proj_1_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0
 ```
+
+**Applies to:**
+- `/api/v1/ingest/single` (ingest single log)
+- `/api/v1/ingest/batch` (ingest batch logs)
+- `/api/v1/queue/depth` (get queue depth)
 
 **Features:**
 - Per-key rate limiting
@@ -714,7 +897,50 @@ curl -X DELETE http://localhost:8000/api/v1/api-keys/1 \
   -H "Authorization: Bearer <access_token>"
 ```
 
-#### 8. Logout
+#### 8. Use the API key to ingest logs
+
+```bash
+# Ingest a single log
+curl -X POST http://localhost:8000/api/v1/ingest/single \
+  -H "Authorization: Bearer <api_key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "timestamp": "2025-10-17T10:00:00Z",
+    "level": "info",
+    "log_type": "console",
+    "importance": "standard",
+    "message": "Application started"
+  }'
+
+# Ingest a batch of logs
+curl -X POST http://localhost:8000/api/v1/ingest/batch \
+  -H "Authorization: Bearer <api_key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "logs": [
+      {
+        "timestamp": "2025-10-17T10:00:00Z",
+        "level": "info",
+        "log_type": "console",
+        "importance": "standard",
+        "message": "Request received"
+      },
+      {
+        "timestamp": "2025-10-17T10:00:01Z",
+        "level": "info",
+        "log_type": "console",
+        "importance": "standard",
+        "message": "Request processed"
+      }
+    ]
+  }'
+
+# Check queue depth
+curl -X GET http://localhost:8000/api/v1/queue/depth \
+  -H "Authorization: Bearer <api_key>"
+```
+
+#### 9. Logout
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/accounts/logout \

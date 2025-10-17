@@ -107,6 +107,20 @@ class Settings(pydantic_settings.BaseSettings):
     def AUTH_SERVICE_URL(self) -> str:
         return f"{self.AUTH_SERVICE_HOST}:{self.AUTH_SERVICE_PORT}"
 
+    INGESTION_SERVICE_HOST: str = pydantic.Field(
+        default="localhost",
+        description="Ingestion Service host",
+    )
+
+    INGESTION_GRPC_PORT: int = pydantic.Field(
+        default=50052,
+        description="Ingestion Service gRPC port",
+    )
+
+    @property
+    def INGESTION_SERVICE_URL(self) -> str:
+        return f"{self.INGESTION_SERVICE_HOST}:{self.INGESTION_GRPC_PORT}"
+
     GRPC_POOL_SIZE: int = pydantic.Field(
         default=10,
         ge=1,
@@ -218,18 +232,6 @@ class Settings(pydantic_settings.BaseSettings):
         if isinstance(v, str):
             return [origin.strip() for origin in v.split(",")]
         return v
-
-    # ==================== Monitoring ====================
-
-    ENABLE_METRICS: bool = pydantic.Field(
-        default=True,
-        description="Enable Prometheus metrics",
-    )
-
-    METRICS_PORT: int = pydantic.Field(
-        default=9090,
-        description="Prometheus metrics port",
-    )
 
     # ==================== Validators ====================
 

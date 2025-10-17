@@ -31,7 +31,7 @@ class TestApiKeyEndpoints(BaseGrpcTest):
         response = await self.stub.CreateApiKey(request)
 
         assert response.key_id > 0
-        assert response.full_key.startswith("ak_live_")
+        assert response.full_key.startswith("ledger_")
         assert len(response.full_key) > 40
         assert response.key_prefix == response.full_key[:20]
 
@@ -71,7 +71,7 @@ class TestApiKeyEndpoints(BaseGrpcTest):
     async def test_validate_invalid_api_key(self):
         """Test validating an invalid API key."""
         request = auth_pb2.ValidateApiKeyRequest(
-            api_key="ak_live_invalid_key_does_not_exist"
+            api_key="ledger_invalid_key_does_not_exist"
         )
         response = await self.stub.ValidateApiKey(request)
 

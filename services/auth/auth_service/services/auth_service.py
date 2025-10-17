@@ -176,7 +176,7 @@ class AuthService:
         """
 
         random_part = secrets.token_urlsafe(32)
-        full_key = f"ak_live_{random_part}"
+        full_key = f"ledger_{random_part}"
         key_prefix = full_key[:20]
 
         key_hash = bcrypt.hashpw(full_key.encode(), bcrypt.gensalt(rounds=10)).decode()

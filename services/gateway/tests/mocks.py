@@ -1,6 +1,7 @@
 import typing
 
 import gateway_service.proto.auth_pb2 as auth_pb2
+import gateway_service.proto.ingestion_pb2 as ingestion_pb2
 
 
 class MockRedisClient:
@@ -118,13 +119,47 @@ class MockGRPCPool:
 
     def get_stub(self, service_name: str, stub_class):
         if service_name not in self.stubs:
-            self.stubs[service_name] = MockAuthStub()
+            if service_name == "auth":
+                self.stubs[service_name] = MockAuthStub()
+            elif service_name == "ingestion":
+                self.stubs[service_name] = MockIngestionStub()
         return self.stubs[service_name]
+
+    def get_auth_stub(self):
+        class ContextManager:
+            def __init__(self, stub):
+                self.stub = stub
+
+            async def __aenter__(self):
+                return self.stub
+
+            async def __aexit__(self, exc_type, exc_val, exc_tb):
+                pass
+
+        return ContextManager(self.get_stub("auth", None))
+
+    def get_ingestion_stub(self):
+        class ContextManager:
+            def __init__(self, stub):
+                self.stub = stub
+
+            async def __aenter__(self):
+                return self.stub
+
+            async def __aexit__(self, exc_type, exc_val, exc_tb):
+                pass
+
+        return ContextManager(self.get_stub("ingestion", None))
 
     def get_stats(self) -> dict:
         return {
             "auth": {
                 "address": "localhost:50051",
+                "pool_size": 10,
+                "active_channels": 10,
+            },
+            "ingestion": {
+                "address": "localhost:50052",
                 "pool_size": 10,
                 "active_channels": 10,
             }
@@ -221,4 +256,36 @@ class MockAuthStub:
             status="active",
             name="Test User",
             created_at="2024-01-01T00:00:00Z",
+        )
+
+
+class MockIngestionStub:
+    def __init__(self):
+        self.ingest_log_response = None
+        self.ingest_log_batch_response = None
+        self.get_queue_depth_response = None
+
+    async def IngestLog(self, request, timeout=None):
+        if self.ingest_log_response:
+            return self.ingest_log_response
+        return ingestion_pb2.IngestLogResponse(
+            success=True,
+            message="Log accepted for processing",
+        )
+
+    async def IngestLogBatch(self, request, timeout=None):
+        if self.ingest_log_batch_response:
+            return self.ingest_log_batch_response
+        return ingestion_pb2.IngestLogBatchResponse(
+            success=True,
+            queued=len(request.logs),
+            failed=0,
+            error=None,
+        )
+
+    async def GetQueueDepth(self, request, timeout=None):
+        if self.get_queue_depth_response:
+            return self.get_queue_depth_response
+        return ingestion_pb2.QueueDepthResponse(
+            depth=0,
         )
