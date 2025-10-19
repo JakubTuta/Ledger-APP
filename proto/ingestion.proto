@@ -23,7 +23,7 @@ message LogEntry {
 
     // Log classification
     string level = 2;  // debug, info, warning, error, critical
-    string log_type = 3;  // console, logger, exception, network, database, custom
+    string log_type = 3;  // console, logger, exception, network, database, endpoint, custom
     string importance = 4;  // critical, high, standard, low
 
     // Content

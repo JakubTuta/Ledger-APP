@@ -13,7 +13,7 @@ CREATE TABLE logs (
 
     -- Log classification
     level VARCHAR(20) NOT NULL,  -- debug, info, warning, error, critical
-    log_type VARCHAR(30) NOT NULL,  -- console, logger, exception, network, database, custom
+    log_type VARCHAR(30) NOT NULL,  -- console, logger, exception, network, database, endpoint, custom
     importance VARCHAR(20) DEFAULT 'standard' NOT NULL,  -- critical, high, standard, low
 
     -- Source identification
@@ -51,7 +51,7 @@ ALTER TABLE logs ADD CONSTRAINT check_log_level
 CHECK (level IN ('debug', 'info', 'warning', 'error', 'critical'));
 
 ALTER TABLE logs ADD CONSTRAINT check_log_type
-CHECK (log_type IN ('console', 'logger', 'exception', 'network', 'database', 'custom'));
+CHECK (log_type IN ('console', 'logger', 'exception', 'network', 'database', 'endpoint', 'custom'));
 
 ALTER TABLE logs ADD CONSTRAINT check_importance
 CHECK (importance IN ('critical', 'high', 'standard', 'low'));
@@ -86,6 +86,11 @@ WHERE error_fingerprint IS NOT NULL;
 -- Contains all columns needed for dashboard, never touches table (10x faster)
 CREATE INDEX idx_logs_dashboard ON logs (project_id, timestamp DESC, level, message)
 WHERE importance IN ('critical', 'high');
+
+-- Partial index for endpoint monitoring logs
+-- Used for performance monitoring and API endpoint analytics
+CREATE INDEX idx_logs_endpoint_monitoring ON logs (project_id, timestamp DESC, level)
+WHERE log_type = 'endpoint';
 
 -- ============================================
 -- PARTITIONS (Monthly - Auto-created)
@@ -259,3 +264,92 @@ CREATE TABLE ingestion_metrics_2025_02 PARTITION OF ingestion_metrics
 --    SHA-256 hash of: error_type + first_3_stack_frames + platform
 --    UPSERT pattern to increment occurrence_count
 --    Enables Sentry-like error grouping without scanning all logs
+
+-- ============================================
+-- ENDPOINT MONITORING USE CASE
+-- ============================================
+
+-- The 'endpoint' log_type enables performance monitoring for HTTP/API endpoints
+-- Used by wrapping endpoint functions with the Ledger SDK decorator
+
+-- Required attributes.endpoint fields:
+--   - method: HTTP method (GET, POST, PUT, DELETE, etc.)
+--   - path: Endpoint path template (e.g., /api/users/{id})
+--   - status_code: HTTP response code (200, 404, 500, etc.)
+--   - duration_ms: Total execution time in milliseconds
+
+-- Optional attributes.endpoint fields:
+--   - request_id: Unique request identifier for tracing
+--   - caller_ip: Client IP address
+--   - user_agent: Client user agent string
+--   - query_params: Query string parameters (object)
+--   - request_size_bytes: Request payload size
+--   - response_size_bytes: Response payload size
+
+-- Optional attributes.performance fields:
+--   - db_query_time_ms: Time spent in database queries
+--   - db_query_count: Number of database queries executed
+--   - cache_hit: Whether cache was hit (boolean)
+--   - external_api_calls: Number of external API calls
+--   - external_api_time_ms: Time spent in external API calls
+
+-- Example endpoint monitoring log:
+-- {
+--   "timestamp": "2025-10-19T10:30:45.123Z",
+--   "level": "info",
+--   "log_type": "endpoint",
+--   "importance": "standard",
+--   "message": "GET /api/users/123 - 200 OK (145ms)",
+--   "attributes": {
+--     "endpoint": {
+--       "method": "GET",
+--       "path": "/api/users/{id}",
+--       "status_code": 200,
+--       "duration_ms": 145,
+--       "request_id": "req_abc123",
+--       "caller_ip": "192.168.1.100"
+--     },
+--     "performance": {
+--       "db_query_time_ms": 120,
+--       "db_query_count": 3,
+--       "cache_hit": false
+--     }
+--   }
+-- }
+
+-- Analytics queries for endpoint monitoring:
+-- 1. Average response time by endpoint:
+-- SELECT
+--   attributes->'endpoint'->>'path' as endpoint_path,
+--   AVG((attributes->'endpoint'->>'duration_ms')::int) as avg_duration_ms,
+--   COUNT(*) as call_count
+-- FROM logs
+-- WHERE log_type = 'endpoint'
+--   AND project_id = 123
+--   AND timestamp > NOW() - INTERVAL '1 hour'
+-- GROUP BY endpoint_path
+-- ORDER BY avg_duration_ms DESC;
+
+-- 2. Error rate by endpoint:
+-- SELECT
+--   attributes->'endpoint'->>'path' as endpoint_path,
+--   COUNT(*) FILTER (WHERE (attributes->'endpoint'->>'status_code')::int >= 500) as server_errors,
+--   COUNT(*) FILTER (WHERE (attributes->'endpoint'->>'status_code')::int >= 400) as client_errors,
+--   COUNT(*) as total_calls
+-- FROM logs
+-- WHERE log_type = 'endpoint'
+--   AND project_id = 123
+--   AND timestamp > NOW() - INTERVAL '24 hours'
+-- GROUP BY endpoint_path;
+
+-- 3. Slowest endpoints (p95, p99):
+-- SELECT
+--   attributes->'endpoint'->>'path' as endpoint_path,
+--   PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY (attributes->'endpoint'->>'duration_ms')::int) as p95_ms,
+--   PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY (attributes->'endpoint'->>'duration_ms')::int) as p99_ms
+-- FROM logs
+-- WHERE log_type = 'endpoint'
+--   AND project_id = 123
+--   AND timestamp > NOW() - INTERVAL '1 hour'
+-- GROUP BY endpoint_path
+-- ORDER BY p99_ms DESC;

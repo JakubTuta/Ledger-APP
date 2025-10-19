@@ -68,12 +68,14 @@ function Show-Help {
     Write-Host "  logs-gateway - View gateway service logs"
     Write-Host "  logs-ingestion - View ingestion service logs"
     Write-Host "  logs-worker  - View worker logs"
+    Write-Host "  logs-analytics - View analytics workers logs"
     Write-Host "  restart      - Restart all services"
     Write-Host "  ps           - Show service status"
     Write-Host "  build        - Build Docker images"
     Write-Host "  build-auth   - Build auth service image"
     Write-Host "  build-gateway - Build gateway service image"
     Write-Host "  build-ingestion - Build ingestion service image"
+    Write-Host "  build-analytics - Build analytics workers image"
     Write-Host "  db-migrate   - Generate new auth DB migration"
     Write-Host "  db-upgrade   - Apply auth DB migrations"
     Write-Host "  db-downgrade - Rollback last auth DB migration"
@@ -88,10 +90,12 @@ function Show-Help {
     Write-Host "  test-auth    - Run auth service tests"
     Write-Host "  test-gateway - Run gateway service tests"
     Write-Host "  test-ingestion - Run ingestion service tests"
+    Write-Host "  test-analytics - Run analytics workers tests"
     Write-Host "  dev-auth     - Run auth service locally"
     Write-Host "  dev-gateway  - Run gateway service locally"
     Write-Host "  dev-ingestion - Run ingestion service locally"
     Write-Host "  dev-worker   - Run storage worker locally"
+    Write-Host "  dev-analytics - Run analytics workers locally"
     Write-Host "  health       - Check service health"
     Write-Host "  clean        - Clean generated files"
     Write-Host "  clean-all    - Clean everything including Docker volumes"
@@ -275,6 +279,11 @@ function Show-WorkerLogs {
     docker-compose logs -f ingestion-worker
 }
 
+function Show-AnalyticsLogs {
+    Write-Host "Showing analytics workers logs (Ctrl+C to exit)..." -ForegroundColor Cyan
+    docker-compose logs -f analytics-workers
+}
+
 function Restart-Services {
     Write-Host "Restarting services..." -ForegroundColor Cyan
     Stop-Services
@@ -330,6 +339,18 @@ function Build-IngestionImage {
         Write-Host "Ingestion service build complete" -ForegroundColor Green
     } else {
         Write-Host "Ingestion service build failed" -ForegroundColor Red
+        exit 1
+    }
+}
+
+function Build-AnalyticsImage {
+    Write-Host "Building analytics workers Docker image..." -ForegroundColor Cyan
+    docker-compose build analytics-workers
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "Analytics workers build complete" -ForegroundColor Green
+    } else {
+        Write-Host "Analytics workers build failed" -ForegroundColor Red
         exit 1
     }
 }
@@ -611,6 +632,26 @@ function Run-IngestionTests {
     }
 }
 
+function Run-AnalyticsTests {
+    if (-not (Test-Path "venv")) {
+        Write-Host "Virtual environment not found. Run '.\Make.ps1 setup' first." -ForegroundColor Red
+        exit 1
+    }
+
+    Write-Host "Running analytics workers tests..." -ForegroundColor Cyan
+    $python = Get-VenvPython
+    Push-Location services\analytics
+    & $python -m pytest tests/ -v
+    Pop-Location
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "Analytics tests passed" -ForegroundColor Green
+    } else {
+        Write-Host "Analytics tests failed" -ForegroundColor Red
+        exit 1
+    }
+}
+
 function Run-DevAuth {
     if (-not (Test-Path "venv")) {
         Write-Host "Virtual environment not found. Run '.\Make.ps1 setup' first." -ForegroundColor Red
@@ -672,6 +713,19 @@ function Run-DevWorker {
     $python = Get-VenvPython
     Push-Location services\ingestion
     & $python -m ingestion_service.worker
+    Pop-Location
+}
+
+function Run-DevAnalytics {
+    if (-not (Test-Path "venv")) {
+        Write-Host "Virtual environment not found. Run '.\Make.ps1 setup' first." -ForegroundColor Red
+        exit 1
+    }
+
+    Write-Host "Running analytics workers locally..." -ForegroundColor Cyan
+    $python = Get-VenvPython
+    Push-Location services\analytics
+    & $python -m analytics_workers.main
     Pop-Location
 }
 
@@ -774,12 +828,14 @@ switch ($Command.ToLower()) {
     "logs-gateway"        { Show-GatewayLogs }
     "logs-ingestion"      { Show-IngestionLogs }
     "logs-worker"         { Show-WorkerLogs }
+    "logs-analytics"      { Show-AnalyticsLogs }
     "restart"             { Restart-Services }
     "ps"                  { Show-Status }
     "build"               { Build-Images }
     "build-auth"          { Build-AuthImage }
     "build-gateway"       { Build-GatewayImage }
     "build-ingestion"     { Build-IngestionImage }
+    "build-analytics"     { Build-AnalyticsImage }
     "db-migrate"          { Create-Migration }
     "db-upgrade"          { Apply-Migrations }
     "db-downgrade"        { Downgrade-Migration }
@@ -794,10 +850,12 @@ switch ($Command.ToLower()) {
     "test-auth"           { Run-AuthTests }
     "test-gateway"        { Run-GatewayTests }
     "test-ingestion"      { Run-IngestionTests }
+    "test-analytics"      { Run-AnalyticsTests }
     "dev-auth"            { Run-DevAuth }
     "dev-gateway"         { Run-DevGateway }
     "dev-ingestion"       { Run-DevIngestion }
     "dev-worker"          { Run-DevWorker }
+    "dev-analytics"       { Run-DevAnalytics }
     "health"              { Check-Health }
     "load-test"           { Run-LoadTest }
     "clean"               { Clean-Files }

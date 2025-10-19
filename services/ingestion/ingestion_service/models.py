@@ -77,7 +77,7 @@ class Log(database.Base):
             name="check_log_level",
         ),
         CheckConstraint(
-            "log_type IN ('console', 'logger', 'exception', 'network', 'database', 'custom')",
+            "log_type IN ('console', 'logger', 'exception', 'network', 'database', 'endpoint', 'custom')",
             name="check_log_type",
         ),
         CheckConstraint(

@@ -15,9 +15,14 @@ help:
 	@echo "  logs-gateway - View gateway service logs"
 	@echo "  logs-ingestion - View ingestion service logs"
 	@echo "  logs-worker - View worker logs"
+	@echo "  logs-analytics - View analytics workers logs"
 	@echo "  restart     - Restart all services"
 	@echo "  ps          - Show service status"
 	@echo "  build       - Build Docker images"
+	@echo "  build-auth  - Build auth service image"
+	@echo "  build-gateway - Build gateway service image"
+	@echo "  build-ingestion - Build ingestion service image"
+	@echo "  build-analytics - Build analytics workers image"
 	@echo "  db-migrate  - Generate new auth DB migration"
 	@echo "  db-upgrade  - Apply auth DB migrations"
 	@echo "  db-shell    - Open auth database shell"
@@ -29,10 +34,12 @@ help:
 	@echo "  test-auth   - Run auth service tests"
 	@echo "  test-gateway - Run gateway service tests"
 	@echo "  test-ingestion - Run ingestion service tests"
+	@echo "  test-analytics - Run analytics workers tests"
 	@echo "  dev-auth    - Run auth service locally"
 	@echo "  dev-gateway - Run gateway service locally"
 	@echo "  dev-ingestion - Run ingestion service locally"
 	@echo "  dev-worker  - Run storage worker locally"
+	@echo "  dev-analytics - Run analytics workers locally"
 	@echo "  clean       - Clean generated files"
 	@echo "  clean-all   - Clean everything including Docker volumes"
 
@@ -50,7 +57,8 @@ setup:
 	@bash -c "source venv/bin/activate && \
 		cd services/auth && pip install -r requirements.txt && \
 		cd ../gateway && pip install -r requirements.txt && \
-		cd ../ingestion && pip install -r requirements.txt"
+		cd ../ingestion && pip install -r requirements.txt && \
+		cd ../analytics && pip install -r requirements.txt"
 	make proto
 	@echo "Setup complete! Edit .env if needed, then run 'make up'"
 
@@ -167,6 +175,10 @@ logs-ingestion:
 logs-worker:
 	docker-compose logs -f ingestion-worker
 
+.PHONY: logs-analytics
+logs-analytics:
+	docker-compose logs -f analytics-workers
+
 .PHONY: restart
 restart: down up
 
@@ -189,6 +201,10 @@ build-gateway:
 .PHONY: build-ingestion
 build-ingestion:
 	docker-compose build ingestion ingestion-worker
+
+.PHONY: build-analytics
+build-analytics:
+	docker-compose build analytics-workers
 
 # ==================== Database (Auth) ====================
 
@@ -291,6 +307,14 @@ test-ingestion:
 	fi
 	@bash -c "source venv/bin/activate && cd services/ingestion && pytest tests/ -v"
 
+.PHONY: test-analytics
+test-analytics:
+	@if [ ! -d "venv" ]; then \
+		echo "Virtual environment not found. Run 'make setup' first."; \
+		exit 1; \
+	fi
+	@bash -c "source venv/bin/activate && cd services/analytics && pytest tests/ -v"
+
 # ==================== Development ====================
 
 .PHONY: dev-auth
@@ -324,6 +348,14 @@ dev-worker:
 		exit 1; \
 	fi
 	@bash -c "source venv/bin/activate && cd services/ingestion && python3 -m ingestion_service.worker"
+
+.PHONY: dev-analytics
+dev-analytics:
+	@if [ ! -d "venv" ]; then \
+		echo "Virtual environment not found. Run 'make setup' first."; \
+		exit 1; \
+	fi
+	@bash -c "source venv/bin/activate && cd services/analytics && python3 -m analytics_workers.main"
 
 # ==================== Health Checks ====================
 

@@ -21,7 +21,7 @@ class LogEntry(pydantic.BaseModel):
     )
 
     log_type: typing.Literal[
-        "console", "logger", "exception", "network", "database", "custom"
+        "console", "logger", "exception", "network", "database", "endpoint", "custom"
     ] = pydantic.Field(
         default="logger",
         description="Type of log source",
@@ -129,6 +129,27 @@ class LogEntry(pydantic.BaseModel):
             if not self.error_message:
                 raise ValueError(
                     "error_message is required when log_type is 'exception'"
+                )
+        return self
+
+    @pydantic.model_validator(mode="after")
+    def validate_endpoint_fields(self) -> "LogEntry":
+        if self.log_type == "endpoint":
+            if not self.attributes:
+                raise ValueError("attributes field is required when log_type is 'endpoint'")
+
+            endpoint_data = self.attributes.get("endpoint")
+            if not endpoint_data:
+                raise ValueError(
+                    "attributes.endpoint is required when log_type is 'endpoint'. "
+                    "Must include: method, path, status_code, duration_ms"
+                )
+
+            required_fields = ["method", "path", "status_code", "duration_ms"]
+            missing_fields = [f for f in required_fields if f not in endpoint_data]
+            if missing_fields:
+                raise ValueError(
+                    f"attributes.endpoint missing required fields: {', '.join(missing_fields)}"
                 )
         return self
 
