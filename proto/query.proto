@@ -1,0 +1,161 @@
+syntax = "proto3";
+
+package query;
+
+service QueryService {
+    rpc QueryLogs(QueryLogsRequest) returns (QueryLogsResponse);
+    rpc SearchLogs(SearchLogsRequest) returns (SearchLogsResponse);
+    rpc GetLog(GetLogRequest) returns (GetLogResponse);
+    rpc GetErrorRate(GetErrorRateRequest) returns (GetErrorRateResponse);
+    rpc GetLogVolume(GetLogVolumeRequest) returns (GetLogVolumeResponse);
+    rpc GetTopErrors(GetTopErrorsRequest) returns (GetTopErrorsResponse);
+    rpc GetUsageStats(GetUsageStatsRequest) returns (GetUsageStatsResponse);
+}
+
+message QueryLogsRequest {
+    int64 project_id = 1;
+    optional string start_time = 2;
+    optional string end_time = 3;
+    optional string level = 4;
+    optional string log_type = 5;
+    optional string environment = 6;
+    optional string error_fingerprint = 7;
+    int32 limit = 8;
+    int32 offset = 9;
+}
+
+message SearchLogsRequest {
+    int64 project_id = 1;
+    string query = 2;
+    optional string start_time = 3;
+    optional string end_time = 4;
+    int32 limit = 5;
+    int32 offset = 6;
+}
+
+message GetLogRequest {
+    int64 log_id = 1;
+    int64 project_id = 2;
+}
+
+message LogEntry {
+    int64 id = 1;
+    int64 project_id = 2;
+    string timestamp = 3;
+    string ingested_at = 4;
+    string level = 5;
+    string log_type = 6;
+    string importance = 7;
+    optional string environment = 8;
+    optional string release = 9;
+    optional string message = 10;
+    optional string error_type = 11;
+    optional string error_message = 12;
+    optional string stack_trace = 13;
+    optional string attributes = 14;
+    optional string sdk_version = 15;
+    optional string platform = 16;
+    optional string platform_version = 17;
+    optional int32 processing_time_ms = 18;
+    optional string error_fingerprint = 19;
+}
+
+message QueryLogsResponse {
+    repeated LogEntry logs = 1;
+    int32 total = 2;
+    bool has_more = 3;
+}
+
+message SearchLogsResponse {
+    repeated LogEntry logs = 1;
+    int32 total = 2;
+    bool has_more = 3;
+}
+
+message GetLogResponse {
+    optional LogEntry log = 1;
+    bool found = 2;
+}
+
+message GetErrorRateRequest {
+    int64 project_id = 1;
+    optional string interval = 2;
+    optional string start_time = 3;
+    optional string end_time = 4;
+}
+
+message ErrorRateData {
+    string timestamp = 1;
+    int32 error_count = 2;
+    int32 critical_count = 3;
+}
+
+message GetErrorRateResponse {
+    int64 project_id = 1;
+    string interval = 2;
+    repeated ErrorRateData data = 3;
+}
+
+message GetLogVolumeRequest {
+    int64 project_id = 1;
+    optional string interval = 2;
+    optional string start_time = 3;
+    optional string end_time = 4;
+}
+
+message LogVolumeData {
+    string timestamp = 1;
+    int32 debug = 2;
+    int32 info = 3;
+    int32 warning = 4;
+    int32 error = 5;
+    int32 critical = 6;
+}
+
+message GetLogVolumeResponse {
+    int64 project_id = 1;
+    string interval = 2;
+    repeated LogVolumeData data = 3;
+}
+
+message GetTopErrorsRequest {
+    int64 project_id = 1;
+    optional int32 limit = 2;
+    optional string start_time = 3;
+    optional string end_time = 4;
+    optional string status = 5;
+}
+
+message TopErrorData {
+    string fingerprint = 1;
+    string error_type = 2;
+    optional string error_message = 3;
+    int32 occurrence_count = 4;
+    string first_seen = 5;
+    string last_seen = 6;
+    string status = 7;
+    optional int64 sample_log_id = 8;
+}
+
+message GetTopErrorsResponse {
+    int64 project_id = 1;
+    repeated TopErrorData errors = 2;
+}
+
+message GetUsageStatsRequest {
+    int64 project_id = 1;
+    optional string start_date = 2;
+    optional string end_date = 3;
+}
+
+message UsageStatsData {
+    string date = 1;
+    int32 log_count = 2;
+    int32 daily_quota = 3;
+    float quota_used_percent = 4;
+}
+
+message GetUsageStatsResponse {
+    int64 project_id = 1;
+    repeated UsageStatsData usage = 2;
+}

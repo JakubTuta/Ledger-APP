@@ -91,6 +91,7 @@ function Show-Help {
     Write-Host "  test-gateway - Run gateway service tests"
     Write-Host "  test-ingestion - Run ingestion service tests"
     Write-Host "  test-analytics - Run analytics workers tests"
+    Write-Host "  test-query   - Run query service tests"
     Write-Host "  dev-auth     - Run auth service locally"
     Write-Host "  dev-gateway  - Run gateway service locally"
     Write-Host "  dev-ingestion - Run ingestion service locally"
@@ -156,77 +157,70 @@ function Setup {
 
 function Compile-Proto {
     Write-Host "Compiling protobuf files..." -ForegroundColor Cyan
-    
-    # Create proto directories if they don't exist
-    $authProtoDir = "services\auth\auth_service\proto"
-    $gatewayProtoDir = "services\gateway\gateway_service\proto"
-    
-    if (-not (Test-Path $authProtoDir)) {
-        New-Item -ItemType Directory -Path $authProtoDir -Force | Out-Null
+
+    # Create proto directories
+    $protoDirs = @(
+        "services\auth\auth_service\proto",
+        "services\gateway\gateway_service\proto",
+        "services\ingestion\ingestion_service\proto",
+        "services\query\query_service\proto"
+    )
+
+    foreach ($dir in $protoDirs) {
+        if (-not (Test-Path $dir)) {
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        }
+        $initFile = Join-Path $dir "__init__.py"
+        if (-not (Test-Path $initFile)) {
+            New-Item -ItemType File -Path $initFile -Force | Out-Null
+        }
     }
-    if (-not (Test-Path $gatewayProtoDir)) {
-        New-Item -ItemType Directory -Path $gatewayProtoDir -Force | Out-Null
-    }
-    
-    # Create __init__.py files if they don't exist
-    $authInitFile = Join-Path $authProtoDir "__init__.py"
-    $gatewayInitFile = Join-Path $gatewayProtoDir "__init__.py"
-    
-    if (-not (Test-Path $authInitFile)) {
-        New-Item -ItemType File -Path $authInitFile -Force | Out-Null
-        Write-Host "Created $authInitFile" -ForegroundColor Gray
-    }
-    if (-not (Test-Path $gatewayInitFile)) {
-        New-Item -ItemType File -Path $gatewayInitFile -Force | Out-Null
-        Write-Host "Created $gatewayInitFile" -ForegroundColor Gray
-    }
-    
-    # Use venv python if available
+
     $python = Get-VenvPython
-    
-    # Compile for auth service
-    & $python -m grpc_tools.protoc `
-        -I=proto `
-        --python_out=services/auth/auth_service/proto `
-        --grpc_python_out=services/auth/auth_service/proto `
-        --pyi_out=services/auth/auth_service/proto `
-        proto/auth.proto
-    
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "Auth protobuf compilation failed" -ForegroundColor Red
-        exit 1
-    }
-    
-    # Compile for gateway service
-    & $python -m grpc_tools.protoc `
-        -I=proto `
-        --python_out=services/gateway/gateway_service/proto `
-        --grpc_python_out=services/gateway/gateway_service/proto `
-        --pyi_out=services/gateway/gateway_service/proto `
-        proto/auth.proto
-    
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "Gateway protobuf compilation failed" -ForegroundColor Red
-        exit 1
-    }
-    
+
+    # Compile auth.proto for auth service
+    & $python -m grpc_tools.protoc -I=proto --python_out=services/auth/auth_service/proto --grpc_python_out=services/auth/auth_service/proto --pyi_out=services/auth/auth_service/proto proto/auth.proto
+    if ($LASTEXITCODE -ne 0) { Write-Host "Auth service proto compilation failed" -ForegroundColor Red; exit 1 }
+
+    # Compile auth.proto for gateway
+    & $python -m grpc_tools.protoc -I=proto --python_out=services/gateway/gateway_service/proto --grpc_python_out=services/gateway/gateway_service/proto --pyi_out=services/gateway/gateway_service/proto proto/auth.proto
+    if ($LASTEXITCODE -ne 0) { Write-Host "Gateway auth proto compilation failed" -ForegroundColor Red; exit 1 }
+
+    # Compile ingestion.proto for ingestion service
+    & $python -m grpc_tools.protoc -I=proto --python_out=services/ingestion/ingestion_service/proto --grpc_python_out=services/ingestion/ingestion_service/proto --pyi_out=services/ingestion/ingestion_service/proto proto/ingestion.proto
+    if ($LASTEXITCODE -ne 0) { Write-Host "Ingestion service proto compilation failed" -ForegroundColor Red; exit 1 }
+
+    # Compile ingestion.proto for gateway
+    & $python -m grpc_tools.protoc -I=proto --python_out=services/gateway/gateway_service/proto --grpc_python_out=services/gateway/gateway_service/proto --pyi_out=services/gateway/gateway_service/proto proto/ingestion.proto
+    if ($LASTEXITCODE -ne 0) { Write-Host "Gateway ingestion proto compilation failed" -ForegroundColor Red; exit 1 }
+
+    # Compile query.proto for query service
+    & $python -m grpc_tools.protoc -I=proto --python_out=services/query/query_service/proto --grpc_python_out=services/query/query_service/proto --pyi_out=services/query/query_service/proto proto/query.proto
+    if ($LASTEXITCODE -ne 0) { Write-Host "Query service proto compilation failed" -ForegroundColor Red; exit 1 }
+
+    # Compile query.proto for gateway
+    & $python -m grpc_tools.protoc -I=proto --python_out=services/gateway/gateway_service/proto --grpc_python_out=services/gateway/gateway_service/proto --pyi_out=services/gateway/gateway_service/proto proto/query.proto
+    if ($LASTEXITCODE -ne 0) { Write-Host "Gateway query proto compilation failed" -ForegroundColor Red; exit 1 }
+
     Write-Host "Protobuf compiled" -ForegroundColor Green
-    
-    # Fix imports in generated gRPC files to use relative imports
-    $authGrpcFile = "services\auth\auth_service\proto\auth_pb2_grpc.py"
-    if (Test-Path $authGrpcFile) {
-        $content = Get-Content $authGrpcFile -Raw
-        $content = $content -replace "import auth_pb2 as auth__pb2", "from . import auth_pb2 as auth__pb2"
-        Set-Content $authGrpcFile -Value $content -NoNewline
-        Write-Host "Fixed imports in auth service" -ForegroundColor Green
-    }
-    
-    $gatewayGrpcFile = "services\gateway\gateway_service\proto\auth_pb2_grpc.py"
-    if (Test-Path $gatewayGrpcFile) {
-        $content = Get-Content $gatewayGrpcFile -Raw
-        $content = $content -replace "import auth_pb2 as auth__pb2", "from . import auth_pb2 as auth__pb2"
-        Set-Content $gatewayGrpcFile -Value $content -NoNewline
-        Write-Host "Fixed imports in gateway service" -ForegroundColor Green
+
+    # Fix imports using relative imports
+    $fixImports = @(
+        @{ File = "services\auth\auth_service\proto\auth_pb2_grpc.py"; Pattern = "import auth_pb2 as auth__pb2"; Replacement = "from . import auth_pb2 as auth__pb2"; Name = "auth service" },
+        @{ File = "services\gateway\gateway_service\proto\auth_pb2_grpc.py"; Pattern = "import auth_pb2 as auth__pb2"; Replacement = "from . import auth_pb2 as auth__pb2"; Name = "gateway (auth)" },
+        @{ File = "services\ingestion\ingestion_service\proto\ingestion_pb2_grpc.py"; Pattern = "import ingestion_pb2 as ingestion__pb2"; Replacement = "from . import ingestion_pb2 as ingestion__pb2"; Name = "ingestion service" },
+        @{ File = "services\gateway\gateway_service\proto\ingestion_pb2_grpc.py"; Pattern = "import ingestion_pb2 as ingestion__pb2"; Replacement = "from . import ingestion_pb2 as ingestion__pb2"; Name = "gateway (ingestion)" },
+        @{ File = "services\query\query_service\proto\query_pb2_grpc.py"; Pattern = "import query_pb2 as query__pb2"; Replacement = "from . import query_pb2 as query__pb2"; Name = "query service" },
+        @{ File = "services\gateway\gateway_service\proto\query_pb2_grpc.py"; Pattern = "import query_pb2 as query__pb2"; Replacement = "from . import query_pb2 as query__pb2"; Name = "gateway (query)" }
+    )
+
+    foreach ($fix in $fixImports) {
+        if (Test-Path $fix.File) {
+            $content = Get-Content $fix.File -Raw
+            $content = $content -replace [regex]::Escape($fix.Pattern), $fix.Replacement
+            Set-Content $fix.File -Value $content -NoNewline
+            Write-Host "Fixed imports in $($fix.Name)" -ForegroundColor Green
+        }
     }
 }
 
@@ -282,6 +276,11 @@ function Show-WorkerLogs {
 function Show-AnalyticsLogs {
     Write-Host "Showing analytics workers logs (Ctrl+C to exit)..." -ForegroundColor Cyan
     docker-compose logs -f analytics-workers
+}
+
+function Show-QueryLogs {
+    Write-Host "Showing query service logs (Ctrl+C to exit)..." -ForegroundColor Cyan
+    docker-compose logs -f query
 }
 
 function Restart-Services {
@@ -351,6 +350,18 @@ function Build-AnalyticsImage {
         Write-Host "Analytics workers build complete" -ForegroundColor Green
     } else {
         Write-Host "Analytics workers build failed" -ForegroundColor Red
+        exit 1
+    }
+}
+
+function Build-QueryImage {
+    Write-Host "Building query service Docker image..." -ForegroundColor Cyan
+    docker-compose build query
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "Query service build complete" -ForegroundColor Green
+    } else {
+        Write-Host "Query service build failed" -ForegroundColor Red
         exit 1
     }
 }
@@ -542,16 +553,16 @@ function Run-Tests {
         Write-Host "Virtual environment not found. Run '.\Make.ps1 setup' first." -ForegroundColor Red
         exit 1
     }
-    
+
     Write-Host "Running all tests..." -ForegroundColor Cyan
     $python = Get-VenvPython
-    
+
     Write-Host "Testing auth service..." -ForegroundColor Cyan
     Push-Location services\auth
     & $python -m pytest tests/ -v
     $authResult = $LASTEXITCODE
     Pop-Location
-    
+
     Write-Host "Testing gateway service..." -ForegroundColor Cyan
     Push-Location services\gateway
     & $python -m pytest tests/ -v
@@ -564,7 +575,13 @@ function Run-Tests {
     $ingestionResult = $LASTEXITCODE
     Pop-Location
 
-    if ($authResult -eq 0 -and $gatewayResult -eq 0 -and $ingestionResult -eq 0) {
+    Write-Host "Testing query service..." -ForegroundColor Cyan
+    Push-Location services\query
+    & $python -m pytest tests/ -v
+    $queryResult = $LASTEXITCODE
+    Pop-Location
+
+    if ($authResult -eq 0 -and $gatewayResult -eq 0 -and $ingestionResult -eq 0 -and $queryResult -eq 0) {
         Write-Host "All tests passed" -ForegroundColor Green
     } else {
         Write-Host "Some tests failed" -ForegroundColor Red
@@ -652,6 +669,26 @@ function Run-AnalyticsTests {
     }
 }
 
+function Run-QueryTests {
+    if (-not (Test-Path "venv")) {
+        Write-Host "Virtual environment not found. Run '.\Make.ps1 setup' first." -ForegroundColor Red
+        exit 1
+    }
+
+    Write-Host "Running query service tests..." -ForegroundColor Cyan
+    $python = Get-VenvPython
+    Push-Location services\query
+    & $python -m pytest tests/ -v
+    Pop-Location
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "Query tests passed" -ForegroundColor Green
+    } else {
+        Write-Host "Query tests failed" -ForegroundColor Red
+        exit 1
+    }
+}
+
 function Run-DevAuth {
     if (-not (Test-Path "venv")) {
         Write-Host "Virtual environment not found. Run '.\Make.ps1 setup' first." -ForegroundColor Red
@@ -726,6 +763,19 @@ function Run-DevAnalytics {
     $python = Get-VenvPython
     Push-Location services\analytics
     & $python -m analytics_workers.main
+    Pop-Location
+}
+
+function Run-DevQuery {
+    if (-not (Test-Path "venv")) {
+        Write-Host "Virtual environment not found. Run '.\Make.ps1 setup' first." -ForegroundColor Red
+        exit 1
+    }
+
+    Write-Host "Running query service locally on port 8004..." -ForegroundColor Cyan
+    $python = Get-VenvPython
+    Push-Location services\query
+    & $python -m query_service.main
     Pop-Location
 }
 
@@ -829,6 +879,7 @@ switch ($Command.ToLower()) {
     "logs-ingestion"      { Show-IngestionLogs }
     "logs-worker"         { Show-WorkerLogs }
     "logs-analytics"      { Show-AnalyticsLogs }
+    "logs-query"          { Show-QueryLogs }
     "restart"             { Restart-Services }
     "ps"                  { Show-Status }
     "build"               { Build-Images }
@@ -836,6 +887,7 @@ switch ($Command.ToLower()) {
     "build-gateway"       { Build-GatewayImage }
     "build-ingestion"     { Build-IngestionImage }
     "build-analytics"     { Build-AnalyticsImage }
+    "build-query"         { Build-QueryImage }
     "db-migrate"          { Create-Migration }
     "db-upgrade"          { Apply-Migrations }
     "db-downgrade"        { Downgrade-Migration }
@@ -851,11 +903,13 @@ switch ($Command.ToLower()) {
     "test-gateway"        { Run-GatewayTests }
     "test-ingestion"      { Run-IngestionTests }
     "test-analytics"      { Run-AnalyticsTests }
+    "test-query"          { Run-QueryTests }
     "dev-auth"            { Run-DevAuth }
     "dev-gateway"         { Run-DevGateway }
     "dev-ingestion"       { Run-DevIngestion }
     "dev-worker"          { Run-DevWorker }
     "dev-analytics"       { Run-DevAnalytics }
+    "dev-query"           { Run-DevQuery }
     "health"              { Check-Health }
     "load-test"           { Run-LoadTest }
     "clean"               { Clean-Files }

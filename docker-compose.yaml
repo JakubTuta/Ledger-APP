@@ -266,6 +266,43 @@ services:
       timeout: 5s
       retries: 3
 
+  # ==================== Query Service (gRPC) ====================
+  query:
+    build:
+      context: ./services/query
+      dockerfile: Dockerfile
+    container_name: query-service
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Override host names for Docker network
+      REDIS_HOST: redis
+      LOGS_DB_HOST: postgres-logs
+    depends_on:
+      postgres-logs:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "${QUERY_GRPC_PORT:-50053}:${QUERY_GRPC_PORT:-50053}"
+    networks:
+      - backend
+    volumes:
+      # Mount for development (hot reload)
+      - ./services/query/query_service:/app/query_service:ro
+    command: python -m query_service.main
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import grpc; channel = grpc.insecure_channel('localhost:${QUERY_GRPC_PORT:-50053}'); channel.close()",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
 networks:
   backend:
     driver: bridge

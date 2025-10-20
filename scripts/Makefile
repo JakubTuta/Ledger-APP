@@ -16,6 +16,7 @@ help:
 	@echo "  logs-ingestion - View ingestion service logs"
 	@echo "  logs-worker - View worker logs"
 	@echo "  logs-analytics - View analytics workers logs"
+	@echo "  logs-query  - View query service logs"
 	@echo "  restart     - Restart all services"
 	@echo "  ps          - Show service status"
 	@echo "  build       - Build Docker images"
@@ -23,6 +24,7 @@ help:
 	@echo "  build-gateway - Build gateway service image"
 	@echo "  build-ingestion - Build ingestion service image"
 	@echo "  build-analytics - Build analytics workers image"
+	@echo "  build-query - Build query service image"
 	@echo "  db-migrate  - Generate new auth DB migration"
 	@echo "  db-upgrade  - Apply auth DB migrations"
 	@echo "  db-shell    - Open auth database shell"
@@ -35,11 +37,13 @@ help:
 	@echo "  test-gateway - Run gateway service tests"
 	@echo "  test-ingestion - Run ingestion service tests"
 	@echo "  test-analytics - Run analytics workers tests"
+	@echo "  test-query  - Run query service tests"
 	@echo "  dev-auth    - Run auth service locally"
 	@echo "  dev-gateway - Run gateway service locally"
 	@echo "  dev-ingestion - Run ingestion service locally"
 	@echo "  dev-worker  - Run storage worker locally"
 	@echo "  dev-analytics - Run analytics workers locally"
+	@echo "  dev-query   - Run query service locally"
 	@echo "  clean       - Clean generated files"
 	@echo "  clean-all   - Clean everything including Docker volumes"
 
@@ -70,9 +74,11 @@ proto:
 	@mkdir -p services/auth/auth_service/proto
 	@mkdir -p services/gateway/gateway_service/proto
 	@mkdir -p services/ingestion/ingestion_service/proto
+	@mkdir -p services/query/query_service/proto
 	@touch services/auth/auth_service/proto/__init__.py
 	@touch services/gateway/gateway_service/proto/__init__.py
 	@touch services/ingestion/ingestion_service/proto/__init__.py
+	@touch services/query/query_service/proto/__init__.py
 	@if [ -d "venv" ]; then \
 		bash -c "source venv/bin/activate && python3 -m grpc_tools.protoc \
 			-I=proto \
@@ -98,6 +104,18 @@ proto:
 			--grpc_python_out=services/gateway/gateway_service/proto \
 			--pyi_out=services/gateway/gateway_service/proto \
 			proto/ingestion.proto"; \
+		bash -c "source venv/bin/activate && python3 -m grpc_tools.protoc \
+			-I=proto \
+			--python_out=services/query/query_service/proto \
+			--grpc_python_out=services/query/query_service/proto \
+			--pyi_out=services/query/query_service/proto \
+			proto/query.proto"; \
+		bash -c "source venv/bin/activate && python3 -m grpc_tools.protoc \
+			-I=proto \
+			--python_out=services/gateway/gateway_service/proto \
+			--grpc_python_out=services/gateway/gateway_service/proto \
+			--pyi_out=services/gateway/gateway_service/proto \
+			proto/query.proto"; \
 	else \
 		python3 -m grpc_tools.protoc \
 			-I=proto \
@@ -123,6 +141,18 @@ proto:
 			--grpc_python_out=services/gateway/gateway_service/proto \
 			--pyi_out=services/gateway/gateway_service/proto \
 			proto/ingestion.proto; \
+		python3 -m grpc_tools.protoc \
+			-I=proto \
+			--python_out=services/query/query_service/proto \
+			--grpc_python_out=services/query/query_service/proto \
+			--pyi_out=services/query/query_service/proto \
+			proto/query.proto; \
+		python3 -m grpc_tools.protoc \
+			-I=proto \
+			--python_out=services/gateway/gateway_service/proto \
+			--grpc_python_out=services/gateway/gateway_service/proto \
+			--pyi_out=services/gateway/gateway_service/proto \
+			proto/query.proto; \
 	fi
 	@echo "Protobuf compiled"
 	@if [ -f "services/auth/auth_service/proto/auth_pb2_grpc.py" ]; then \
@@ -140,6 +170,14 @@ proto:
 	@if [ -f "services/gateway/gateway_service/proto/ingestion_pb2_grpc.py" ]; then \
 		sed -i 's/^import ingestion_pb2 as ingestion__pb2/from . import ingestion_pb2 as ingestion__pb2/' services/gateway/gateway_service/proto/ingestion_pb2_grpc.py; \
 		echo "Fixed imports in gateway service (ingestion)"; \
+	fi
+	@if [ -f "services/query/query_service/proto/query_pb2_grpc.py" ]; then \
+		sed -i 's/^import query_pb2 as query__pb2/from . import query_pb2 as query__pb2/' services/query/query_service/proto/query_pb2_grpc.py; \
+		echo "Fixed imports in query service"; \
+	fi
+	@if [ -f "services/gateway/gateway_service/proto/query_pb2_grpc.py" ]; then \
+		sed -i 's/^import query_pb2 as query__pb2/from . import query_pb2 as query__pb2/' services/gateway/gateway_service/proto/query_pb2_grpc.py; \
+		echo "Fixed imports in gateway service (query)"; \
 	fi
 
 # ==================== Docker ====================
@@ -179,6 +217,10 @@ logs-worker:
 logs-analytics:
 	docker-compose logs -f analytics-workers
 
+.PHONY: logs-query
+logs-query:
+	docker-compose logs -f query
+
 .PHONY: restart
 restart: down up
 
@@ -205,6 +247,10 @@ build-ingestion:
 .PHONY: build-analytics
 build-analytics:
 	docker-compose build analytics-workers
+
+.PHONY: build-query
+build-query:
+	docker-compose build query
 
 # ==================== Database (Auth) ====================
 
@@ -281,7 +327,7 @@ redis-flush:
 # ==================== Testing ====================
 
 .PHONY: test
-test: test-auth test-gateway test-ingestion
+test: test-auth test-gateway test-ingestion test-query
 
 .PHONY: test-auth
 test-auth:
@@ -314,6 +360,14 @@ test-analytics:
 		exit 1; \
 	fi
 	@bash -c "source venv/bin/activate && cd services/analytics && pytest tests/ -v"
+
+.PHONY: test-query
+test-query:
+	@if [ ! -d "venv" ]; then \
+		echo "Virtual environment not found. Run 'make setup' first."; \
+		exit 1; \
+	fi
+	@bash -c "source venv/bin/activate && cd services/query && pytest tests/ -v"
 
 # ==================== Development ====================
 
@@ -356,6 +410,14 @@ dev-analytics:
 		exit 1; \
 	fi
 	@bash -c "source venv/bin/activate && cd services/analytics && python3 -m analytics_workers.main"
+
+.PHONY: dev-query
+dev-query:
+	@if [ ! -d "venv" ]; then \
+		echo "Virtual environment not found. Run 'make setup' first."; \
+		exit 1; \
+	fi
+	@bash -c "source venv/bin/activate && cd services/query && python3 -m query_service.main"
 
 # ==================== Health Checks ====================
 

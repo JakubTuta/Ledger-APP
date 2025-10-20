@@ -1,11 +1,11 @@
 # Web Framework
 fastapi==0.119.0
-uvicorn[standard]==0.37.0
+uvicorn[standard]==0.38.0
 
 # gRPC Client
 grpcio==1.75.1
 grpcio-tools==1.75.1
-protobuf==6.32.1
+protobuf==6.33.0
 
 # Redis Client
 redis[hiredis]==6.4.0
@@ -14,7 +14,7 @@ redis[hiredis]==6.4.0
 httpx==0.28.1
 
 # Configuration & Validation
-pydantic==2.12.0
+pydantic==2.12.3
 pydantic-settings==2.11.0
 python-dotenv==1.1.1
 
