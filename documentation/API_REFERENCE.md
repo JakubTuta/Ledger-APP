@@ -1,12 +1,12 @@
-# REST API Endpoints Documentation
+# Ledger API Reference
 
 ## Overview
 
-This document provides comprehensive documentation for the Ledger Gateway Service REST API. All endpoints are exposed through the Gateway Service running on port 8000.
+This document provides complete documentation for the Ledger REST API. Use these endpoints to send logs, query data, and manage your account.
 
-**Base URL:** `http://localhost:8000/api/v1`
+**Base URL**: `http://localhost:8000/api/v1`
 
-**API Version:** 1.0.0
+**API Version**: 1.0.0
 
 ---
 
@@ -742,15 +742,6 @@ When rate limit is exceeded, the API returns:
 }
 ```
 
-### Middleware Stack
-
-All requests pass through the following middleware layers:
-
-1. **CORS Middleware** - Cross-origin resource sharing
-2. **Circuit Breaker Middleware** - Fault tolerance with emergency cache fallback
-3. **Rate Limit Middleware** - Sliding window rate limiting with Redis
-4. **Auth Middleware** - JWT/API key validation with Redis caching
-
 ---
 
 ## Authentication Methods
@@ -786,36 +777,6 @@ Authorization: Bearer ldg_proj_1_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0
 - `/api/v1/ingest/single` (ingest single log)
 - `/api/v1/ingest/batch` (ingest batch logs)
 - `/api/v1/queue/depth` (get queue depth)
-
-**Features:**
-- Per-key rate limiting
-- Project-scoped access
-- Redis-cached validation (5-minute TTL)
-- Index-only database scans for performance
-
----
-
-## Performance Characteristics
-
-### Latency Targets
-
-| Metric | Target | Notes |
-|--------|--------|-------|
-| Gateway p99 latency | <50ms | With cached auth |
-| API key validation | ~5ms | Redis cached (95% hit rate) |
-| Rate limit check | <1ms | Redis atomic operations |
-| Throughput | 10K RPS | Per Gateway instance |
-
-### Caching Strategy
-
-- **API Key Cache:** 5-minute TTL in Redis
-- **Emergency Cache:** 10-minute fallback during circuit breaker open state
-- **Session Cache:** 1-hour TTL for JWT tokens
-
-### Connection Pooling
-
-- **gRPC Channels:** 10 persistent channels with keepalive
-- **Redis Pool:** 50 connections maximum
 
 ---
 
@@ -951,13 +912,14 @@ curl -X POST http://localhost:8000/api/v1/accounts/logout \
 
 ## Additional Resources
 
-- **Architecture Documentation:** See `project_overview/ARCHITECTURE.md`
-- **Gateway Service Details:** See `project_overview/GATEWAY_SERVICE.md`
-- **Database Schema:** See `project_overview/DATABASE_SCHEMA.md`
-- **Performance Optimization:** See `project_overview/OPTIMIZATION.md`
+- **[Architecture Guide](ARCHITECTURE.md)** - System design and service overview
+- **[Services Guide](SERVICES.md)** - Detailed information about each service
+- **[Main README](../README.md)** - Getting started and quick start guide
 
 ---
 
-## Support
+## Need Help?
 
-For issues or questions, please refer to the project README or create an issue in the repository.
+- Check the [README](../README.md) for getting started
+- Review the [Architecture Guide](ARCHITECTURE.md) for system design
+- See [Services Guide](SERVICES.md) for service details
