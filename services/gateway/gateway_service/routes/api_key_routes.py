@@ -18,12 +18,20 @@ router = fastapi.APIRouter(tags=["API Keys"])
 
 class CreateApiKeyRequest(pydantic.BaseModel):
     name: str = pydantic.Field(
-        ..., min_length=1, max_length=255, description="API key name"
+        ...,
+        min_length=1,
+        max_length=255,
+        description="Descriptive name for the API key",
+        examples=["Production API Key"],
+    )
+
+    model_config = pydantic.ConfigDict(
+        json_schema_extra={"example": {"name": "Production API Key"}}
     )
 
 
 class CreateApiKeyResponse(pydantic.BaseModel):
-    key_id: int
+    key_id: int = pydantic.Field(..., description="Unique API key identifier")
     full_key: str = pydantic.Field(
         ..., description="Complete API key (only shown once!)"
     )
@@ -33,10 +41,30 @@ class CreateApiKeyResponse(pydantic.BaseModel):
         description="Security warning",
     )
 
+    model_config = pydantic.ConfigDict(
+        json_schema_extra={
+            "example": {
+                "key_id": 789,
+                "full_key": "ldg_prod_1a2b3c4d5e6f7g8h9i0j",
+                "key_prefix": "ldg_prod_1a2b",
+                "warning": "Save this key now! It will not be shown again.",
+            }
+        }
+    )
+
 
 class RevokeApiKeyResponse(pydantic.BaseModel):
-    success: bool
-    message: str
+    success: bool = pydantic.Field(..., description="Whether revocation succeeded")
+    message: str = pydantic.Field(..., description="Status message")
+
+    model_config = pydantic.ConfigDict(
+        json_schema_extra={
+            "example": {
+                "success": True,
+                "message": "API key 789 has been revoked",
+            }
+        }
+    )
 
 
 # ==================== ROUTE HANDLERS ====================
@@ -47,29 +75,69 @@ class RevokeApiKeyResponse(pydantic.BaseModel):
     response_model=CreateApiKeyResponse,
     status_code=fastapi.status.HTTP_201_CREATED,
     summary="Create API key",
-    description="Create a new API key for a project",
+    description="Generate a new API key for log ingestion and project access. The full key is only shown once.",
+    response_description="Created API key (save immediately!)",
+    responses={
+        201: {
+            "description": "API key created successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "key_id": 789,
+                        "full_key": "ldg_prod_1a2b3c4d5e6f7g8h9i0j",
+                        "key_prefix": "ldg_prod_1a2b",
+                        "warning": "Save this key now! It will not be shown again.",
+                    }
+                }
+            },
+        },
+        403: {
+            "description": "Permission denied (don't own this project)",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "You don't have permission to create API keys for this project"
+                    }
+                }
+            },
+        },
+        404: {
+            "description": "Project not found",
+            "content": {
+                "application/json": {"example": {"detail": "Project 456 not found"}}
+            },
+        },
+        503: {
+            "description": "Service timeout",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Service timeout, please try again"}
+                }
+            },
+        },
+    },
 )
 async def create_api_key(
-    project_id: int,
-    request_data: CreateApiKeyRequest,
+    project_id: int = fastapi.Path(
+        ..., description="Project ID to create API key for", examples=[456]
+    ),
+    request_data: CreateApiKeyRequest = fastapi.Body(...),
     grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
 ):
     """
     Create a new API key for a project.
 
-    Args:
-        project_id: Project ID to create key for
-        request_data: API key details
-        auth: Auth context from middleware
-        grpc_pool: gRPC connection pool
+    **IMPORTANT:** The full API key is only shown once in the response.
+    Save it securely - it cannot be retrieved again.
 
-    Returns:
-        Created API key details (full key shown once!)
+    API keys are used for:
+    - Log ingestion via /api/v1/ingest endpoints
+    - Accessing project-specific endpoints
+    - SDK authentication
 
-    Raises:
-        403: User doesn't own this project
-        404: Project not found
-        500: Internal server error
+    Include the key in requests using the `X-API-Key` header.
+
+    Requires JWT authentication.
     """
 
     try:
@@ -128,28 +196,58 @@ async def create_api_key(
     "/api-keys/{key_id}",
     response_model=RevokeApiKeyResponse,
     summary="Revoke API key",
-    description="Revoke an API key (cannot be undone)",
+    description="Permanently revoke an API key. This action cannot be undone and the key will immediately stop working.",
+    response_description="Revocation confirmation",
+    responses={
+        200: {
+            "description": "API key revoked successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "message": "API key 789 has been revoked",
+                    }
+                }
+            },
+        },
+        403: {
+            "description": "Permission denied (don't own this API key)",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "You don't have permission to revoke this API key"
+                    }
+                }
+            },
+        },
+        404: {
+            "description": "API key not found",
+            "content": {
+                "application/json": {"example": {"detail": "API key 789 not found"}}
+            },
+        },
+        503: {
+            "description": "Service timeout",
+            "content": {"application/json": {"example": {"detail": "Service timeout"}}},
+        },
+    },
 )
 async def revoke_api_key(
-    key_id: int,
+    key_id: int = fastapi.Path(..., description="API key ID to revoke", examples=[789]),
     grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
 ):
     """
-    Revoke an API key.
+    Permanently revoke an API key.
 
-    Args:
-        key_id: API key ID to revoke
-        auth: Auth context from middleware
-        grpc_pool: gRPC connection pool
-        redis: Redis client for cache invalidation
+    Once revoked, the API key will immediately stop working and cannot be
+    restored. Any requests using the revoked key will receive 401 Unauthorized.
 
-    Returns:
-        Revocation status
+    This is useful for:
+    - Rotating compromised keys
+    - Removing access for decommissioned services
+    - Cleaning up unused keys
 
-    Raises:
-        403: User doesn't own this API key
-        404: API key not found
-        500: Internal server error
+    Requires JWT authentication.
     """
 
     try:

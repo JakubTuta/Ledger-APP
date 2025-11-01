@@ -18,9 +18,26 @@ router = fastapi.APIRouter(tags=["Authentication"])
 
 
 class RegisterRequest(pydantic.BaseModel):
-    email: str = pydantic.Field(..., max_length=255)
-    password: str = pydantic.Field(..., min_length=8, max_length=64)
-    name: str = pydantic.Field(..., min_length=1, max_length=255)
+    email: str = pydantic.Field(
+        ...,
+        max_length=255,
+        description="Valid email address for account creation",
+        examples=["user@example.com"],
+    )
+    password: str = pydantic.Field(
+        ...,
+        min_length=8,
+        max_length=64,
+        description="Secure password (min 8 chars, must include uppercase, lowercase, and digit)",
+        examples=["SecurePass123"],
+    )
+    name: str = pydantic.Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="User's full name",
+        examples=["John Doe"],
+    )
 
     @pydantic.field_validator("email")
     @classmethod
@@ -53,30 +70,89 @@ class RegisterRequest(pydantic.BaseModel):
 
         return v
 
+    model_config = pydantic.ConfigDict(
+        json_schema_extra={
+            "example": {
+                "email": "user@example.com",
+                "password": "SecurePass123",
+                "name": "John Doe",
+            }
+        }
+    )
+
 
 class RegisterResponse(pydantic.BaseModel):
-    account_id: int
-    email: str
-    name: str
-    message: str = "Account created successfully"
+    account_id: int = pydantic.Field(..., description="Unique account identifier")
+    email: str = pydantic.Field(..., description="Registered email address")
+    name: str = pydantic.Field(..., description="User's full name")
+    message: str = pydantic.Field(
+        default="Account created successfully", description="Success message"
+    )
+
+    model_config = pydantic.ConfigDict(
+        json_schema_extra={
+            "example": {
+                "account_id": 123,
+                "email": "user@example.com",
+                "name": "John Doe",
+                "message": "Account created successfully",
+            }
+        }
+    )
 
 
 class LoginRequest(pydantic.BaseModel):
-    email: str = pydantic.Field(..., max_length=255)
-    password: str = pydantic.Field(..., min_length=8, max_length=64)
+    email: str = pydantic.Field(
+        ...,
+        max_length=255,
+        description="Registered email address",
+        examples=["user@example.com"],
+    )
+    password: str = pydantic.Field(
+        ...,
+        min_length=8,
+        max_length=64,
+        description="Account password",
+        examples=["SecurePass123"],
+    )
 
     @pydantic.field_validator("email")
     @classmethod
     def validate_email(cls, v: str) -> str:
         return v.lower()
 
+    model_config = pydantic.ConfigDict(
+        json_schema_extra={
+            "example": {
+                "email": "user@example.com",
+                "password": "SecurePass123",
+            }
+        }
+    )
+
 
 class LoginResponse(pydantic.BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    account_id: int
-    email: str
-    expires_in: int = 3600
+    access_token: str = pydantic.Field(..., description="JWT access token")
+    token_type: str = pydantic.Field(
+        default="bearer", description="Token type (always 'bearer')"
+    )
+    account_id: int = pydantic.Field(..., description="Account identifier")
+    email: str = pydantic.Field(..., description="Logged in email address")
+    expires_in: int = pydantic.Field(
+        default=3600, description="Token expiration time in seconds"
+    )
+
+    model_config = pydantic.ConfigDict(
+        json_schema_extra={
+            "example": {
+                "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                "token_type": "bearer",
+                "account_id": 123,
+                "email": "user@example.com",
+                "expires_in": 3600,
+            }
+        }
+    )
 
 
 # ==================== ROUTE HANDLERS ====================
@@ -87,25 +163,66 @@ class LoginResponse(pydantic.BaseModel):
     response_model=RegisterResponse,
     status_code=fastapi.status.HTTP_201_CREATED,
     summary="Register new account",
-    description="Create a new account with email and password",
+    description="Create a new account with email, password, and name. Password must be at least 8 characters with uppercase, lowercase, and digit.",
+    response_description="Created account details",
+    responses={
+        201: {
+            "description": "Account created successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "account_id": 123,
+                        "email": "user@example.com",
+                        "name": "John Doe",
+                        "message": "Account created successfully",
+                    }
+                }
+            },
+        },
+        400: {
+            "description": "Invalid input (email format, password requirements)",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Password must contain uppercase letter"
+                    }
+                }
+            },
+        },
+        409: {
+            "description": "Email already registered",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Email already registered"}
+                }
+            },
+        },
+        503: {
+            "description": "Service temporarily unavailable",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Registration service timeout, please try again"
+                    }
+                }
+            },
+        },
+    },
 )
 async def register_account(
     request: RegisterRequest,
     grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
 ):
     """
-    Register a new account.
+    Register a new account with email, password, and name.
 
-    Args:
-        request: Registration details
+    The password must meet the following requirements:
+    - Minimum 8 characters
+    - At least one uppercase letter
+    - At least one lowercase letter
+    - At least one digit
 
-    Returns:
-        Created account details
-
-    Raises:
-        203: Email already registered
-        400: Invalid input
-        500: Registration failed
+    Returns the created account details including a unique account_id.
     """
 
     try:
@@ -156,7 +273,40 @@ async def register_account(
     "/accounts/login",
     response_model=LoginResponse,
     summary="Login to account",
-    description="Authenticate with email and password, receive JWT token",
+    description="Authenticate with email and password to receive a JWT token for accessing protected endpoints",
+    response_description="JWT token and account information",
+    responses={
+        200: {
+            "description": "Login successful",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                        "token_type": "bearer",
+                        "account_id": 123,
+                        "email": "user@example.com",
+                        "expires_in": 3600,
+                    }
+                }
+            },
+        },
+        401: {
+            "description": "Invalid email or password",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Invalid email or password"}
+                }
+            },
+        },
+        503: {
+            "description": "Service temporarily unavailable",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Login service timeout, please try again"}
+                }
+            },
+        },
+    },
 )
 async def login_account(
     request: LoginRequest,
@@ -164,18 +314,13 @@ async def login_account(
     redis: redis_client.RedisClient = fastapi.Depends(dependencies.get_redis_client),
 ):
     """
-    Login to account and receive JWT token.
+    Authenticate with email and password to receive a JWT access token.
 
-    Args:
-        request: Login details
+    The JWT token is valid for 3600 seconds (1 hour) and should be included
+    in the Authorization header for subsequent requests:
+    `Authorization: Bearer <token>`
 
-    Returns:
-        JWT token and account details
-
-    Raises:
-        401: Invalid credentials
-        500: Login failed
-        503: Service timeout
+    The token is also cached in Redis for fast validation.
     """
 
     try:
@@ -235,24 +380,28 @@ async def login_account(
     "/accounts/logout",
     status_code=fastapi.status.HTTP_204_NO_CONTENT,
     summary="Logout from account",
-    description="Invalidate JWT token",
+    description="Invalidate the current JWT token by removing it from the session cache",
+    responses={
+        204: {"description": "Logout successful, token invalidated"},
+        401: {
+            "description": "Not authenticated",
+            "content": {
+                "application/json": {"example": {"detail": "Not authenticated"}}
+            },
+        },
+    },
 )
 async def logout_account(
     request: fastapi.Request,
     redis: redis_client.RedisClient = fastapi.Depends(dependencies.get_redis_client),
 ):
     """
-    Logout: Invalidate JWT token.
+    Invalidate the current JWT token.
 
-    Args:
-        request: HTTP request with Authorization header
+    Removes the token from the Redis session cache, effectively logging out
+    the user. The token will no longer be valid for authenticated requests.
 
-    Returns:
-        None (204 No Content)
-
-    Raises:
-        401: Not authenticated
-        500: Logout failed
+    Requires a valid JWT token in the Authorization header.
     """
 
     auth_header = request.headers.get("Authorization")
@@ -273,25 +422,53 @@ async def logout_account(
 @router.get(
     "/accounts/me",
     summary="Get current account info",
-    description="Get account details for authenticated user",
+    description="Retrieve account details for the currently authenticated user",
+    response_description="Account information",
+    responses={
+        200: {
+            "description": "Account details retrieved successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "account_id": 123,
+                        "email": "user@example.com",
+                        "name": "John Doe",
+                        "created_at": "2024-01-15T10:30:00Z",
+                    }
+                }
+            },
+        },
+        401: {
+            "description": "Not authenticated",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Authentication required"}
+                }
+            },
+        },
+        404: {
+            "description": "Account not found",
+            "content": {
+                "application/json": {"example": {"detail": "Account not found"}}
+            },
+        },
+        503: {
+            "description": "Service timeout",
+            "content": {
+                "application/json": {"example": {"detail": "Service timeout"}}
+            },
+        },
+    },
 )
 async def get_current_account(
     request: fastapi.Request,
     grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
 ):
     """
-    Get current account information.
+    Get current authenticated account information.
 
-    Args:
-        request: HTTP request with account_id in state
-
-    Returns:
-        Account details
-
-    Raises:
-        401: Not authenticated
-        404: Account not found
-        500: Failed to fetch account
+    Returns the account details including account_id, email, name, and
+    creation timestamp. Requires a valid JWT token in the Authorization header.
     """
 
     if not hasattr(request.state, "account_id"):

@@ -14,41 +14,155 @@ router = fastapi.APIRouter(tags=["Dashboard"])
 
 
 class PanelRequest(pydantic.BaseModel):
-    name: str = pydantic.Field(..., min_length=1, max_length=255)
-    index: int = pydantic.Field(..., ge=0)
-    project_id: str = pydantic.Field(..., min_length=1)
-    time_range_from: str = pydantic.Field(...)
-    time_range_to: str = pydantic.Field(...)
-    type: str = pydantic.Field(..., pattern=r"^(logs|errors|metrics)$")
+    name: str = pydantic.Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="Panel display name",
+        examples=["Error Rate - Last 24h"],
+    )
+    index: int = pydantic.Field(
+        ..., ge=0, description="Panel position index", examples=[0]
+    )
+    project_id: str = pydantic.Field(
+        ..., min_length=1, description="Project ID", examples=["456"]
+    )
+    time_range_from: str = pydantic.Field(
+        ...,
+        description="Start of time range (ISO 8601)",
+        examples=["2024-01-15T00:00:00Z"],
+    )
+    time_range_to: str = pydantic.Field(
+        ...,
+        description="End of time range (ISO 8601)",
+        examples=["2024-01-16T00:00:00Z"],
+    )
+    type: str = pydantic.Field(
+        ...,
+        pattern=r"^(logs|errors|metrics)$",
+        description="Panel type (logs, errors, metrics)",
+        examples=["errors"],
+    )
+
+    model_config = pydantic.ConfigDict(
+        json_schema_extra={
+            "example": {
+                "name": "Error Rate - Last 24h",
+                "index": 0,
+                "project_id": "456",
+                "time_range_from": "2024-01-15T00:00:00Z",
+                "time_range_to": "2024-01-16T00:00:00Z",
+                "type": "errors",
+            }
+        }
+    )
 
 
 class PanelResponse(pydantic.BaseModel):
-    id: str
-    name: str
-    index: int
-    project_id: str
-    time_range_from: str
-    time_range_to: str
-    type: str
+    id: str = pydantic.Field(..., description="Unique panel identifier")
+    name: str = pydantic.Field(..., description="Panel display name")
+    index: int = pydantic.Field(..., description="Panel position index")
+    project_id: str = pydantic.Field(..., description="Associated project ID")
+    time_range_from: str = pydantic.Field(..., description="Time range start")
+    time_range_to: str = pydantic.Field(..., description="Time range end")
+    type: str = pydantic.Field(..., description="Panel type")
+
+    model_config = pydantic.ConfigDict(
+        json_schema_extra={
+            "example": {
+                "id": "panel_abc123",
+                "name": "Error Rate - Last 24h",
+                "index": 0,
+                "project_id": "456",
+                "time_range_from": "2024-01-15T00:00:00Z",
+                "time_range_to": "2024-01-16T00:00:00Z",
+                "type": "errors",
+            }
+        }
+    )
 
 
 class PanelListResponse(pydantic.BaseModel):
-    panels: list[PanelResponse]
-    total: int
+    panels: list[PanelResponse] = pydantic.Field(..., description="List of panels")
+    total: int = pydantic.Field(..., description="Total number of panels")
+
+    model_config = pydantic.ConfigDict(
+        json_schema_extra={
+            "example": {
+                "panels": [
+                    {
+                        "id": "panel_abc123",
+                        "name": "Error Rate - Last 24h",
+                        "index": 0,
+                        "project_id": "456",
+                        "time_range_from": "2024-01-15T00:00:00Z",
+                        "time_range_to": "2024-01-16T00:00:00Z",
+                        "type": "errors",
+                    }
+                ],
+                "total": 1,
+            }
+        }
+    )
 
 
 class UpdatePanelRequest(pydantic.BaseModel):
-    name: str = pydantic.Field(..., min_length=1, max_length=255)
-    index: int = pydantic.Field(..., ge=0)
-    project_id: str = pydantic.Field(..., min_length=1)
-    time_range_from: str = pydantic.Field(...)
-    time_range_to: str = pydantic.Field(...)
-    type: str = pydantic.Field(..., pattern=r"^(logs|errors|metrics)$")
+    name: str = pydantic.Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="Panel display name",
+        examples=["Error Rate - Last 24h"],
+    )
+    index: int = pydantic.Field(
+        ..., ge=0, description="Panel position index", examples=[0]
+    )
+    project_id: str = pydantic.Field(
+        ..., min_length=1, description="Project ID", examples=["456"]
+    )
+    time_range_from: str = pydantic.Field(
+        ...,
+        description="Start of time range (ISO 8601)",
+        examples=["2024-01-15T00:00:00Z"],
+    )
+    time_range_to: str = pydantic.Field(
+        ...,
+        description="End of time range (ISO 8601)",
+        examples=["2024-01-16T00:00:00Z"],
+    )
+    type: str = pydantic.Field(
+        ...,
+        pattern=r"^(logs|errors|metrics)$",
+        description="Panel type (logs, errors, metrics)",
+        examples=["errors"],
+    )
+
+    model_config = pydantic.ConfigDict(
+        json_schema_extra={
+            "example": {
+                "name": "Error Rate - Last 24h",
+                "index": 0,
+                "project_id": "456",
+                "time_range_from": "2024-01-15T00:00:00Z",
+                "time_range_to": "2024-01-16T00:00:00Z",
+                "type": "errors",
+            }
+        }
+    )
 
 
 class DeletePanelResponse(pydantic.BaseModel):
-    success: bool
-    message: str
+    success: bool = pydantic.Field(..., description="Whether deletion succeeded")
+    message: str = pydantic.Field(..., description="Status message")
+
+    model_config = pydantic.ConfigDict(
+        json_schema_extra={
+            "example": {
+                "success": True,
+                "message": "Panel panel_abc123 deleted successfully",
+            }
+        }
+    )
 
 
 @router.get(

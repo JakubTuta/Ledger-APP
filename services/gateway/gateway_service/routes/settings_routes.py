@@ -6,12 +6,107 @@ import gateway_service.config as config
 import gateway_service.proto.auth_pb2 as auth_pb2
 import grpc
 
-router = fastapi.APIRouter(tags=["settings"])
+router = fastapi.APIRouter(tags=["Settings"])
 logger = logging.getLogger(__name__)
 
 
-@router.get("/settings")
+@router.get(
+    "/settings",
+    summary="Get project settings",
+    description="Retrieve comprehensive project settings including rate limits, quotas, constraints, and feature flags.",
+    response_description="Project settings and configuration",
+    responses={
+        200: {
+            "description": "Settings retrieved successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "project_id": 456,
+                        "project_name": "My Production App",
+                        "project_slug": "my-production-app",
+                        "environment": "production",
+                        "rate_limits": {
+                            "requests_per_minute": 1000,
+                            "requests_per_hour": 50000,
+                        },
+                        "quotas": {
+                            "daily_quota": 1000000,
+                            "daily_usage": 45678,
+                            "quota_remaining": 954322,
+                            "quota_reset_at": "2024-01-16T00:00:00Z",
+                        },
+                        "constraints": {
+                            "max_batch_size": 1000,
+                            "max_message_length": 10000,
+                            "max_error_message_length": 5000,
+                            "max_stack_trace_length": 50000,
+                            "max_attributes_size_bytes": 102400,
+                            "supported_log_levels": ["debug", "info", "warning", "error", "critical"],
+                            "supported_log_types": ["console", "logger", "exception", "custom"],
+                        },
+                        "features": {
+                            "batch_ingestion": True,
+                            "compression": False,
+                            "streaming": False,
+                            "endpoint_monitoring": True,
+                        },
+                        "server_info": {
+                            "version": "1.0.0",
+                            "timestamp": "2024-01-15T10:30:00Z",
+                        },
+                    }
+                }
+            },
+        },
+        404: {
+            "description": "Project not found",
+            "content": {
+                "application/json": {"example": {"detail": "Project not found"}}
+            },
+        },
+        500: {
+            "description": "Failed to fetch settings",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Failed to fetch settings"}
+                }
+            },
+        },
+    },
+)
 async def get_settings(request: fastapi.Request):
+    """
+    Get comprehensive project settings and configuration.
+
+    Returns all settings relevant to the project including:
+
+    **Rate Limits:**
+    - Requests per minute limit
+    - Requests per hour limit
+
+    **Quotas:**
+    - Daily log ingestion quota
+    - Current daily usage
+    - Remaining quota
+    - When quota resets (midnight UTC)
+
+    **Constraints:**
+    - Maximum batch size (1000 logs)
+    - Maximum field lengths
+    - Supported enum values (levels, types, importance)
+
+    **Features:**
+    - Available features and their status
+    - Endpoint monitoring enabled/disabled
+
+    **Server Info:**
+    - API version
+    - Current server timestamp
+
+    Useful for SDK initialization and validation.
+
+    Requires API key authentication via `X-API-Key` header.
+    """
     grpc_pool = request.app.state.grpc_pool
     project_id = request.state.project_id
 

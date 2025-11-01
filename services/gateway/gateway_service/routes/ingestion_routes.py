@@ -6,12 +6,75 @@ import grpc
 
 import gateway_service.proto.ingestion_pb2 as ingestion_pb2
 
-router = fastapi.APIRouter(tags=["ingestion"])
+router = fastapi.APIRouter(tags=["Ingestion"])
 logger = logging.getLogger(__name__)
 
 
-@router.post("/ingest/single", status_code=202)
+@router.post(
+    "/ingest/single",
+    status_code=202,
+    summary="Ingest single log",
+    description="Ingest a single log entry into the project. Requires API key authentication via X-API-Key header.",
+    response_description="Ingestion acknowledgment",
+    responses={
+        202: {
+            "description": "Log accepted for processing",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "accepted": 1,
+                        "rejected": 0,
+                        "message": "Log queued successfully",
+                    }
+                }
+            },
+        },
+        400: {
+            "description": "Invalid log format or validation error",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Invalid timestamp format"}
+                }
+            },
+        },
+        503: {
+            "description": "Service unavailable - queue full",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Service temporarily unavailable - queue full"}
+                }
+            },
+            "headers": {
+                "Retry-After": {
+                    "description": "Seconds to wait before retrying",
+                    "schema": {"type": "integer"},
+                }
+            },
+        },
+    },
+)
 async def ingest_single_log(log_entry: dict, request: fastapi.Request):
+    """
+    Ingest a single log entry.
+
+    Accepts a log entry with fields like timestamp, level, message, error details,
+    and custom attributes. The log is validated and queued for asynchronous processing.
+
+    **Required fields:**
+    - `timestamp` (ISO 8601 format)
+    - `level` (debug, info, warning, error, critical)
+
+    **Optional fields:**
+    - `message` - Log message (max 10,000 chars)
+    - `log_type` - Type of log (console, logger, exception, custom)
+    - `error_type` - Error class name
+    - `error_message` - Error description
+    - `stack_trace` - Full stack trace
+    - `attributes` - Custom JSON attributes (max 100KB)
+    - `environment`, `release`, `sdk_version`, `platform`
+
+    Requires API key authentication via `X-API-Key` header.
+    """
     grpc_pool = request.app.state.grpc_pool
     project_id = request.state.project_id
 
@@ -53,8 +116,82 @@ async def ingest_single_log(log_entry: dict, request: fastapi.Request):
         )
 
 
-@router.post("/ingest/batch", status_code=202)
+@router.post(
+    "/ingest/batch",
+    status_code=202,
+    summary="Ingest batch of logs",
+    description="Ingest multiple log entries in a single request for improved throughput (max 1000 logs per batch).",
+    response_description="Batch ingestion summary",
+    responses={
+        202: {
+            "description": "Batch accepted for processing",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "accepted": 100,
+                        "rejected": 0,
+                        "errors": None,
+                    }
+                }
+            },
+        },
+        400: {
+            "description": "Invalid batch format or empty batch",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Batch must contain at least one log entry"}
+                }
+            },
+        },
+        503: {
+            "description": "Service unavailable - queue full",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Service temporarily unavailable - queue full"}
+                }
+            },
+            "headers": {
+                "Retry-After": {
+                    "description": "Seconds to wait before retrying",
+                    "schema": {"type": "integer"},
+                }
+            },
+        },
+    },
+)
 async def ingest_batch_logs(batch_request: dict, request: fastapi.Request):
+    """
+    Ingest multiple log entries in a single batch request.
+
+    Batch ingestion provides higher throughput and lower overhead compared
+    to individual requests. Ideal for processing large volumes of logs.
+
+    **Request format:**
+    ```json
+    {
+      "logs": [
+        {
+          "timestamp": "2024-01-15T10:30:00Z",
+          "level": "error",
+          "message": "Application error occurred",
+          ...
+        },
+        ...
+      ]
+    }
+    ```
+
+    **Limits:**
+    - Maximum 1000 logs per batch
+    - Each log follows the same validation as single ingestion
+
+    **Response:**
+    - `accepted` - Number of logs successfully queued
+    - `rejected` - Number of logs that failed validation
+    - `errors` - Array of error messages for rejected logs
+
+    Requires API key authentication via `X-API-Key` header.
+    """
     grpc_pool = request.app.state.grpc_pool
     project_id = request.state.project_id
 
@@ -109,8 +246,47 @@ async def ingest_batch_logs(batch_request: dict, request: fastapi.Request):
         )
 
 
-@router.get("/queue/depth")
+@router.get(
+    "/queue/depth",
+    summary="Get queue depth",
+    description="Check the current number of logs waiting to be processed in the ingestion queue for this project.",
+    response_description="Queue depth information",
+    responses={
+        200: {
+            "description": "Queue depth retrieved successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "project_id": 456,
+                        "queue_depth": 1234,
+                    }
+                }
+            },
+        },
+        500: {
+            "description": "Failed to retrieve queue depth",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Failed to get queue depth"}
+                }
+            },
+        },
+    },
+)
 async def get_queue_depth_endpoint(request: fastapi.Request):
+    """
+    Get the current ingestion queue depth for this project.
+
+    Returns the number of log entries currently waiting in the Redis queue
+    to be processed by the storage workers. High queue depth may indicate:
+    - High ingestion rate
+    - Slow storage processing
+    - Potential backlog issues
+
+    Useful for monitoring and alerting on ingestion performance.
+
+    Requires API key authentication via `X-API-Key` header.
+    """
     grpc_pool = request.app.state.grpc_pool
     project_id = request.state.project_id
 

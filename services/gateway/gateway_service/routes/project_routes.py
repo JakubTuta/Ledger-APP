@@ -18,12 +18,26 @@ router = fastapi.APIRouter(tags=["Projects"])
 
 
 class CreateProjectRequest(pydantic.BaseModel):
-    name: str = pydantic.Field(..., min_length=1, max_length=255)
+    name: str = pydantic.Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="Project display name",
+        examples=["My Production App"],
+    )
     slug: str = pydantic.Field(
-        ..., min_length=1, max_length=255, pattern=r"^[a-z0-9-]+$"
+        ...,
+        min_length=1,
+        max_length=255,
+        pattern=r"^[a-z0-9-]+$",
+        description="Unique project identifier (lowercase, alphanumeric, hyphens only)",
+        examples=["my-production-app"],
     )
     environment: str = pydantic.Field(
-        default="production", pattern=r"^(production|staging|dev)$"
+        default="production",
+        pattern=r"^(production|staging|dev)$",
+        description="Deployment environment (production, staging, or dev)",
+        examples=["production"],
     )
 
     @pydantic.field_validator("slug")
@@ -36,19 +50,62 @@ class CreateProjectRequest(pydantic.BaseModel):
 
         return v.lower()
 
+    model_config = pydantic.ConfigDict(
+        json_schema_extra={
+            "example": {
+                "name": "My Production App",
+                "slug": "my-production-app",
+                "environment": "production",
+            }
+        }
+    )
+
 
 class ProjectResponse(pydantic.BaseModel):
-    project_id: int
-    name: str
-    slug: str
-    environment: str
-    retention_days: int
-    daily_quota: int
+    project_id: int = pydantic.Field(..., description="Unique project identifier")
+    name: str = pydantic.Field(..., description="Project display name")
+    slug: str = pydantic.Field(..., description="Project slug")
+    environment: str = pydantic.Field(..., description="Deployment environment")
+    retention_days: int = pydantic.Field(..., description="Log retention period in days")
+    daily_quota: int = pydantic.Field(..., description="Daily log ingestion quota")
+
+    model_config = pydantic.ConfigDict(
+        json_schema_extra={
+            "example": {
+                "project_id": 456,
+                "name": "My Production App",
+                "slug": "my-production-app",
+                "environment": "production",
+                "retention_days": 30,
+                "daily_quota": 1000000,
+            }
+        }
+    )
 
 
 class ProjectListResponse(pydantic.BaseModel):
-    projects: typing.List[ProjectResponse]
-    total: int
+    projects: typing.List[ProjectResponse] = pydantic.Field(
+        ..., description="List of projects"
+    )
+    total: int = pydantic.Field(..., description="Total number of projects")
+
+    model_config = pydantic.ConfigDict(
+        json_schema_extra={
+            "example": {
+                "projects": [
+                    {
+                        "project_id": 456,
+                        "name": "My Production App",
+                        "slug": "my-production-app",
+                        "environment": "production",
+                        "retention_days": 30,
+                        "daily_quota": 1000000,
+                    }
+                ],
+                "total": 1,
+            }
+        }
+    )
 
 
 # ==================== ROUTE HANDLERS ====================
@@ -59,7 +116,49 @@ class ProjectListResponse(pydantic.BaseModel):
     response_model=ProjectResponse,
     status_code=fastapi.status.HTTP_201_CREATED,
     summary="Create new project",
-    description="Create a new project for the authenticated account",
+    description="Create a new project for organizing and isolating logs. Each project has its own API keys, quotas, and settings.",
+    response_description="Created project details",
+    responses={
+        201: {
+            "description": "Project created successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "project_id": 456,
+                        "name": "My Production App",
+                        "slug": "my-production-app",
+                        "environment": "production",
+                        "retention_days": 30,
+                        "daily_quota": 1000000,
+                    }
+                }
+            },
+        },
+        400: {
+            "description": "Invalid input (slug format, environment value)",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Slug must contain only alphanumeric characters, hyphens, and underscores"
+                    }
+                }
+            },
+        },
+        409: {
+            "description": "Project slug already exists",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Project with slug 'my-production-app' already exists"}
+                }
+            },
+        },
+        503: {
+            "description": "Service timeout",
+            "content": {
+                "application/json": {"example": {"detail": "Service timeout, please try again"}}
+            },
+        },
+    },
 )
 async def create_project(
     request_data: CreateProjectRequest,
@@ -67,19 +166,16 @@ async def create_project(
     grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
 ):
     """
-    Create a new project.
+    Create a new project for organizing logs.
 
-    Args:
-        request_data: Project details
-        account_id: From auth middleware (already validated)
-        grpc_pool: gRPC connection pool
+    Projects provide isolation between different applications or environments.
+    Each project has:
+    - Unique slug identifier
+    - Separate API keys
+    - Individual quotas and rate limits
+    - Configurable retention period
 
-    Returns:
-        Created project details
-
-    Raises:
-        409: Project slug already exists
-        500: Internal server error
+    Requires JWT authentication.
     """
 
     try:
@@ -135,21 +231,46 @@ async def create_project(
     "/projects",
     response_model=ProjectListResponse,
     summary="List projects",
-    description="Get all projects for the authenticated account",
+    description="Retrieve all projects owned by the authenticated account",
+    response_description="List of projects with metadata",
+    responses={
+        200: {
+            "description": "Projects retrieved successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "projects": [
+                            {
+                                "project_id": 456,
+                                "name": "My Production App",
+                                "slug": "my-production-app",
+                                "environment": "production",
+                                "retention_days": 30,
+                                "daily_quota": 1000000,
+                            }
+                        ],
+                        "total": 1,
+                    }
+                }
+            },
+        },
+        503: {
+            "description": "Service timeout",
+            "content": {
+                "application/json": {"example": {"detail": "Service timeout"}}
+            },
+        },
+    },
 )
 async def list_projects(
     account_id: int = fastapi.Depends(dependencies.get_current_account_id),
     grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
 ):
     """
-    List all projects for authenticated account.
+    List all projects for the authenticated account.
 
-    Args:
-        account_id: From auth middleware
-        grpc_pool: gRPC connection pool
-
-    Returns:
-        List of projects
+    Returns a list of all projects owned by the current user, including
+    their configuration, quotas, and settings. Requires JWT authentication.
     """
 
     try:
@@ -191,26 +312,51 @@ async def list_projects(
     "/projects/{project_slug}",
     response_model=ProjectResponse,
     summary="Get project by slug",
-    description="Get project details by slug",
+    description="Retrieve detailed information about a specific project using its slug identifier",
+    response_description="Project details",
+    responses={
+        200: {
+            "description": "Project found",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "project_id": 456,
+                        "name": "My Production App",
+                        "slug": "my-production-app",
+                        "environment": "production",
+                        "retention_days": 30,
+                        "daily_quota": 1000000,
+                    }
+                }
+            },
+        },
+        404: {
+            "description": "Project not found",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Project 'my-production-app' not found"}
+                }
+            },
+        },
+        503: {
+            "description": "Service timeout",
+            "content": {
+                "application/json": {"example": {"detail": "Service timeout"}}
+            },
+        },
+    },
 )
 async def get_project_by_slug(
-    project_slug: str,
+    project_slug: str = fastapi.Path(..., description="Project slug identifier", examples=["my-production-app"]),
     account_id: int = fastapi.Depends(dependencies.get_current_account_id),
     grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
 ):
     """
-    Get project by slug.
+    Get project details by slug.
 
-    Args:
-        project_slug: Project slug
-        account_id: From auth middleware
-        grpc_pool: gRPC connection pool
-
-    Returns:
-        Project details
-
-    Raises:
-        404: Project not found
+    Retrieves a specific project's configuration and settings using its
+    unique slug identifier. Only projects owned by the authenticated
+    account can be accessed. Requires JWT authentication.
     """
     try:
         stub = grpc_pool.get_stub("auth", auth_pb2_grpc.AuthServiceStub)
