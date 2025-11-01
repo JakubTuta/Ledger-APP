@@ -16,10 +16,11 @@ This document provides complete documentation for the Ledger REST API. Use these
 2. [Authentication Endpoints](#authentication-endpoints)
 3. [Project Management Endpoints](#project-management-endpoints)
 4. [API Key Management Endpoints](#api-key-management-endpoints)
-5. [Log Ingestion Endpoints](#log-ingestion-endpoints)
-6. [Common Response Codes](#common-response-codes)
-7. [Error Handling](#error-handling)
-8. [Rate Limiting](#rate-limiting)
+5. [Dashboard Panel Management Endpoints](#dashboard-panel-management-endpoints)
+6. [Log Ingestion Endpoints](#log-ingestion-endpoints)
+7. [Common Response Codes](#common-response-codes)
+8. [Error Handling](#error-handling)
+9. [Rate Limiting](#rate-limiting)
 
 ---
 
@@ -467,6 +468,220 @@ Authorization: Bearer <access_token>
 - `403 Forbidden` - User doesn't own this API key
 - `404 Not Found` - API key not found
 - `500 Internal Server Error` - Failed to revoke API key
+- `503 Service Unavailable` - Service timeout
+
+---
+
+## Dashboard Panel Management Endpoints
+
+### Get Dashboard Panels
+
+**Endpoint:** `GET /api/v1/dashboard/panels`
+
+**Description:** Retrieve all dashboard panels for the authenticated user. Dashboard panels allow users to customize their dashboard view with filtered and aggregated data from different projects.
+
+**Authentication:** Required (API Key)
+
+**Request Headers:**
+```
+Authorization: Bearer <api_key>
+```
+
+**Response:**
+
+```json
+{
+  "panels": [
+    {
+      "id": "panel_a1b2c3d4e5f6g7h8",
+      "name": "Project A Logs",
+      "index": 0,
+      "project_id": "project-a",
+      "time_range_from": "2025-10-01T00:00:00Z",
+      "time_range_to": "2025-10-30T23:59:59Z",
+      "type": "logs"
+    },
+    {
+      "id": "panel_b2c3d4e5f6g7h8i9",
+      "name": "Error Dashboard",
+      "index": 1,
+      "project_id": "project-b",
+      "time_range_from": "2025-10-15T00:00:00Z",
+      "time_range_to": "2025-10-30T23:59:59Z",
+      "type": "errors"
+    }
+  ],
+  "total": 2
+}
+```
+
+**Panel Fields:**
+- `id` (string): Unique panel identifier
+- `name` (string): User-defined panel name
+- `index` (integer): Display order (0-based)
+- `project_id` (string): Associated project identifier
+- `time_range_from` (string): Start of time range (ISO 8601)
+- `time_range_to` (string): End of time range (ISO 8601)
+- `type` (string): Panel type - `logs`, `errors`, or `metrics`
+
+**Caching:**
+- Panel data is cached in Redis for 5 minutes
+- Cache is automatically invalidated on create/update/delete operations
+
+**Status Codes:**
+- `200 OK` - Panels retrieved successfully
+- `401 Unauthorized` - Not authenticated
+- `404 Not Found` - Dashboard not found (rare - auto-created on first access)
+- `500 Internal Server Error` - Failed to retrieve panels
+- `503 Service Unavailable` - Service timeout
+
+---
+
+### Create Dashboard Panel
+
+**Endpoint:** `POST /api/v1/dashboard/panels`
+
+**Description:** Create a new dashboard panel for the authenticated user.
+
+**Authentication:** Required (API Key)
+
+**Request Headers:**
+```
+Authorization: Bearer <api_key>
+Content-Type: application/json
+```
+
+**Request Body:**
+
+```json
+{
+  "name": "Error Dashboard",
+  "index": 1,
+  "project_id": "project-b",
+  "time_range_from": "2025-10-15T00:00:00Z",
+  "time_range_to": "2025-10-30T23:59:59Z",
+  "type": "errors"
+}
+```
+
+**Field Requirements:**
+- `name` (string, required): 1-255 characters, descriptive panel name
+- `index` (integer, required): Display order, must be >= 0
+- `project_id` (string, required): Valid project identifier
+- `time_range_from` (string, required): ISO 8601 timestamp
+- `time_range_to` (string, required): ISO 8601 timestamp
+- `type` (string, required): Must be one of `logs`, `errors`, `metrics`
+
+**Response:**
+
+```json
+{
+  "id": "panel_b2c3d4e5f6g7h8i9",
+  "name": "Error Dashboard",
+  "index": 1,
+  "project_id": "project-b",
+  "time_range_from": "2025-10-15T00:00:00Z",
+  "time_range_to": "2025-10-30T23:59:59Z",
+  "type": "errors"
+}
+```
+
+**Status Codes:**
+- `201 Created` - Panel created successfully
+- `400 Bad Request` - Invalid panel data
+- `401 Unauthorized` - Not authenticated
+- `500 Internal Server Error` - Failed to create panel
+- `503 Service Unavailable` - Service timeout
+
+---
+
+### Update Dashboard Panel
+
+**Endpoint:** `PUT /api/v1/dashboard/panels/{panel_id}`
+
+**Description:** Update an existing dashboard panel for the authenticated user.
+
+**Authentication:** Required (API Key)
+
+**Request Headers:**
+```
+Authorization: Bearer <api_key>
+Content-Type: application/json
+```
+
+**Path Parameters:**
+- `panel_id` (string, required): The panel ID to update
+
+**Request Body:**
+
+```json
+{
+  "name": "Updated Panel Name",
+  "index": 0,
+  "project_id": "project-a",
+  "time_range_from": "2025-10-01T00:00:00Z",
+  "time_range_to": "2025-10-30T23:59:59Z",
+  "type": "metrics"
+}
+```
+
+**Field Requirements:**
+- Same as Create Dashboard Panel (all fields required)
+
+**Response:**
+
+```json
+{
+  "id": "panel_a1b2c3d4e5f6g7h8",
+  "name": "Updated Panel Name",
+  "index": 0,
+  "project_id": "project-a",
+  "time_range_from": "2025-10-01T00:00:00Z",
+  "time_range_to": "2025-10-30T23:59:59Z",
+  "type": "metrics"
+}
+```
+
+**Status Codes:**
+- `200 OK` - Panel updated successfully
+- `400 Bad Request` - Invalid panel data
+- `401 Unauthorized` - Not authenticated
+- `404 Not Found` - Panel not found
+- `500 Internal Server Error` - Failed to update panel
+- `503 Service Unavailable` - Service timeout
+
+---
+
+### Delete Dashboard Panel
+
+**Endpoint:** `DELETE /api/v1/dashboard/panels/{panel_id}`
+
+**Description:** Delete a dashboard panel for the authenticated user.
+
+**Authentication:** Required (API Key)
+
+**Request Headers:**
+```
+Authorization: Bearer <api_key>
+```
+
+**Path Parameters:**
+- `panel_id` (string, required): The panel ID to delete
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "message": "Panel panel_a1b2c3d4e5f6g7h8 deleted successfully"
+}
+```
+
+**Status Codes:**
+- `200 OK` - Panel deleted successfully
+- `401 Unauthorized` - Not authenticated
+- `404 Not Found` - Panel not found
+- `500 Internal Server Error` - Failed to delete panel
 - `503 Service Unavailable` - Service timeout
 
 ---

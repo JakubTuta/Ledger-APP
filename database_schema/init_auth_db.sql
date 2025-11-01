@@ -92,5 +92,29 @@ CREATE TABLE daily_usage (
     CONSTRAINT uq_project_date UNIQUE(project_id, date)
 );
 
-CREATE INDEX CONCURRENTLY idx_daily_usage_project_date 
+CREATE INDEX CONCURRENTLY idx_daily_usage_project_date
 ON daily_usage(project_id, date DESC);
+
+-- ============================================
+-- 5. USER DASHBOARDS (panel configuration)
+-- ============================================
+
+CREATE TABLE user_dashboards (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    panels JSONB NOT NULL DEFAULT '[]'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT uq_user_dashboard UNIQUE(user_id)
+);
+
+CREATE INDEX CONCURRENTLY idx_user_dashboards_user_id
+ON user_dashboards(user_id);
+
+CREATE INDEX CONCURRENTLY idx_user_dashboards_panels
+ON user_dashboards USING GIN(panels);
+
+ALTER TABLE user_dashboards
+ADD CONSTRAINT fk_user_dashboards_account
+FOREIGN KEY (user_id) REFERENCES accounts(id)
+ON DELETE CASCADE;

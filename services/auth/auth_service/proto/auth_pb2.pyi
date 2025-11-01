@@ -183,3 +183,97 @@ class RevokeApiKeyResponse(_message.Message):
     SUCCESS_FIELD_NUMBER: _ClassVar[int]
     success: bool
     def __init__(self, success: bool = ...) -> None: ...
+
+class Panel(_message.Message):
+    __slots__ = ("id", "name", "index", "project_id", "time_range_from", "time_range_to", "type")
+    ID_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    INDEX_FIELD_NUMBER: _ClassVar[int]
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    TIME_RANGE_FROM_FIELD_NUMBER: _ClassVar[int]
+    TIME_RANGE_TO_FIELD_NUMBER: _ClassVar[int]
+    TYPE_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    name: str
+    index: int
+    project_id: str
+    time_range_from: str
+    time_range_to: str
+    type: str
+    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., time_range_from: _Optional[str] = ..., time_range_to: _Optional[str] = ..., type: _Optional[str] = ...) -> None: ...
+
+class GetDashboardPanelsRequest(_message.Message):
+    __slots__ = ("user_id",)
+    USER_ID_FIELD_NUMBER: _ClassVar[int]
+    user_id: int
+    def __init__(self, user_id: _Optional[int] = ...) -> None: ...
+
+class GetDashboardPanelsResponse(_message.Message):
+    __slots__ = ("panels",)
+    PANELS_FIELD_NUMBER: _ClassVar[int]
+    panels: _containers.RepeatedCompositeFieldContainer[Panel]
+    def __init__(self, panels: _Optional[_Iterable[_Union[Panel, _Mapping]]] = ...) -> None: ...
+
+class CreateDashboardPanelRequest(_message.Message):
+    __slots__ = ("user_id", "name", "index", "project_id", "time_range_from", "time_range_to", "type")
+    USER_ID_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    INDEX_FIELD_NUMBER: _ClassVar[int]
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    TIME_RANGE_FROM_FIELD_NUMBER: _ClassVar[int]
+    TIME_RANGE_TO_FIELD_NUMBER: _ClassVar[int]
+    TYPE_FIELD_NUMBER: _ClassVar[int]
+    user_id: int
+    name: str
+    index: int
+    project_id: str
+    time_range_from: str
+    time_range_to: str
+    type: str
+    def __init__(self, user_id: _Optional[int] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., time_range_from: _Optional[str] = ..., time_range_to: _Optional[str] = ..., type: _Optional[str] = ...) -> None: ...
+
+class CreateDashboardPanelResponse(_message.Message):
+    __slots__ = ("panel",)
+    PANEL_FIELD_NUMBER: _ClassVar[int]
+    panel: Panel
+    def __init__(self, panel: _Optional[_Union[Panel, _Mapping]] = ...) -> None: ...
+
+class UpdateDashboardPanelRequest(_message.Message):
+    __slots__ = ("user_id", "panel_id", "name", "index", "project_id", "time_range_from", "time_range_to", "type")
+    USER_ID_FIELD_NUMBER: _ClassVar[int]
+    PANEL_ID_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    INDEX_FIELD_NUMBER: _ClassVar[int]
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    TIME_RANGE_FROM_FIELD_NUMBER: _ClassVar[int]
+    TIME_RANGE_TO_FIELD_NUMBER: _ClassVar[int]
+    TYPE_FIELD_NUMBER: _ClassVar[int]
+    user_id: int
+    panel_id: str
+    name: str
+    index: int
+    project_id: str
+    time_range_from: str
+    time_range_to: str
+    type: str
+    def __init__(self, user_id: _Optional[int] = ..., panel_id: _Optional[str] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., time_range_from: _Optional[str] = ..., time_range_to: _Optional[str] = ..., type: _Optional[str] = ...) -> None: ...
+
+class UpdateDashboardPanelResponse(_message.Message):
+    __slots__ = ("panel",)
+    PANEL_FIELD_NUMBER: _ClassVar[int]
+    panel: Panel
+    def __init__(self, panel: _Optional[_Union[Panel, _Mapping]] = ...) -> None: ...
+
+class DeleteDashboardPanelRequest(_message.Message):
+    __slots__ = ("user_id", "panel_id")
+    USER_ID_FIELD_NUMBER: _ClassVar[int]
+    PANEL_ID_FIELD_NUMBER: _ClassVar[int]
+    user_id: int
+    panel_id: str
+    def __init__(self, user_id: _Optional[int] = ..., panel_id: _Optional[str] = ...) -> None: ...
+
+class DeleteDashboardPanelResponse(_message.Message):
+    __slots__ = ("success",)
+    SUCCESS_FIELD_NUMBER: _ClassVar[int]
+    success: bool
+    def __init__(self, success: bool = ...) -> None: ...

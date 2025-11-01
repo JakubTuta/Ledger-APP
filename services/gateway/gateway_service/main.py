@@ -10,6 +10,7 @@ from gateway_service.middleware import auth, circuit_breaker, rate_limit
 from gateway_service.routes import (
     api_key_routes,
     auth_routes,
+    dashboard_routes,
     ingestion_routes,
     project_routes,
     settings_routes,
@@ -159,6 +160,7 @@ def include_router(router, prefix: str = ""):
 include_router(auth_routes.router, prefix="/api/v1")
 include_router(project_routes.router, prefix="/api/v1")
 include_router(api_key_routes.router, prefix="/api/v1")
+include_router(dashboard_routes.router, prefix="/api/v1")
 include_router(ingestion_routes.router, prefix="/api/v1")
 include_router(settings_routes.router, prefix="/api/v1")
 

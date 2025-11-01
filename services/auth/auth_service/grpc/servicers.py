@@ -1,7 +1,7 @@
 import grpc
 from auth_service import database
 from auth_service.proto import auth_pb2, auth_pb2_grpc
-from auth_service.services import auth_service
+from auth_service.services import auth_service, dashboard_service
 from redis.asyncio import Redis
 
 
@@ -10,6 +10,7 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
 
     def __init__(self, redis: Redis):
         self.auth_service = auth_service.AuthService(redis)
+        self.dashboard_service = dashboard_service.DashboardService(redis)
 
     # ==================== Account Operations ====================
 
@@ -270,4 +271,147 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f"Internal error: {str(e)}")
             return auth_pb2.RevokeApiKeyResponse(success=False)
-            return auth_pb2.RevokeApiKeyResponse(success=False)
+
+    # ==================== Dashboard Panel Operations ====================
+
+    async def GetDashboardPanels(
+        self,
+        request: auth_pb2.GetDashboardPanelsRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.GetDashboardPanelsResponse:
+        """Get all dashboard panels for a user."""
+        try:
+            async with database.get_session() as session:
+                panels = await self.dashboard_service.get_dashboard_panels(
+                    session=session,
+                    user_id=request.user_id,
+                )
+
+                panel_messages = [
+                    auth_pb2.Panel(
+                        id=panel["id"],
+                        name=panel["name"],
+                        index=panel["index"],
+                        project_id=panel["project_id"],
+                        time_range_from=panel["time_range_from"],
+                        time_range_to=panel["time_range_to"],
+                        type=panel["type"],
+                    )
+                    for panel in panels
+                ]
+
+                return auth_pb2.GetDashboardPanelsResponse(panels=panel_messages)
+
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.GetDashboardPanelsResponse()
+
+    async def CreateDashboardPanel(
+        self,
+        request: auth_pb2.CreateDashboardPanelRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.CreateDashboardPanelResponse:
+        """Create a new dashboard panel."""
+        try:
+            async with database.get_session() as session:
+                panel = await self.dashboard_service.create_dashboard_panel(
+                    session=session,
+                    user_id=request.user_id,
+                    name=request.name,
+                    index=request.index,
+                    project_id=request.project_id,
+                    time_range_from=request.time_range_from,
+                    time_range_to=request.time_range_to,
+                    panel_type=request.type,
+                )
+
+                panel_message = auth_pb2.Panel(
+                    id=panel["id"],
+                    name=panel["name"],
+                    index=panel["index"],
+                    project_id=panel["project_id"],
+                    time_range_from=panel["time_range_from"],
+                    time_range_to=panel["time_range_to"],
+                    type=panel["type"],
+                )
+
+                return auth_pb2.CreateDashboardPanelResponse(panel=panel_message)
+
+        except ValueError as e:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(str(e))
+            return auth_pb2.CreateDashboardPanelResponse()
+
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.CreateDashboardPanelResponse()
+
+    async def UpdateDashboardPanel(
+        self,
+        request: auth_pb2.UpdateDashboardPanelRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.UpdateDashboardPanelResponse:
+        """Update an existing dashboard panel."""
+        try:
+            async with database.get_session() as session:
+                panel = await self.dashboard_service.update_dashboard_panel(
+                    session=session,
+                    user_id=request.user_id,
+                    panel_id=request.panel_id,
+                    name=request.name,
+                    index=request.index,
+                    project_id=request.project_id,
+                    time_range_from=request.time_range_from,
+                    time_range_to=request.time_range_to,
+                    panel_type=request.type,
+                )
+
+                panel_message = auth_pb2.Panel(
+                    id=panel["id"],
+                    name=panel["name"],
+                    index=panel["index"],
+                    project_id=panel["project_id"],
+                    time_range_from=panel["time_range_from"],
+                    time_range_to=panel["time_range_to"],
+                    type=panel["type"],
+                )
+
+                return auth_pb2.UpdateDashboardPanelResponse(panel=panel_message)
+
+        except ValueError as e:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(str(e))
+            return auth_pb2.UpdateDashboardPanelResponse()
+
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.UpdateDashboardPanelResponse()
+
+    async def DeleteDashboardPanel(
+        self,
+        request: auth_pb2.DeleteDashboardPanelRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.DeleteDashboardPanelResponse:
+        """Delete a dashboard panel."""
+        try:
+            async with database.get_session() as session:
+                success = await self.dashboard_service.delete_dashboard_panel(
+                    session=session,
+                    user_id=request.user_id,
+                    panel_id=request.panel_id,
+                )
+
+                return auth_pb2.DeleteDashboardPanelResponse(success=success)
+
+        except ValueError as e:
+            context.set_code(grpc.StatusCode.NOT_FOUND)
+            context.set_details(str(e))
+            return auth_pb2.DeleteDashboardPanelResponse(success=False)
+
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.DeleteDashboardPanelResponse(success=False)

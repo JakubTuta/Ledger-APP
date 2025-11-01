@@ -182,7 +182,14 @@ class Settings(pydantic_settings.BaseSettings):
         default=300,
         ge=60,
         le=3600,
-        description="Cache TTL (seconds)",
+        description="Cache TTL for API keys (seconds)",
+    )
+
+    DASHBOARD_CACHE_TTL: int = pydantic.Field(
+        default=300,
+        ge=60,
+        le=3600,
+        description="Cache TTL for dashboard panels (seconds)",
     )
 
     # ==================== Monitoring ====================

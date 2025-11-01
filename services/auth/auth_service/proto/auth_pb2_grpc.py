@@ -74,6 +74,26 @@ class AuthServiceStub(object):
                 request_serializer=auth__pb2.RevokeApiKeyRequest.SerializeToString,
                 response_deserializer=auth__pb2.RevokeApiKeyResponse.FromString,
                 _registered_method=True)
+        self.GetDashboardPanels = channel.unary_unary(
+                '/auth.AuthService/GetDashboardPanels',
+                request_serializer=auth__pb2.GetDashboardPanelsRequest.SerializeToString,
+                response_deserializer=auth__pb2.GetDashboardPanelsResponse.FromString,
+                _registered_method=True)
+        self.CreateDashboardPanel = channel.unary_unary(
+                '/auth.AuthService/CreateDashboardPanel',
+                request_serializer=auth__pb2.CreateDashboardPanelRequest.SerializeToString,
+                response_deserializer=auth__pb2.CreateDashboardPanelResponse.FromString,
+                _registered_method=True)
+        self.UpdateDashboardPanel = channel.unary_unary(
+                '/auth.AuthService/UpdateDashboardPanel',
+                request_serializer=auth__pb2.UpdateDashboardPanelRequest.SerializeToString,
+                response_deserializer=auth__pb2.UpdateDashboardPanelResponse.FromString,
+                _registered_method=True)
+        self.DeleteDashboardPanel = channel.unary_unary(
+                '/auth.AuthService/DeleteDashboardPanel',
+                request_serializer=auth__pb2.DeleteDashboardPanelRequest.SerializeToString,
+                response_deserializer=auth__pb2.DeleteDashboardPanelResponse.FromString,
+                _registered_method=True)
 
 
 class AuthServiceServicer(object):
@@ -130,6 +150,31 @@ class AuthServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetDashboardPanels(self, request, context):
+        """Dashboard panel operations
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CreateDashboardPanel(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def UpdateDashboardPanel(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeleteDashboardPanel(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_AuthServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -172,6 +217,26 @@ def add_AuthServiceServicer_to_server(servicer, server):
                     servicer.RevokeApiKey,
                     request_deserializer=auth__pb2.RevokeApiKeyRequest.FromString,
                     response_serializer=auth__pb2.RevokeApiKeyResponse.SerializeToString,
+            ),
+            'GetDashboardPanels': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetDashboardPanels,
+                    request_deserializer=auth__pb2.GetDashboardPanelsRequest.FromString,
+                    response_serializer=auth__pb2.GetDashboardPanelsResponse.SerializeToString,
+            ),
+            'CreateDashboardPanel': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateDashboardPanel,
+                    request_deserializer=auth__pb2.CreateDashboardPanelRequest.FromString,
+                    response_serializer=auth__pb2.CreateDashboardPanelResponse.SerializeToString,
+            ),
+            'UpdateDashboardPanel': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateDashboardPanel,
+                    request_deserializer=auth__pb2.UpdateDashboardPanelRequest.FromString,
+                    response_serializer=auth__pb2.UpdateDashboardPanelResponse.SerializeToString,
+            ),
+            'DeleteDashboardPanel': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteDashboardPanel,
+                    request_deserializer=auth__pb2.DeleteDashboardPanelRequest.FromString,
+                    response_serializer=auth__pb2.DeleteDashboardPanelResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -390,6 +455,114 @@ class AuthService(object):
             '/auth.AuthService/RevokeApiKey',
             auth__pb2.RevokeApiKeyRequest.SerializeToString,
             auth__pb2.RevokeApiKeyResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetDashboardPanels(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/GetDashboardPanels',
+            auth__pb2.GetDashboardPanelsRequest.SerializeToString,
+            auth__pb2.GetDashboardPanelsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CreateDashboardPanel(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/CreateDashboardPanel',
+            auth__pb2.CreateDashboardPanelRequest.SerializeToString,
+            auth__pb2.CreateDashboardPanelResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UpdateDashboardPanel(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/UpdateDashboardPanel',
+            auth__pb2.UpdateDashboardPanelRequest.SerializeToString,
+            auth__pb2.UpdateDashboardPanelResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteDashboardPanel(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/DeleteDashboardPanel',
+            auth__pb2.DeleteDashboardPanelRequest.SerializeToString,
+            auth__pb2.DeleteDashboardPanelResponse.FromString,
             options,
             channel_credentials,
             insecure,

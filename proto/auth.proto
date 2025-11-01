@@ -16,6 +16,12 @@ service AuthService {
   rpc CreateApiKey(CreateApiKeyRequest) returns (CreateApiKeyResponse);
   rpc ValidateApiKey(ValidateApiKeyRequest) returns (ValidateApiKeyResponse);
   rpc RevokeApiKey(RevokeApiKeyRequest) returns (RevokeApiKeyResponse);
+
+  // Dashboard panel operations
+  rpc GetDashboardPanels(GetDashboardPanelsRequest) returns (GetDashboardPanelsResponse);
+  rpc CreateDashboardPanel(CreateDashboardPanelRequest) returns (CreateDashboardPanelResponse);
+  rpc UpdateDashboardPanel(UpdateDashboardPanelRequest) returns (UpdateDashboardPanelResponse);
+  rpc DeleteDashboardPanel(DeleteDashboardPanelRequest) returns (DeleteDashboardPanelResponse);
 }
 
 // ==================== Account Messages ====================
@@ -127,5 +133,63 @@ message RevokeApiKeyRequest {
 }
 
 message RevokeApiKeyResponse {
+  bool success = 1;
+}
+
+// ==================== Dashboard Panel Messages ====================
+
+message Panel {
+  string id = 1;
+  string name = 2;
+  int32 index = 3;
+  string project_id = 4;
+  string time_range_from = 5;
+  string time_range_to = 6;
+  string type = 7;
+}
+
+message GetDashboardPanelsRequest {
+  int64 user_id = 1;
+}
+
+message GetDashboardPanelsResponse {
+  repeated Panel panels = 1;
+}
+
+message CreateDashboardPanelRequest {
+  int64 user_id = 1;
+  string name = 2;
+  int32 index = 3;
+  string project_id = 4;
+  string time_range_from = 5;
+  string time_range_to = 6;
+  string type = 7;
+}
+
+message CreateDashboardPanelResponse {
+  Panel panel = 1;
+}
+
+message UpdateDashboardPanelRequest {
+  int64 user_id = 1;
+  string panel_id = 2;
+  string name = 3;
+  int32 index = 4;
+  string project_id = 5;
+  string time_range_from = 6;
+  string time_range_to = 7;
+  string type = 8;
+}
+
+message UpdateDashboardPanelResponse {
+  Panel panel = 1;
+}
+
+message DeleteDashboardPanelRequest {
+  int64 user_id = 1;
+  string panel_id = 2;
+}
+
+message DeleteDashboardPanelResponse {
   bool success = 1;
 }

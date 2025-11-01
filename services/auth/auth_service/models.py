@@ -12,6 +12,7 @@ from sqlalchemy import (
     Integer,
     SmallInteger,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 
@@ -303,3 +304,57 @@ class DailyUsage(database.Base):
 
     def __repr__(self) -> str:
         return f"<DailyUsage(project_id={self.project_id}, date={self.date}, logs={self.logs_ingested})>"
+
+
+class UserDashboard(database.Base):
+    """
+    User dashboard configuration table.
+
+    Stores user-specific dashboard panel configurations using JSONB.
+    Each user has one dashboard with multiple customizable panels.
+
+    Performance notes:
+    - JSONB for flexible panel storage with indexing support
+    - One-to-one relationship with Account (unique user_id)
+    - GIN index on panels for fast JSON queries
+    """
+
+    __tablename__ = "user_dashboards"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("accounts.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+        index=True,
+    )
+
+    panels: Mapped[list] = mapped_column(
+        JSONB,
+        default=list,
+        nullable=False,
+    )
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.datetime.now(datetime.timezone.utc),
+        onupdate=datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+    account: Mapped["Account"] = relationship("Account", backref="dashboard")
+
+    __table_args__ = (
+        Index("idx_user_dashboards_user_id", "user_id"),
+        Index("idx_user_dashboards_panels", "panels", postgresql_using="gin"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<UserDashboard(id={self.id}, user_id={self.user_id}, panels={len(self.panels)})>"
