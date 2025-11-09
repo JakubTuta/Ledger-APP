@@ -82,9 +82,16 @@ class RegisterRequest(pydantic.BaseModel):
 
 
 class RegisterResponse(pydantic.BaseModel):
+    access_token: str = pydantic.Field(..., description="JWT access token for immediate use")
+    token_type: str = pydantic.Field(
+        default="bearer", description="Token type (always 'bearer')"
+    )
     account_id: int = pydantic.Field(..., description="Unique account identifier")
     email: str = pydantic.Field(..., description="Registered email address")
     name: str = pydantic.Field(..., description="User's full name")
+    expires_in: int = pydantic.Field(
+        default=3600, description="Token expiration time in seconds"
+    )
     message: str = pydantic.Field(
         default="Account created successfully", description="Success message"
     )
@@ -92,9 +99,12 @@ class RegisterResponse(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(
         json_schema_extra={
             "example": {
+                "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                "token_type": "bearer",
                 "account_id": 123,
                 "email": "user@example.com",
                 "name": "John Doe",
+                "expires_in": 3600,
                 "message": "Account created successfully",
             }
         }
@@ -167,13 +177,16 @@ class LoginResponse(pydantic.BaseModel):
     response_description="Created account details",
     responses={
         201: {
-            "description": "Account created successfully",
+            "description": "Account created successfully with access token",
             "content": {
                 "application/json": {
                     "example": {
+                        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                        "token_type": "bearer",
                         "account_id": 123,
                         "email": "user@example.com",
                         "name": "John Doe",
+                        "expires_in": 3600,
                         "message": "Account created successfully",
                     }
                 }
@@ -212,6 +225,7 @@ class LoginResponse(pydantic.BaseModel):
 async def register_account(
     request: RegisterRequest,
     grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
+    redis: redis_client.RedisClient = fastapi.Depends(dependencies.get_redis_client),
 ):
     """
     Register a new account with email, password, and name.
@@ -222,23 +236,45 @@ async def register_account(
     - At least one lowercase letter
     - At least one digit
 
-    Returns the created account details including a unique account_id.
+    Returns the created account details including an access token for immediate use.
+    This eliminates the need for a separate login call after registration.
     """
 
     try:
         stub = grpc_pool.get_stub("auth", auth_pb2_grpc.AuthServiceStub)
 
-        grpc_request = auth_pb2.RegisterRequest(
+        register_request = auth_pb2.RegisterRequest(
             email=request.email, password=request.password
         )
 
-        response = await asyncio.wait_for(
-            stub.Register(grpc_request),
+        register_response = await asyncio.wait_for(
+            stub.Register(register_request),
             timeout=10.0,
         )
 
+        login_request = auth_pb2.LoginRequest(
+            email=request.email, password=request.password
+        )
+
+        login_response = await asyncio.wait_for(
+            stub.Login(login_request),
+            timeout=10.0,
+        )
+
+        session_key = f"session:{login_response.access_token}"
+        session_data = {
+            "account_id": login_response.account_id,
+            "email": login_response.email,
+            "logged_in_at": asyncio.get_event_loop().time(),
+        }
+
+        asyncio.create_task(redis.client.setex(session_key, 3600, str(session_data)))  # type: ignore
+
         return RegisterResponse(
-            account_id=response.account_id, email=response.email, name=response.name
+            access_token=login_response.access_token,
+            account_id=register_response.account_id,
+            email=register_response.email,
+            name=register_response.name,
         )
 
     except asyncio.TimeoutError:

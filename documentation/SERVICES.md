@@ -9,7 +9,9 @@ The Gateway Service is your single entry point for all API interactions with Led
 
 ### Key Features
 - **REST API**: Standard HTTPS/JSON interface for all operations
-- **Authentication**: Validates JWT tokens and API keys
+- **Dual Authentication**: Supports both session tokens (JWT) and API keys
+  - **Session Tokens**: For account operations (project management, settings)
+  - **API Keys**: For high-throughput log ingestion
 - **Rate Limiting**: Prevents abuse with configurable limits
 - **Circuit Breaker**: Maintains availability during service outages
 - **Request Translation**: Converts REST to internal gRPC calls
@@ -35,33 +37,38 @@ Every single API request you make goes through the Gateway Service. It's the onl
 The Auth Service manages all authentication and authorization for Ledger. It handles user accounts, projects, and API keys.
 
 ### Key Features
-- **Account Management**: User registration and login
+- **Account Management**: User registration and login with automatic session tokens
+- **Auto-Login**: Registration automatically returns a JWT token (no separate login needed)
 - **Multi-Tenancy**: Support for multiple projects per account
 - **API Key Management**: Generate, validate, and revoke API keys
 - **Quota Tracking**: Monitor and enforce daily log quotas
 - **Secure Storage**: bcrypt hashing for passwords and keys
+- **Session Management**: JWT tokens cached in Redis (1-hour expiration)
 
 ### When You Use It
 Indirectly, every authenticated request uses the Auth Service for validation. Directly, you use it when:
-- Registering a new account
-- Logging in
+- Registering a new account (automatically provides session token)
+- Logging in (only needed for existing accounts)
 - Creating or managing projects
 - Generating API keys
 
 ### Data Model
 - **Accounts**: Your user account with email/password
+- **Session Tokens**: Short-lived JWT tokens (1 hour) for account operations
 - **Projects**: Isolated environments (production, staging, dev)
-- **API Keys**: Per-project authentication tokens
+- **API Keys**: Long-lived per-project authentication tokens for log ingestion
 - **Quotas**: Daily log limits per project
 
 ### Security Features
 - Password hashing (bcrypt, cost 12)
 - API key hashing (bcrypt, cost 10)
+- Session tokens stored in Redis with 1-hour expiration
 - Keys shown only once at creation
-- Redis caching (5-minute TTL) for fast validation
+- Redis caching (5-minute TTL for API keys) for fast validation
 - Circuit breaker fallback to emergency cache
 
 ### Performance
+- Session token validation: <1ms (Redis lookup)
 - API key validation: 5ms (cached), 100ms (uncached)
 - Cache hit rate: >95%
 - Supports thousands of validations per second
@@ -249,7 +256,9 @@ Unlike other services, Analytics Workers have no API. They run scheduled jobs:
 ### External (Your Apps → Ledger)
 - **Protocol**: HTTPS REST
 - **Format**: JSON
-- **Authentication**: API keys in Authorization header
+- **Authentication**: Bearer tokens in Authorization header
+  - Session tokens (JWT) for account operations
+  - API keys for log ingestion
 - **Endpoint**: Gateway Service (port 8000)
 
 ### Internal (Service → Service)

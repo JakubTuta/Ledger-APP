@@ -64,9 +64,19 @@ Ledger is built on a microservices architecture designed for high throughput, re
 
 **Key Responsibilities**:
 - Route REST requests to internal gRPC services
-- Authenticate requests (JWT tokens or API keys)
+- Authenticate requests (JWT session tokens or API keys)
 - Enforce rate limits per project
 - Provide fault tolerance with circuit breakers
+
+**Authentication Methods**:
+- **JWT Session Tokens**: Issued by `/register` and `/login` endpoints, valid for 1 hour
+  - Used for account-level operations (project management, settings)
+  - Stored in Redis with key format `session:{token}`
+  - Automatically provided after registration (no separate login needed)
+- **API Keys**: Long-lived keys for log ingestion
+  - Used for high-throughput data ingestion
+  - Validated via Auth Service with Redis caching
+  - Format: `ledger_<random_32_chars>`
 
 **Why it exists**:
 - Centralizes security and policy enforcement

@@ -84,7 +84,7 @@ This document provides complete documentation for the Ledger REST API. Use these
 
 **Endpoint:** `POST /api/v1/accounts/register`
 
-**Description:** Create a new user account.
+**Description:** Create a new user account. Returns an access token for immediate use, eliminating the need for a separate login call.
 
 **Authentication:** Not required
 
@@ -118,15 +118,27 @@ Content-Type: application/json
 
 ```json
 {
+  "access_token": "token_1_user@example.com",
+  "token_type": "bearer",
   "account_id": 1,
   "email": "user@example.com",
   "name": "John Doe",
+  "expires_in": 3600,
   "message": "Account created successfully"
 }
 ```
 
+**Response Fields:**
+- `access_token` (string): JWT token for authentication (valid for 3600 seconds)
+- `token_type` (string): Always "bearer"
+- `account_id` (integer): Unique account identifier
+- `email` (string): Registered email address (lowercase)
+- `name` (string): User's full name
+- `expires_in` (integer): Token expiration time in seconds (1 hour)
+- `message` (string): Success message
+
 **Status Codes:**
-- `201 Created` - Account created successfully
+- `201 Created` - Account created successfully with access token
 - `400 Bad Request` - Invalid input (validation failed)
 - `409 Conflict` - Email already registered
 - `500 Internal Server Error` - Registration failed
@@ -1011,7 +1023,23 @@ curl -X POST http://localhost:8000/api/v1/accounts/register \
   }'
 ```
 
-#### 2. Login to get access token
+**Response includes an `access_token`** - no separate login needed!
+
+```json
+{
+  "access_token": "token_1_user@example.com",
+  "token_type": "bearer",
+  "account_id": 1,
+  "email": "user@example.com",
+  "name": "John Doe",
+  "expires_in": 3600,
+  "message": "Account created successfully"
+}
+```
+
+#### 2. (Optional) Login for existing accounts
+
+Only needed if you already have an account:
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/accounts/login \
@@ -1022,7 +1050,7 @@ curl -X POST http://localhost:8000/api/v1/accounts/login \
   }'
 ```
 
-Save the `access_token` from the response.
+Save the `access_token` from either the registration or login response.
 
 #### 3. Create a project
 

@@ -26,16 +26,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
         "/api/v1/accounts/login",
     }
 
-    def __init__(
-        self,
-        app,
-        redis_client: redis_client.RedisClient,
-        grpc_pool: grpc_pool.GRPCPoolManager,
-    ):
+    def __init__(self, app):
         super().__init__(app)
-        self.redis = redis_client
-        self.grpc_pool = grpc_pool
-
         self._cache_hits = 0
         self._cache_misses = 0
         self._auth_failures = 0
@@ -46,18 +38,24 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if self._is_public_path(request.url.path):
             return await call_next(request)
 
+        self.redis = request.app.state.redis_client
+        self.grpc_pool = request.app.state.grpc_pool
+
         try:
-            api_key = self._extract_api_key(request)
+            token, auth_type = self._extract_auth_token(request)
 
-            auth_data = await self._validate_api_key(api_key)
+            if auth_type == "session":
+                auth_data = await self._validate_session_token(token)
+            else:
+                auth_data = await self._validate_api_key(token)
 
-            request.state.project_id = auth_data["project_id"]
+            request.state.project_id = auth_data.get("project_id")
             request.state.account_id = auth_data["account_id"]
-            request.state.rate_limits = {
-                "per_minute": auth_data["rate_limit_per_minute"],
-                "per_hour": auth_data["rate_limit_per_hour"],
-            }
-            request.state.daily_quota = auth_data["daily_quota"]
+            request.state.rate_limits = auth_data.get("rate_limits", {
+                "per_minute": auth_data.get("rate_limit_per_minute", 1000),
+                "per_hour": auth_data.get("rate_limit_per_hour", 50000),
+            })
+            request.state.daily_quota = auth_data.get("daily_quota", 1000000)
 
             return await call_next(request)
 
@@ -82,7 +80,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
     def _is_public_path(self, path: str) -> bool:
         return path in self.PUBLIC_PATHS
 
-    def _extract_api_key(self, request: fastapi.Request) -> str:
+    def _extract_auth_token(self, request: fastapi.Request) -> typing.Tuple[str, str]:
+        """
+        Extract authentication token and type from request.
+
+        Returns:
+            Tuple of (token, auth_type) where auth_type is either 'session' or 'api_key'
+        """
         auth_header = request.headers.get("Authorization")
 
         if not auth_header:
@@ -95,14 +99,54 @@ class AuthMiddleware(BaseHTTPMiddleware):
         parts = auth_header.split()
 
         if len(parts) == 2 and parts[0].lower() == "bearer":
-            return parts[1]
+            token = parts[1]
+            if token.startswith("token_"):
+                return (token, "session")
+            else:
+                return (token, "api_key")
         elif len(parts) == 1:
-            return parts[0]
+            return (parts[0], "api_key")
         else:
             raise fastapi.HTTPException(
                 status_code=fastapi.status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid Authorization header format",
                 headers={"WWW-Authenticate": "Bearer"},
+            )
+
+    async def _validate_session_token(self, token: str) -> typing.Dict:
+        """
+        Validate session token (JWT/Bearer token from login).
+
+        Returns:
+            Dict with account_id and other session data
+        """
+        session_key = f"session:{token}"
+
+        try:
+            session_data_str = await self.redis.client.get(session_key)
+
+            if not session_data_str:
+                self._auth_failures += 1
+                raise fastapi.HTTPException(
+                    status_code=fastapi.status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid or expired session token",
+                )
+
+            import ast
+            session_data = ast.literal_eval(session_data_str.decode() if isinstance(session_data_str, bytes) else session_data_str)
+
+            return {
+                "account_id": session_data["account_id"],
+                "email": session_data.get("email"),
+                "project_id": None,
+            }
+
+        except (ValueError, KeyError, SyntaxError) as e:
+            logger.error(f"Failed to parse session data: {e}")
+            self._auth_failures += 1
+            raise fastapi.HTTPException(
+                status_code=fastapi.status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid session data",
             )
 
     async def _validate_api_key(self, api_key: str) -> typing.Dict:

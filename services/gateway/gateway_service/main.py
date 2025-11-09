@@ -283,16 +283,12 @@ add_middleware(
 
 add_middleware(
     circuit_breaker.CircuitBreakerMiddleware,
-    grpc_pool=gateway_app.grpc_pool,
 )
 add_middleware(
     rate_limit.RateLimitMiddleware,
-    redis_client=gateway_app.redis_client,
 )
 add_middleware(
     auth.AuthMiddleware,
-    redis_client=gateway_app.redis_client,
-    grpc_pool=gateway_app.grpc_pool,
 )
 
 

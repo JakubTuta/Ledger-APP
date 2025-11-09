@@ -22,16 +22,16 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         "OPTIONS",
     }
 
-    def __init__(self, app, redis_client: redis_client.RedisClient):
+    def __init__(self, app):
         super().__init__(app)
-        self.redis = redis_client
-
         self._total_requests = 0
         self._rate_limited_requests = 0
 
     async def dispatch(self, request: Request, call_next) -> Response:
         if self._is_exempt_path(request.url.path):
             return await call_next(request)
+
+        self.redis = request.app.state.redis_client
 
         if not hasattr(request.state, "project_id"):
             return await call_next(request)

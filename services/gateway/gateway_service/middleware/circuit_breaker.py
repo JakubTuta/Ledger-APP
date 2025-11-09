@@ -196,17 +196,9 @@ class CircuitBreakerMiddleware(BaseHTTPMiddleware):
     from bringing down the entire system.
     """
 
-    def __init__(self, app, grpc_pool: grpc_pool.GRPCPoolManager):
+    def __init__(self, app):
         super().__init__(app)
-        self.grpc_pool = grpc_pool
-
         self.breakers: typing.Dict[str, CircuitBreaker] = {}
-
-        # Initialize breakers for known services
-        self._init_breaker("auth")
-        # Add more services as they're implemented:
-        # self._init_breaker("ingestion")
-        # self._init_breaker("query")
 
     def _init_breaker(self, service_name: str):
         self.breakers[service_name] = CircuitBreaker(
