@@ -340,7 +340,7 @@ make -C scripts test
 ## Technology Stack
 
 - **Backend**: Python 3.12+, FastAPI, gRPC
-- **Databases**: PostgreSQL 15 (with partitioning), Redis 7
+- **Databases**: PostgreSQL 15, Redis 7
 - **Infrastructure**: Docker, Docker Compose
 - **Communication**: REST (external), gRPC (internal)
 
