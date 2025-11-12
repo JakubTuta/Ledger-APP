@@ -404,3 +404,20 @@ All services are stateless and can be scaled independently:
 - **Hot/Cold Storage**: Move old logs to cheaper storage
 - **Read Replicas**: Scale Query Service reads
 - **Compression**: Reduce storage costs by 5-10x
+
+---
+
+## Resources
+
+- **Server Repository**: https://github.com/JakubTuta/Ledger-APP
+- **SDK Repository**: https://github.com/JakubTuta/Ledger-SDK
+- **Frontend Repository**: https://github.com/JakubTuta/Ledger-WEB
+- **SDK on PyPI**: https://pypi.org/project/ledger-sdk/
+- **Production Server**: https://ledger-server.jtuta.cloud
+- **Frontend Dashboard**: https://ledger.jtuta.cloud
+
+## Related Documentation
+
+- **[API Reference](API_REFERENCE.md)** - Complete REST API documentation
+- **[Services Guide](SERVICES.md)** - Detailed service information
+- **[Main README](../README.md)** - Getting started guide

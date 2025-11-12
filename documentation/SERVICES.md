@@ -350,8 +350,19 @@ Analytics Workers
 
 ---
 
-## Next Steps
+---
 
-- **API Reference**: See `API_REFERENCE.md` for complete endpoint documentation
-- **Architecture**: See `ARCHITECTURE.md` for system design details
-- **Development**: See `../CLAUDE.md` for development guidelines
+## Resources
+
+- **Server Repository**: https://github.com/JakubTuta/Ledger-APP
+- **SDK Repository**: https://github.com/JakubTuta/Ledger-SDK
+- **Frontend Repository**: https://github.com/JakubTuta/Ledger-WEB
+- **SDK on PyPI**: https://pypi.org/project/ledger-sdk/
+- **Production Server**: https://ledger-server.jtuta.cloud
+- **Frontend Dashboard**: https://ledger.jtuta.cloud
+
+## Related Documentation
+
+- **[API Reference](API_REFERENCE.md)** - Complete REST API documentation
+- **[Architecture](ARCHITECTURE.md)** - System design and overview
+- **[Main README](../README.md)** - Getting started guide

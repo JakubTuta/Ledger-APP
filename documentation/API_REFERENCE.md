@@ -4,7 +4,8 @@
 
 This document provides complete documentation for the Ledger REST API. Use these endpoints to send logs, query data, and manage your account.
 
-**Base URL**: `http://localhost:8000/api/v1`
+**Production URL**: `https://ledger-server.jtuta.cloud/api/v1`
+**Local Development**: `http://localhost:8000/api/v1`
 
 **API Version**: 1.0.0
 
@@ -1153,7 +1154,16 @@ curl -X POST http://localhost:8000/api/v1/accounts/logout \
 
 ---
 
-## Additional Resources
+## Resources
+
+- **Server Repository**: https://github.com/JakubTuta/Ledger-APP
+- **SDK Repository**: https://github.com/JakubTuta/Ledger-SDK
+- **Frontend Repository**: https://github.com/JakubTuta/Ledger-WEB
+- **SDK on PyPI**: https://pypi.org/project/ledger-sdk/
+- **Production Server**: https://ledger-server.jtuta.cloud
+- **Frontend Dashboard**: https://ledger.jtuta.cloud
+
+## Additional Documentation
 
 - **[Architecture Guide](ARCHITECTURE.md)** - System design and service overview
 - **[Services Guide](SERVICES.md)** - Detailed information about each service
@@ -1163,6 +1173,6 @@ curl -X POST http://localhost:8000/api/v1/accounts/logout \
 
 ## Need Help?
 
+- **Server Issues**: [GitHub Issues](https://github.com/JakubTuta/Ledger-APP/issues)
+- **SDK Issues**: [GitHub Issues](https://github.com/JakubTuta/Ledger-SDK/issues)
 - Check the [README](../README.md) for getting started
-- Review the [Architecture Guide](ARCHITECTURE.md) for system design
-- See [Services Guide](SERVICES.md) for service details

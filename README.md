@@ -209,13 +209,14 @@ client.log.error("Payment failed", error=exception)
 
 **More Languages Coming Soon**: JavaScript/Node.js, Go, Java
 
-**[📦 View SDK Repository](https://github.com/JakubTuta/Ledger-SDK)** - Complete SDK documentation, examples, and source code
+**[📦 SDK Repository](https://github.com/JakubTuta/Ledger-SDK)** - Complete SDK documentation, examples, and source code
+**[📦 SDK on PyPI](https://pypi.org/project/ledger-sdk/)** - Install via `pip install ledger-sdk`
 
 ### Web Dashboard
 
 Monitor your logs with the Ledger web interface:
 
-**[🌐 Ledger-Front](https://github.com/JakubTuta/Ledger-Front)** - Modern web dashboard for:
+**[🌐 Frontend Dashboard](https://ledger.jtuta.cloud)** - Modern web dashboard for:
 
 - Real-time log streaming
 - Error grouping and tracking
@@ -304,10 +305,15 @@ LOGS_DB_PORT=5433
 - **[Services Guide](documentation/SERVICES.md)** - Detailed information about each service
 - **[Development Guide](CLAUDE.md)** - For contributors and developers
 
+## Production Deployment
+
+- **Server**: https://ledger-server.jtuta.cloud
+- **Frontend**: https://ledger.jtuta.cloud
+
 ## Related Projects
 
-- **[Ledger-SDK](https://github.com/JakubTuta/Ledger-SDK)** - Official SDKs for multiple languages
-- **[Ledger-Front](https://github.com/JakubTuta/Ledger-Front)** - Web dashboard for log visualization
+- **[Ledger-SDK](https://github.com/JakubTuta/Ledger-SDK)** - Official SDKs ([PyPI](https://pypi.org/project/ledger-sdk/))
+- **[Ledger-WEB](https://github.com/JakubTuta/Ledger-WEB)** - Web dashboard for log visualization
 
 ## Development Commands
 
@@ -346,10 +352,9 @@ make -C scripts test
 
 ## Support
 
-- **Issues**: [Report bugs or request features](https://github.com/JakubTuta/Ledger-APP/issues)
+- **Server Issues**: [GitHub Issues](https://github.com/JakubTuta/Ledger-APP/issues)
+- **SDK Issues**: [GitHub Issues](https://github.com/JakubTuta/Ledger-SDK/issues)
 - **Documentation**: Complete guides available in `/documentation`
-- **SDK Issues**: [Report SDK-specific issues](https://github.com/JakubTuta/Ledger-SDK/issues)
-- **Frontend Issues**: [Report UI issues](https://github.com/JakubTuta/Ledger-Front/issues)
 
 ## License
 
