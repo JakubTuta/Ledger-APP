@@ -308,19 +308,46 @@ Unlike other services, Analytics Workers have no API. They run scheduled jobs:
 
 ## Deployment
 
-### Development
-All services run in Docker containers via Docker Compose:
+### Docker Compose Deployment (Required)
+Ledger is designed to run exclusively via Docker Compose for both development and production:
+
 ```bash
+# Development
 ./scripts/Make.ps1 up    # Windows
 make -C scripts up       # Linux/Mac
+
+# Production
+./scripts/Make.ps1 prod-up    # Windows (uses production images)
+make -C scripts prod-up       # Linux/Mac
 ```
 
-### Production Recommendations
-- **Kubernetes**: For orchestration and auto-scaling
-- **Managed Databases**: Cloud SQL for PostgreSQL
-- **Managed Redis**: Memorystore or ElastiCache
-- **Load Balancer**: For Gateway Service
-- **Monitoring**: Prometheus + Grafana
+### Network Architecture
+- **Only Gateway Service (port 8000) is exposed externally**
+- All other services communicate via Docker's internal network
+- Internal services (Auth, Ingestion, Query, PostgreSQL, Redis) are NOT accessible from outside
+- Enhanced security through network isolation
+
+**Port Mapping**:
+- `8000` (Gateway) → External access (HTTPS in production)
+- `50051` (Auth gRPC) → Internal only
+- `50052` (Ingestion gRPC) → Internal only
+- `50053` (Query gRPC) → Internal only
+- `5432` (PostgreSQL) → Internal only
+- `6379` (Redis) → Internal only
+
+### Production Deployment
+The application is production-ready with Docker Compose:
+- **Production Server**: https://ledger-server.jtuta.cloud
+- Uses pre-built Docker images from Google Artifact Registry
+- All services run in a single Docker network (`ledger-network`)
+- Reverse proxy (nginx/Traefik) handles HTTPS and routing to Gateway
+- Automated builds and deployments via CI/CD
+
+### Security Benefits
+- **Reduced Attack Surface**: Only 1 port exposed vs 7
+- **Network Isolation**: Internal services completely isolated
+- **Defense in Depth**: Even if Gateway is compromised, internal services remain protected
+- **Simplified Firewall Rules**: Only port 8000 needs to be open
 
 ---
 

@@ -14,25 +14,28 @@ Ledger is built on a microservices architecture designed for high throughput, re
                        │ HTTPS REST
                        ▼
 ┌──────────────────────────────────────────────────────────────┐
-│                    Gateway Service (Port 8000)               │
+│           Gateway Service (Public Port 8000)                 │
+│             ONLY EXTERNALLY ACCESSIBLE SERVICE               │
 │  ┌────────────┐  ┌──────────┐  ┌────────────┐              │
 │  │    Auth    │  │   Rate   │  │  Circuit   │              │
 │  │ Middleware │→ │ Limiting │→ │  Breaker   │              │
 │  └────────────┘  └──────────┘  └────────────┘              │
 └────────┬─────────────────┬─────────────┬────────────────────┘
          │ gRPC            │ gRPC        │ gRPC
+         │ (Internal)      │ (Internal)  │ (Internal)
          ▼                 ▼             ▼
 ┌────────────────┐  ┌─────────────┐  ┌──────────────┐
 │  Auth Service  │  │  Ingestion  │  │    Query     │
-│   (Port 50051) │  │   Service   │  │   Service    │
-│                │  │ (Port 50052)│  │ (Port 50053) │
-└────────┬───────┘  └──────┬──────┘  └──────┬───────┘
+│  (Internal)    │  │   Service   │  │   Service    │
+│  :50051        │  │  (Internal) │  │  (Internal)  │
+└────────┬───────┘  │   :50052    │  │   :50053     │
+         │          └──────┬──────┘  └──────┬───────┘
          │                 │                 │
          ▼                 ▼                 ▼
 ┌────────────────┐  ┌─────────────────────────────────┐
 │ PostgreSQL     │  │      Redis Cache & Queues       │
 │ (Auth DB)      │  ├─────────────────────────────────┤
-│ Port 5432      │  │ • API key cache (5min TTL)      │
+│ Internal :5432 │  │ • API key cache (5min TTL)      │
 └────────────────┘  │ • Rate limit counters           │
                     │ • Log ingestion queues          │
                     │ • Pre-computed metrics          │
@@ -42,7 +45,7 @@ Ledger is built on a microservices architecture designed for high throughput, re
                     ┌─────────────────────┐
                     │   PostgreSQL        │
                     │   (Logs DB)         │
-                    │   Port 5433         │
+                    │   Internal :5432    │
                     │ • Time-partitioned  │
                     │ • BRIN indexes      │
                     └─────────────────────┘
@@ -54,6 +57,9 @@ Ledger is built on a microservices architecture designed for high throughput, re
                     │ • Error aggregation │
                     │ • Metrics           │
                     └─────────────────────┘
+
+Note: All services except Gateway communicate via Docker's internal
+network and are NOT exposed externally for enhanced security.
 ```
 
 ## Service Details
@@ -363,10 +369,29 @@ All services are stateless and can be scaled independently:
 
 ### Network Security
 
-- External: HTTPS/TLS 1.3 (production)
-- Internal: gRPC (mTLS in production)
-- Redis: Password protected
-- PostgreSQL: Private VPC
+**External Access**:
+- Only Gateway Service exposes port 8000 externally
+- All external traffic must go through Gateway (single entry point)
+- HTTPS/TLS 1.3 encryption (production)
+- All other services isolated from external access
+
+**Internal Communication**:
+- Services communicate via Docker internal network
+- No direct external access to internal services
+- gRPC for inter-service communication (mTLS in production)
+- Service names resolve via Docker DNS (e.g., `ledger-auth-service:50051`)
+
+**Database & Cache Security**:
+- Redis: Password protected, internal network only
+- PostgreSQL (Auth DB): Internal network only (:5432)
+- PostgreSQL (Logs DB): Internal network only (:5432)
+- No database ports exposed to host machine
+
+**Deployment Model**:
+- All services run in Docker Compose
+- Shared backend network for internal communication
+- Only Gateway port (8000) mapped to host
+- Enhanced security through network isolation
 
 ### Multi-Tenancy
 

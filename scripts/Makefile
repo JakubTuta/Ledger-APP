@@ -206,27 +206,27 @@ logs:
 
 .PHONY: logs-auth
 logs-auth:
-	docker-compose logs -f auth-service
+	docker-compose logs -f ledger-auth-service
 
 .PHONY: logs-gateway
 logs-gateway:
-	docker-compose logs -f gateway
+	docker-compose logs -f ledger-gateway
 
 .PHONY: logs-ingestion
 logs-ingestion:
-	docker-compose logs -f ingestion
+	docker-compose logs -f ledger-ingestion
 
 .PHONY: logs-worker
 logs-worker:
-	docker-compose logs -f ingestion-worker
+	docker-compose logs -f ledger-ingestion-worker
 
 .PHONY: logs-analytics
 logs-analytics:
-	docker-compose logs -f analytics-workers
+	docker-compose logs -f ledger-analytics-workers
 
 .PHONY: logs-query
 logs-query:
-	docker-compose logs -f query
+	docker-compose logs -f ledger-query
 
 .PHONY: restart
 restart: down up
@@ -241,23 +241,23 @@ build:
 
 .PHONY: build-auth
 build-auth:
-	docker-compose build auth-service
+	docker-compose build ledger-auth-service
 
 .PHONY: build-gateway
 build-gateway:
-	docker-compose build gateway
+	docker-compose build ledger-gateway
 
 .PHONY: build-ingestion
 build-ingestion:
-	docker-compose build ingestion ingestion-worker
+	docker-compose build ledger-ingestion ledger-ingestion-worker
 
 .PHONY: build-analytics
 build-analytics:
-	docker-compose build analytics-workers
+	docker-compose build ledger-analytics-workers
 
 .PHONY: build-query
 build-query:
-	docker-compose build query
+	docker-compose build ledger-query
 
 # ==================== Database (Auth) ====================
 
@@ -288,7 +288,7 @@ db-downgrade:
 
 .PHONY: db-shell
 db-shell:
-	docker-compose exec postgres psql -U $(AUTH_DB_USER) -d $(AUTH_DB_NAME)
+	docker-compose exec ledger-postgres psql -U $(AUTH_DB_USER) -d $(AUTH_DB_NAME)
 
 # ==================== Database (Logs) ====================
 
@@ -319,17 +319,17 @@ logs-db-downgrade:
 
 .PHONY: logs-db-shell
 logs-db-shell:
-	docker-compose exec postgres-logs psql -U $(LOGS_DB_USER) -d $(LOGS_DB_NAME)
+	docker-compose exec ledger-postgres-logs psql -U $(LOGS_DB_USER) -d $(LOGS_DB_NAME)
 
 # ==================== Redis ====================
 
 .PHONY: redis-cli
 redis-cli:
-	docker-compose exec redis redis-cli -a $(REDIS_PASSWORD)
+	docker-compose exec ledger-redis redis-cli -a $(REDIS_PASSWORD)
 
 .PHONY: redis-flush
 redis-flush:
-	docker-compose exec redis redis-cli -a $(REDIS_PASSWORD) FLUSHALL
+	docker-compose exec ledger-redis redis-cli -a $(REDIS_PASSWORD) FLUSHALL
 
 # ==================== Testing ====================
 

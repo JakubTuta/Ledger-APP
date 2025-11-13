@@ -262,32 +262,32 @@ function Show-Logs {
 
 function Show-AuthLogs {
     Write-Host "Showing auth service logs (Ctrl+C to exit)..." -ForegroundColor Cyan
-    docker-compose logs -f auth-service
+    docker-compose logs -f ledger-auth-service
 }
 
 function Show-GatewayLogs {
     Write-Host "Showing gateway service logs (Ctrl+C to exit)..." -ForegroundColor Cyan
-    docker-compose logs -f gateway
+    docker-compose logs -f ledger-gateway
 }
 
 function Show-IngestionLogs {
     Write-Host "Showing ingestion service logs (Ctrl+C to exit)..." -ForegroundColor Cyan
-    docker-compose logs -f ingestion
+    docker-compose logs -f ledger-ingestion
 }
 
 function Show-WorkerLogs {
     Write-Host "Showing storage worker logs (Ctrl+C to exit)..." -ForegroundColor Cyan
-    docker-compose logs -f ingestion-worker
+    docker-compose logs -f ledger-ingestion-worker
 }
 
 function Show-AnalyticsLogs {
     Write-Host "Showing analytics workers logs (Ctrl+C to exit)..." -ForegroundColor Cyan
-    docker-compose logs -f analytics-workers
+    docker-compose logs -f ledger-analytics-workers
 }
 
 function Show-QueryLogs {
     Write-Host "Showing query service logs (Ctrl+C to exit)..." -ForegroundColor Cyan
-    docker-compose logs -f query
+    docker-compose logs -f ledger-query
 }
 
 function Restart-Services {
@@ -315,8 +315,8 @@ function Build-Images {
 
 function Build-AuthImage {
     Write-Host "Building auth service Docker image..." -ForegroundColor Cyan
-    docker-compose build auth-service
-    
+    docker-compose build ledger-auth-service
+
     if ($LASTEXITCODE -eq 0) {
         Write-Host "Auth service build complete" -ForegroundColor Green
     } else {
@@ -327,7 +327,7 @@ function Build-AuthImage {
 
 function Build-GatewayImage {
     Write-Host "Building gateway service Docker image..." -ForegroundColor Cyan
-    docker-compose build gateway
+    docker-compose build ledger-gateway
 
     if ($LASTEXITCODE -eq 0) {
         Write-Host "Gateway service build complete" -ForegroundColor Green
@@ -339,7 +339,7 @@ function Build-GatewayImage {
 
 function Build-IngestionImage {
     Write-Host "Building ingestion service Docker images..." -ForegroundColor Cyan
-    docker-compose build ingestion ingestion-worker
+    docker-compose build ledger-ingestion ledger-ingestion-worker
 
     if ($LASTEXITCODE -eq 0) {
         Write-Host "Ingestion service build complete" -ForegroundColor Green
@@ -351,7 +351,7 @@ function Build-IngestionImage {
 
 function Build-AnalyticsImage {
     Write-Host "Building analytics workers Docker image..." -ForegroundColor Cyan
-    docker-compose build analytics-workers
+    docker-compose build ledger-analytics-workers
 
     if ($LASTEXITCODE -eq 0) {
         Write-Host "Analytics workers build complete" -ForegroundColor Green
@@ -363,7 +363,7 @@ function Build-AnalyticsImage {
 
 function Build-QueryImage {
     Write-Host "Building query service Docker image..." -ForegroundColor Cyan
-    docker-compose build query
+    docker-compose build ledger-query
 
     if ($LASTEXITCODE -eq 0) {
         Write-Host "Query service build complete" -ForegroundColor Green
@@ -446,7 +446,7 @@ function Open-DatabaseShell {
     $dbName = $env:AUTH_DB_NAME
 
     Write-Host "Opening database shell..." -ForegroundColor Cyan
-    docker-compose exec postgres psql -U $dbUser -d $dbName
+    docker-compose exec ledger-postgres psql -U $dbUser -d $dbName
 }
 
 function Create-LogsMigration {
@@ -522,28 +522,28 @@ function Open-LogsDatabase {
     $dbName = $env:LOGS_DB_NAME
 
     Write-Host "Opening logs database shell..." -ForegroundColor Cyan
-    docker-compose exec postgres-logs psql -U $dbUser -d $dbName
+    docker-compose exec ledger-postgres-logs psql -U $dbUser -d $dbName
 }
 
 function Open-RedisShell {
     Load-EnvFile
     $redisPassword = $env:REDIS_PASSWORD
-    
+
     Write-Host "Opening Redis CLI..." -ForegroundColor Cyan
-    docker-compose exec redis redis-cli -a $redisPassword
+    docker-compose exec ledger-redis redis-cli -a $redisPassword
 }
 
 function Flush-Redis {
     Load-EnvFile
     $redisPassword = $env:REDIS_PASSWORD
-    
+
     Write-Host "WARNING: This will delete all Redis data!" -ForegroundColor Yellow
     $confirmation = Read-Host "Are you sure? (yes/no)"
-    
+
     if ($confirmation -eq "yes") {
         Write-Host "Flushing Redis..." -ForegroundColor Cyan
-        docker-compose exec redis redis-cli -a $redisPassword FLUSHALL
-        
+        docker-compose exec ledger-redis redis-cli -a $redisPassword FLUSHALL
+
         if ($LASTEXITCODE -eq 0) {
             Write-Host "Redis flushed" -ForegroundColor Green
         } else {

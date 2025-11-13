@@ -222,12 +222,12 @@ async def health_check():
                                 "auth": {
                                     "pool_size": 10,
                                     "active_channels": 10,
-                                    "address": "auth:50051",
+                                    "address": "ledger-auth-service:50051",
                                 },
                                 "ingestion": {
                                     "pool_size": 10,
                                     "active_channels": 10,
-                                    "address": "ingestion:50052",
+                                    "address": "ledger-ingestion:50052",
                                 },
                             },
                         },

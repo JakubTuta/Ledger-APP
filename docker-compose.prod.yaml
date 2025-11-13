@@ -1,8 +1,8 @@
 services:
   # ==================== PostgreSQL (Auth DB) ====================
-  postgres:
+  ledger-postgres:
     image: postgres:15-alpine
-    container_name: auth-postgres
+    container_name: ledger-postgres
     restart: unless-stopped
     env_file: .env
     environment:
@@ -14,8 +14,6 @@ services:
       POSTGRES_MAINTENANCE_WORK_MEM: 64MB
       POSTGRES_EFFECTIVE_CACHE_SIZE: 1GB
       POSTGRES_CHECKPOINT_TIMEOUT: 5min
-    ports:
-      - "${AUTH_DB_PORT}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database_schema/init_auth_db.sql:/docker-entrypoint-initdb.d/init.sql
@@ -34,9 +32,9 @@ services:
       - backend
 
   # ==================== PostgreSQL (Logs DB) ====================
-  postgres-logs:
+  ledger-postgres-logs:
     image: postgres:15-alpine
-    container_name: logs-postgres
+    container_name: ledger-postgres-logs
     restart: unless-stopped
     env_file: .env
     environment:
@@ -50,8 +48,6 @@ services:
       POSTGRES_CHECKPOINT_TIMEOUT: 30min
       POSTGRES_MAX_WAL_SIZE: 4GB
       POSTGRES_AUTOVACUUM_MAX_WORKERS: 4
-    ports:
-      - "${LOGS_DB_PORT}:5432"
     volumes:
       - postgres_logs_data:/var/lib/postgresql/data
       - ./database_schema/init_logs_db.sql:/docker-entrypoint-initdb.d/init.sql
@@ -70,13 +66,11 @@ services:
       - backend
 
   # ==================== Redis ====================
-  redis:
+  ledger-redis:
     image: redis:7-alpine
-    container_name: auth-redis
+    container_name: ledger-redis
     restart: unless-stopped
     env_file: .env
-    ports:
-      - "${REDIS_PORT}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -96,21 +90,19 @@ services:
       --protected-mode no
 
   # ==================== Auth Service (gRPC) ====================
-  auth-service:
+  ledger-auth-service:
     image: europe-central2-docker.pkg.dev/ledger-478119/images/auth:latest
-    container_name: auth-service
+    container_name: ledger-auth-service
     restart: unless-stopped
     env_file: .env
     environment:
-      AUTH_DB_HOST: postgres
-      REDIS_HOST: redis
+      AUTH_DB_HOST: ledger-postgres
+      REDIS_HOST: ledger-redis
     depends_on:
-      postgres:
+      ledger-postgres:
         condition: service_healthy
-      redis:
+      ledger-redis:
         condition: service_healthy
-    ports:
-      - "${AUTH_GRPC_PORT}:50051"
     networks:
       - backend
     healthcheck:
@@ -126,19 +118,19 @@ services:
       retries: 3
 
   # ==================== Gateway Service (REST) ====================
-  gateway:
+  ledger-gateway:
     image: europe-central2-docker.pkg.dev/ledger-478119/images/gateway:latest
-    container_name: gateway-service
+    container_name: ledger-gateway
     restart: unless-stopped
     env_file: .env
     environment:
-      REDIS_HOST: redis
-      AUTH_SERVICE_HOST: auth-service
-      INGESTION_SERVICE_HOST: ingestion
+      REDIS_HOST: ledger-redis
+      AUTH_SERVICE_HOST: ledger-auth-service
+      INGESTION_SERVICE_HOST: ledger-ingestion
     depends_on:
-      auth-service:
+      ledger-auth-service:
         condition: service_healthy
-      redis:
+      ledger-redis:
         condition: service_healthy
     ports:
       - "${GATEWAY_HTTP_PORT}:8000"
@@ -157,21 +149,19 @@ services:
       retries: 3
 
   # ==================== Ingestion Service (gRPC) ====================
-  ingestion:
+  ledger-ingestion:
     image: europe-central2-docker.pkg.dev/ledger-478119/images/ingestion:latest
-    container_name: ingestion-service
+    container_name: ledger-ingestion
     restart: unless-stopped
     env_file: .env
     environment:
-      REDIS_HOST: redis
-      LOGS_DB_HOST: postgres-logs
+      REDIS_HOST: ledger-redis
+      LOGS_DB_HOST: ledger-postgres-logs
     depends_on:
-      postgres-logs:
+      ledger-postgres-logs:
         condition: service_healthy
-      redis:
+      ledger-redis:
         condition: service_healthy
-    ports:
-      - "${INGESTION_GRPC_PORT}:50052"
     networks:
       - backend
     command: python -m ingestion_service.main
@@ -188,41 +178,41 @@ services:
       retries: 3
 
   # ==================== Storage Workers ====================
-  ingestion-worker:
+  ledger-ingestion-worker:
     image: europe-central2-docker.pkg.dev/ledger-478119/images/ingestion:latest
-    container_name: ingestion-worker
+    container_name: ledger-ingestion-worker
     restart: unless-stopped
     env_file: .env
     environment:
-      REDIS_HOST: redis
-      LOGS_DB_HOST: postgres-logs
+      REDIS_HOST: ledger-redis
+      LOGS_DB_HOST: ledger-postgres-logs
     depends_on:
-      postgres-logs:
+      ledger-postgres-logs:
         condition: service_healthy
-      redis:
+      ledger-redis:
         condition: service_healthy
-      ingestion:
+      ledger-ingestion:
         condition: service_started
     networks:
       - backend
     command: python -m ingestion_service.worker
 
   # ==================== Analytics Workers ====================
-  analytics-workers:
+  ledger-analytics-workers:
     image: europe-central2-docker.pkg.dev/ledger-478119/images/analytics:latest
-    container_name: analytics-workers
+    container_name: ledger-analytics-workers
     restart: unless-stopped
     env_file: .env
     environment:
-      REDIS_HOST: redis
-      LOGS_DB_HOST: postgres-logs
-      AUTH_DB_HOST: postgres
+      REDIS_HOST: ledger-redis
+      LOGS_DB_HOST: ledger-postgres-logs
+      AUTH_DB_HOST: ledger-postgres
     depends_on:
-      postgres:
+      ledger-postgres:
         condition: service_healthy
-      postgres-logs:
+      ledger-postgres-logs:
         condition: service_healthy
-      redis:
+      ledger-redis:
         condition: service_healthy
     networks:
       - backend
@@ -234,21 +224,19 @@ services:
       retries: 3
 
   # ==================== Query Service (gRPC) ====================
-  query:
+  ledger-query:
     image: europe-central2-docker.pkg.dev/ledger-478119/images/query:latest
-    container_name: query-service
+    container_name: ledger-query
     restart: unless-stopped
     env_file: .env
     environment:
-      REDIS_HOST: redis
-      LOGS_DB_HOST: postgres-logs
+      REDIS_HOST: ledger-redis
+      LOGS_DB_HOST: ledger-postgres-logs
     depends_on:
-      postgres-logs:
+      ledger-postgres-logs:
         condition: service_healthy
-      redis:
+      ledger-redis:
         condition: service_healthy
-    ports:
-      - "${QUERY_GRPC_PORT:-50053}:${QUERY_GRPC_PORT:-50053}"
     networks:
       - backend
     command: python -m query_service.main
