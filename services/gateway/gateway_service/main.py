@@ -4,7 +4,6 @@ import typing
 
 import fastapi
 import gateway_service.config as config
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from gateway_service.middleware import auth, circuit_breaker, rate_limit
 from gateway_service.routes import (
@@ -273,13 +272,7 @@ def add_middleware(middleware_class, **options):
     app.add_middleware(middleware_class, **options)
 
 
-add_middleware(
-    CORSMiddleware,
-    allow_origins=config.settings.ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS MANAGED BY REVERSE PROXY
 
 add_middleware(
     circuit_breaker.CircuitBreakerMiddleware,

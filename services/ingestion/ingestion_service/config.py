@@ -215,19 +215,6 @@ class Settings(pydantic_settings.BaseSettings):
         description="HTTP request timeout (seconds)",
     )
 
-    ALLOWED_ORIGINS: list[str] | str = pydantic.Field(
-        default=["http://localhost:3000", "http://localhost:8000"],
-        description="CORS allowed origins",
-    )
-
-    @pydantic.field_validator("ALLOWED_ORIGINS", mode="before")
-    @classmethod
-    def parse_allowed_origins(cls, v):
-        if isinstance(v, str):
-            return [origin.strip() for origin in v.split(",")]
-        return v
-
-
     @property
     def is_production(self) -> bool:
         return self.ENV.lower() == "production"
