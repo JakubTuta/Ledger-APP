@@ -35,9 +35,6 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV ENV_FILE_PATH=../../.env
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:8001/health')"
 
-EXPOSE 8001
-
-CMD ["python", "-m", "uvicorn", "ingestion_service.main:app", "--host", "0.0.0.0", "--port", "8001"]
+# Default command (overridden by docker-compose to run gRPC server)
+CMD ["python", "-m", "ingestion_service.main"]
