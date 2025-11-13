@@ -15,7 +15,7 @@ services:
       POSTGRES_EFFECTIVE_CACHE_SIZE: 1GB
       POSTGRES_CHECKPOINT_TIMEOUT: 5min
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ledger-postgres-data:/var/lib/postgresql/data
       - ./database_schema/init_auth_db.sql:/docker-entrypoint-initdb.d/init.sql
     deploy:
       resources:
@@ -29,7 +29,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - backend
+      - ledger-server-network
 
   # ==================== PostgreSQL (Logs DB) ====================
   ledger-postgres-logs:
@@ -49,7 +49,7 @@ services:
       POSTGRES_MAX_WAL_SIZE: 4GB
       POSTGRES_AUTOVACUUM_MAX_WORKERS: 4
     volumes:
-      - postgres_logs_data:/var/lib/postgresql/data
+      - ledger-postgres-logs-data:/var/lib/postgresql/data
       - ./database_schema/init_logs_db.sql:/docker-entrypoint-initdb.d/init.sql
     deploy:
       resources:
@@ -63,7 +63,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - backend
+      - ledger-server-network
 
   # ==================== Redis ====================
   ledger-redis:
@@ -72,14 +72,14 @@ services:
     restart: unless-stopped
     env_file: .env
     volumes:
-      - redis_data:/data
+      - ledger-redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - backend
+      - ledger-server-network
     command: >
       redis-server
       --maxmemory 2gb
@@ -104,7 +104,7 @@ services:
       ledger-redis:
         condition: service_healthy
     networks:
-      - backend
+      - ledger-server-network
     healthcheck:
       test:
         [
@@ -135,7 +135,7 @@ services:
     ports:
       - "${GATEWAY_HTTP_PORT}:8000"
     networks:
-      - backend
+      - ledger-server-network
     command: >
       uvicorn gateway_service.main:app
       --host 0.0.0.0
@@ -163,7 +163,7 @@ services:
       ledger-redis:
         condition: service_healthy
     networks:
-      - backend
+      - ledger-server-network
     command: python -m ingestion_service.main
     healthcheck:
       test:
@@ -194,7 +194,7 @@ services:
       ledger-ingestion:
         condition: service_started
     networks:
-      - backend
+      - ledger-server-network
     command: python -m ingestion_service.worker
 
   # ==================== Analytics Workers ====================
@@ -215,10 +215,14 @@ services:
       ledger-redis:
         condition: service_healthy
     networks:
-      - backend
+      - ledger-server-network
     command: python -m analytics_workers.main
     healthcheck:
-      test: ["CMD-SHELL", "test -f /tmp/analytics_health.json && cat /tmp/analytics_health.json | grep -q healthy"]
+      test:
+        [
+          "CMD-SHELL",
+          "test -f /tmp/analytics_health.json && cat /tmp/analytics_health.json | grep -q healthy",
+        ]
       interval: 60s
       timeout: 5s
       retries: 3
@@ -238,7 +242,7 @@ services:
       ledger-redis:
         condition: service_healthy
     networks:
-      - backend
+      - ledger-server-network
     command: python -m query_service.main
     healthcheck:
       test:
@@ -253,14 +257,13 @@ services:
       retries: 3
 
 networks:
-  backend:
+  ledger-server-network:
     driver: bridge
-    name: ledger-network
 
 volumes:
-  postgres_data:
+  ledger-postgres-data:
     name: ledger-postgres-data
-  postgres_logs_data:
+  ledger-postgres-logs-data:
     name: ledger-postgres-logs-data
-  redis_data:
+  ledger-redis-data:
     name: ledger-redis-data
