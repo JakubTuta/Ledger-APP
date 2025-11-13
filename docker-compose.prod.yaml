@@ -1,0 +1,278 @@
+services:
+  # ==================== PostgreSQL (Auth DB) ====================
+  postgres:
+    image: postgres:15-alpine
+    container_name: auth-postgres
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_DB: ${AUTH_DB_NAME}
+      POSTGRES_USER: ${AUTH_DB_USER}
+      POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD}
+      POSTGRES_SHARED_BUFFERS: 256MB
+      POSTGRES_WORK_MEM: 8MB
+      POSTGRES_MAINTENANCE_WORK_MEM: 64MB
+      POSTGRES_EFFECTIVE_CACHE_SIZE: 1GB
+      POSTGRES_CHECKPOINT_TIMEOUT: 5min
+    ports:
+      - "${AUTH_DB_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database_schema/init_auth_db.sql:/docker-entrypoint-initdb.d/init.sql
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${AUTH_DB_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend
+
+  # ==================== PostgreSQL (Logs DB) ====================
+  postgres-logs:
+    image: postgres:15-alpine
+    container_name: logs-postgres
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_DB: ${LOGS_DB_NAME}
+      POSTGRES_USER: ${LOGS_DB_USER}
+      POSTGRES_PASSWORD: ${LOGS_DB_PASSWORD}
+      POSTGRES_SHARED_BUFFERS: 1GB
+      POSTGRES_WORK_MEM: 64MB
+      POSTGRES_MAINTENANCE_WORK_MEM: 512MB
+      POSTGRES_EFFECTIVE_CACHE_SIZE: 4GB
+      POSTGRES_CHECKPOINT_TIMEOUT: 30min
+      POSTGRES_MAX_WAL_SIZE: 4GB
+      POSTGRES_AUTOVACUUM_MAX_WORKERS: 4
+    ports:
+      - "${LOGS_DB_PORT}:5432"
+    volumes:
+      - postgres_logs_data:/var/lib/postgresql/data
+      - ./database_schema/init_logs_db.sql:/docker-entrypoint-initdb.d/init.sql
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+        reservations:
+          memory: 2G
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${LOGS_DB_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend
+
+  # ==================== Redis ====================
+  redis:
+    image: redis:7-alpine
+    container_name: auth-redis
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "${REDIS_PORT}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend
+    command: >
+      redis-server
+      --maxmemory 2gb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+      --bind 0.0.0.0
+      --protected-mode no
+
+  # ==================== Auth Service (gRPC) ====================
+  auth-service:
+    image: europe-central2-docker.pkg.dev/ledger-478119/images/auth:latest
+    container_name: auth-service
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      AUTH_DB_HOST: postgres
+      REDIS_HOST: redis
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "${AUTH_GRPC_PORT}:50051"
+    networks:
+      - backend
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import grpc; channel = grpc.insecure_channel('localhost:50051'); channel.close()",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ==================== Gateway Service (REST) ====================
+  gateway:
+    image: europe-central2-docker.pkg.dev/ledger-478119/images/gateway:latest
+    container_name: gateway-service
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      REDIS_HOST: redis
+      AUTH_SERVICE_HOST: auth-service
+      INGESTION_SERVICE_HOST: ingestion
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "${GATEWAY_HTTP_PORT}:8000"
+    networks:
+      - backend
+    command: >
+      uvicorn gateway_service.main:app
+      --host 0.0.0.0
+      --port 8000
+      --workers ${GATEWAY_WORKERS}
+      --log-level info
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ==================== Ingestion Service (gRPC) ====================
+  ingestion:
+    image: europe-central2-docker.pkg.dev/ledger-478119/images/ingestion:latest
+    container_name: ingestion-service
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      REDIS_HOST: redis
+      LOGS_DB_HOST: postgres-logs
+    depends_on:
+      postgres-logs:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "${INGESTION_GRPC_PORT}:50052"
+    networks:
+      - backend
+    command: python -m ingestion_service.main
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import grpc; channel = grpc.insecure_channel('localhost:50052'); channel.close()",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ==================== Storage Workers ====================
+  ingestion-worker:
+    image: europe-central2-docker.pkg.dev/ledger-478119/images/ingestion:latest
+    container_name: ingestion-worker
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      REDIS_HOST: redis
+      LOGS_DB_HOST: postgres-logs
+    depends_on:
+      postgres-logs:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ingestion:
+        condition: service_started
+    networks:
+      - backend
+    command: python -m ingestion_service.worker
+
+  # ==================== Analytics Workers ====================
+  analytics-workers:
+    image: europe-central2-docker.pkg.dev/ledger-478119/images/analytics:latest
+    container_name: analytics-workers
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      REDIS_HOST: redis
+      LOGS_DB_HOST: postgres-logs
+      AUTH_DB_HOST: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+      postgres-logs:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backend
+    command: python -m analytics_workers.main
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/analytics_health.json && cat /tmp/analytics_health.json | grep -q healthy"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+
+  # ==================== Query Service (gRPC) ====================
+  query:
+    image: europe-central2-docker.pkg.dev/ledger-478119/images/query:latest
+    container_name: query-service
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      REDIS_HOST: redis
+      LOGS_DB_HOST: postgres-logs
+    depends_on:
+      postgres-logs:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "${QUERY_GRPC_PORT:-50053}:${QUERY_GRPC_PORT:-50053}"
+    networks:
+      - backend
+    command: python -m query_service.main
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import grpc; channel = grpc.insecure_channel('localhost:${QUERY_GRPC_PORT:-50053}'); channel.close()",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+networks:
+  backend:
+    driver: bridge
+    name: ledger-network
+
+volumes:
+  postgres_data:
+    name: ledger-postgres-data
+  postgres_logs_data:
+    name: ledger-postgres-logs-data
+  redis_data:
+    name: ledger-redis-data

@@ -46,6 +46,13 @@ help:
 	@echo "  dev-query   - Run query service locally"
 	@echo "  clean       - Clean generated files"
 	@echo "  clean-all   - Clean everything including Docker volumes"
+	@echo ""
+	@echo "Production Commands:"
+	@echo "  prod-build  - Build production images for GCP"
+	@echo "  prod-push   - Push production images to GCP Artifact Registry"
+	@echo "  prod-deploy - Build and push production images"
+	@echo "  prod-up     - Start services using production images"
+	@echo "  prod-down   - Stop production services"
 
 # ==================== Setup ====================
 
@@ -450,3 +457,179 @@ load-test:
 		exit 1; \
 	fi
 	@bash -c "source venv/bin/activate && locust -f services/gateway/tests/locustfile.py --host http://localhost:$(GATEWAY_HTTP_PORT)"
+
+# ==================== Production Deployment ====================
+
+PROD_REGISTRY := europe-central2-docker.pkg.dev/ledger-478119/images
+PROD_TAG := latest
+SERVICES := auth gateway ingestion analytics query
+
+define check_docker
+	@if ! docker version > /dev/null 2>&1; then \
+		echo "\033[0;31mDocker is not running or not installed\033[0m"; \
+		exit 1; \
+	fi
+endef
+
+define check_gcloud
+	@if ! command -v gcloud > /dev/null 2>&1; then \
+		echo "\033[0;31mgcloud CLI is not installed\033[0m"; \
+		exit 1; \
+	fi
+	@if ! gcloud auth print-access-token > /dev/null 2>&1; then \
+		echo "\033[0;33mGoogle Cloud authentication required.\033[0m"; \
+		echo "\033[0;33mAttempting to authenticate with gcloud...\033[0m"; \
+		gcloud auth configure-docker europe-central2-docker.pkg.dev || \
+		(echo "\033[0;31mFailed to configure Docker for GCP\033[0m" && \
+		 echo "Please run: gcloud auth configure-docker europe-central2-docker.pkg.dev" && \
+		 exit 1); \
+	fi
+endef
+
+define build_service
+	@echo ""; \
+	echo "======================================================================"; \
+	echo "Building $(1) service"; \
+	echo "======================================================================"; \
+	echo ""; \
+	echo "Context: services/$(1)"; \
+	echo "Dockerfile: services/$(1)/Dockerfile"; \
+	echo "Image: $(PROD_REGISTRY)/$(1):$(PROD_TAG)"; \
+	echo ""; \
+	if docker build \
+		--file services/$(1)/Dockerfile \
+		--tag $(PROD_REGISTRY)/$(1):$(PROD_TAG) \
+		--platform linux/amd64 \
+		services/$(1); then \
+		echo "\033[0;32m[SUCCESS] $(1) image built successfully\033[0m"; \
+	else \
+		echo "\033[0;31m[ERROR] Failed to build $(1) image\033[0m"; \
+		exit 1; \
+	fi
+endef
+
+define push_service
+	@echo ""; \
+	echo "======================================================================"; \
+	echo "Pushing $(1) service"; \
+	echo "======================================================================"; \
+	echo ""; \
+	echo "Image: $(PROD_REGISTRY)/$(1):$(PROD_TAG)"; \
+	echo ""; \
+	if docker push $(PROD_REGISTRY)/$(1):$(PROD_TAG); then \
+		echo "\033[0;32m[SUCCESS] $(1) image pushed successfully\033[0m"; \
+	else \
+		echo "\033[0;31m[ERROR] Failed to push $(1) image\033[0m"; \
+		exit 1; \
+	fi
+endef
+
+.PHONY: prod-build
+prod-build:
+	@echo ""
+	@echo "======================================================================"
+	@echo "Building production images for GCP"
+	@echo "======================================================================"
+	@echo ""
+	@echo "Registry: $(PROD_REGISTRY)"
+	@echo "Tag: $(PROD_TAG)"
+	$(call check_docker)
+	@success=0; \
+	total=5; \
+	for service in $(SERVICES); do \
+		$(call build_service,$$service) && success=$$((success + 1)) || true; \
+	done; \
+	echo ""; \
+	echo "======================================================================"; \
+	echo "Summary"; \
+	echo "======================================================================"; \
+	echo ""; \
+	echo "Total services: $$total"; \
+	echo "\033[0;32m[SUCCESS] Successful: $$success\033[0m"; \
+	if [ $$success -ne $$total ]; then \
+		echo "\033[0;31m[ERROR] Failed: $$((total - success))\033[0m"; \
+		exit 1; \
+	fi; \
+	echo ""; \
+	echo "\033[0;32m[SUCCESS] All production images built successfully!\033[0m"
+
+.PHONY: prod-push
+prod-push:
+	@echo ""
+	@echo "======================================================================"
+	@echo "Pushing production images to GCP Artifact Registry"
+	@echo "======================================================================"
+	@echo ""
+	@echo "Registry: $(PROD_REGISTRY)"
+	@echo "Tag: $(PROD_TAG)"
+	$(call check_docker)
+	$(call check_gcloud)
+	@success=0; \
+	total=5; \
+	for service in $(SERVICES); do \
+		$(call push_service,$$service) && success=$$((success + 1)) || true; \
+	done; \
+	echo ""; \
+	echo "======================================================================"; \
+	echo "Summary"; \
+	echo "======================================================================"; \
+	echo ""; \
+	echo "Total services: $$total"; \
+	echo "\033[0;32m[SUCCESS] Successful: $$success\033[0m"; \
+	if [ $$success -ne $$total ]; then \
+		echo "\033[0;31m[ERROR] Failed: $$((total - success))\033[0m"; \
+		exit 1; \
+	fi; \
+	echo ""; \
+	echo "\033[0;32m[SUCCESS] All production images pushed successfully!\033[0m"; \
+	echo ""; \
+	echo "\033[0;33mYou can now deploy using:\033[0m"; \
+	echo "\033[0;36m  docker-compose -f docker-compose.prod.yaml up -d\033[0m"
+
+.PHONY: prod-deploy
+prod-deploy:
+	@echo ""
+	@echo "======================================================================"
+	@echo "Building and pushing production images"
+	@echo "======================================================================"
+	@echo ""
+	@echo "Registry: $(PROD_REGISTRY)"
+	@echo "Tag: $(PROD_TAG)"
+	$(call check_docker)
+	$(call check_gcloud)
+	@success=0; \
+	total=5; \
+	for service in $(SERVICES); do \
+		if $(call build_service,$$service); then \
+			$(call push_service,$$service) && success=$$((success + 1)) || true; \
+		fi; \
+	done; \
+	echo ""; \
+	echo "======================================================================"; \
+	echo "Summary"; \
+	echo "======================================================================"; \
+	echo ""; \
+	echo "Total services: $$total"; \
+	echo "\033[0;32m[SUCCESS] Successful: $$success\033[0m"; \
+	if [ $$success -ne $$total ]; then \
+		echo "\033[0;31m[ERROR] Failed: $$((total - success))\033[0m"; \
+		exit 1; \
+	fi; \
+	echo ""; \
+	echo "\033[0;32m[SUCCESS] All production images deployed successfully!\033[0m"; \
+	echo ""; \
+	echo "\033[0;33mNext steps:\033[0m"; \
+	echo "  1. Deploy to your production environment"; \
+	echo "  2. Or test locally with: \033[0;36mmake prod-up\033[0m"
+
+.PHONY: prod-up
+prod-up:
+	@echo "Starting services with production images..."
+	@docker-compose -f docker-compose.prod.yaml up -d
+	@echo "\033[0;32mProduction services started. Check status with 'make ps'\033[0m"
+
+.PHONY: prod-down
+prod-down:
+	@echo "Stopping production services..."
+	@docker-compose -f docker-compose.prod.yaml down
+	@echo "\033[0;32mProduction services stopped\033[0m"

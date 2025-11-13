@@ -102,6 +102,13 @@ function Show-Help {
     Write-Host "  clean-all    - Clean everything including Docker volumes"
     Write-Host "  load-test    - Run load tests with Locust"
     Write-Host ""
+    Write-Host "Production Commands:" -ForegroundColor Yellow
+    Write-Host "  prod-build   - Build production images for GCP"
+    Write-Host "  prod-push    - Push production images to GCP Artifact Registry"
+    Write-Host "  prod-deploy  - Build and push production images"
+    Write-Host "  prod-up      - Start services using production images"
+    Write-Host "  prod-down    - Stop production services"
+    Write-Host ""
     Write-Host "Usage: .\Make.ps1 <command>" -ForegroundColor Yellow
 }
 
@@ -855,13 +862,323 @@ function Clean-Files {
 function Clean-All {
     Write-Host "WARNING: This will remove all Docker volumes and data!" -ForegroundColor Yellow
     $confirmation = Read-Host "Are you sure? (yes/no)"
-    
+
     if ($confirmation -eq "yes") {
         Clean-Files
         docker-compose down -v
         Write-Host "All data deleted!" -ForegroundColor Green
     } else {
         Write-Host "Operation cancelled" -ForegroundColor Yellow
+    }
+}
+
+# ==================== Production Deployment ====================
+
+$PROD_REGISTRY = "europe-central2-docker.pkg.dev/ledger-478119/images"
+$PROD_TAG = "latest"
+
+$PROD_SERVICES = @{
+    "auth" = @{
+        "context" = "services/auth"
+        "dockerfile" = "services/auth/Dockerfile"
+    }
+    "gateway" = @{
+        "context" = "services/gateway"
+        "dockerfile" = "services/gateway/Dockerfile"
+    }
+    "ingestion" = @{
+        "context" = "services/ingestion"
+        "dockerfile" = "services/ingestion/Dockerfile"
+    }
+    "analytics" = @{
+        "context" = "services/analytics"
+        "dockerfile" = "services/analytics/Dockerfile"
+    }
+    "query" = @{
+        "context" = "services/query"
+        "dockerfile" = "services/query/Dockerfile"
+    }
+}
+
+function Test-DockerRunning {
+    try {
+        docker version | Out-Null
+        return $true
+    }
+    catch {
+        Write-Host "Docker is not running or not installed" -ForegroundColor Red
+        return $false
+    }
+}
+
+function Test-GCloudAuthentication {
+    try {
+        $result = gcloud auth print-access-token 2>$null
+        return $result -ne $null
+    }
+    catch {
+        return $false
+    }
+}
+
+function Configure-GCloudDocker {
+    Write-Host "Google Cloud authentication required." -ForegroundColor Yellow
+    Write-Host "Attempting to authenticate with gcloud..." -ForegroundColor Yellow
+
+    try {
+        gcloud auth configure-docker europe-central2-docker.pkg.dev
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "Docker configured for GCP Artifact Registry" -ForegroundColor Green
+            return $true
+        }
+        return $false
+    }
+    catch {
+        Write-Host "Failed to configure Docker for GCP. Please run: gcloud auth configure-docker europe-central2-docker.pkg.dev" -ForegroundColor Red
+        return $false
+    }
+}
+
+function Build-SingleProductionImage {
+    param(
+        [string]$ServiceName,
+        [string]$Tag = $PROD_TAG
+    )
+
+    if (-not $PROD_SERVICES.ContainsKey($ServiceName)) {
+        Write-Host "Unknown service: $ServiceName" -ForegroundColor Red
+        return $false
+    }
+
+    $config = $PROD_SERVICES[$ServiceName]
+    $image = "$PROD_REGISTRY/${ServiceName}:${Tag}"
+
+    Write-Host "`n======================================================================"
+    Write-Host "Building $ServiceName service"
+    Write-Host "======================================================================`n"
+    Write-Host "Context: $($config.context)"
+    Write-Host "Dockerfile: $($config.dockerfile)"
+    Write-Host "Image: $image"
+
+    try {
+        docker build `
+            --file $config.dockerfile `
+            --tag $image `
+            --platform linux/amd64 `
+            $config.context
+
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "[SUCCESS] $ServiceName image built successfully" -ForegroundColor Green
+            return $true
+        }
+        return $false
+    }
+    catch {
+        Write-Host "[ERROR] Failed to build $ServiceName image: $_" -ForegroundColor Red
+        return $false
+    }
+}
+
+function Push-SingleProductionImage {
+    param(
+        [string]$ServiceName,
+        [string]$Tag = $PROD_TAG
+    )
+
+    $image = "$PROD_REGISTRY/${ServiceName}:${Tag}"
+
+    Write-Host "`n======================================================================"
+    Write-Host "Pushing $ServiceName service"
+    Write-Host "======================================================================`n"
+    Write-Host "Image: $image"
+
+    try {
+        docker push $image
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "[SUCCESS] $ServiceName image pushed successfully" -ForegroundColor Green
+            return $true
+        }
+        return $false
+    }
+    catch {
+        Write-Host "[ERROR] Failed to push $ServiceName image: $_" -ForegroundColor Red
+        return $false
+    }
+}
+
+function Build-ProductionImages {
+    param(
+        [string]$Tag = $PROD_TAG
+    )
+
+    Write-Host "`n======================================================================"
+    Write-Host "Building production images for GCP"
+    Write-Host "======================================================================`n"
+    Write-Host "Registry: $PROD_REGISTRY"
+    Write-Host "Tag: $Tag"
+
+    if (-not (Test-DockerRunning)) {
+        exit 1
+    }
+
+    $successCount = 0
+    $failureCount = 0
+    $failedServices = @()
+
+    foreach ($serviceName in $PROD_SERVICES.Keys | Sort-Object) {
+        if (Build-SingleProductionImage -ServiceName $serviceName -Tag $Tag) {
+            $successCount++
+        } else {
+            $failureCount++
+            $failedServices += $serviceName
+        }
+    }
+
+    Write-Host "`n======================================================================"
+    Write-Host "Summary"
+    Write-Host "======================================================================`n"
+    Write-Host "Total services: $($PROD_SERVICES.Keys.Count)"
+    Write-Host "[SUCCESS] Successful: $successCount" -ForegroundColor Green
+
+    if ($failureCount -gt 0) {
+        Write-Host "[ERROR] Failed: $failureCount" -ForegroundColor Red
+        Write-Host "[ERROR] Failed services: $($failedServices -join ', ')" -ForegroundColor Red
+        exit 1
+    }
+
+    Write-Host "`n[SUCCESS] All production images built successfully!" -ForegroundColor Green
+}
+
+function Push-ProductionImages {
+    param(
+        [string]$Tag = $PROD_TAG
+    )
+
+    Write-Host "`n======================================================================"
+    Write-Host "Pushing production images to GCP Artifact Registry"
+    Write-Host "======================================================================`n"
+    Write-Host "Registry: $PROD_REGISTRY"
+    Write-Host "Tag: $Tag"
+
+    if (-not (Test-DockerRunning)) {
+        exit 1
+    }
+
+    if (-not (Test-GCloudAuthentication)) {
+        if (-not (Configure-GCloudDocker)) {
+            exit 1
+        }
+    }
+
+    $successCount = 0
+    $failureCount = 0
+    $failedServices = @()
+
+    foreach ($serviceName in $PROD_SERVICES.Keys | Sort-Object) {
+        if (Push-SingleProductionImage -ServiceName $serviceName -Tag $Tag) {
+            $successCount++
+        } else {
+            $failureCount++
+            $failedServices += $serviceName
+        }
+    }
+
+    Write-Host "`n======================================================================"
+    Write-Host "Summary"
+    Write-Host "======================================================================`n"
+    Write-Host "Total services: $($PROD_SERVICES.Keys.Count)"
+    Write-Host "[SUCCESS] Successful: $successCount" -ForegroundColor Green
+
+    if ($failureCount -gt 0) {
+        Write-Host "[ERROR] Failed: $failureCount" -ForegroundColor Red
+        Write-Host "[ERROR] Failed services: $($failedServices -join ', ')" -ForegroundColor Red
+        exit 1
+    }
+
+    Write-Host "`n[SUCCESS] All production images pushed successfully!" -ForegroundColor Green
+    Write-Host "`nYou can now deploy using:" -ForegroundColor Yellow
+    Write-Host "  docker-compose -f docker-compose.prod.yaml up -d" -ForegroundColor Cyan
+}
+
+function Deploy-ProductionImages {
+    param(
+        [string]$Tag = $PROD_TAG
+    )
+
+    Write-Host "`n======================================================================"
+    Write-Host "Building and pushing production images"
+    Write-Host "======================================================================`n"
+    Write-Host "Registry: $PROD_REGISTRY"
+    Write-Host "Tag: $Tag"
+
+    if (-not (Test-DockerRunning)) {
+        exit 1
+    }
+
+    if (-not (Test-GCloudAuthentication)) {
+        if (-not (Configure-GCloudDocker)) {
+            exit 1
+        }
+    }
+
+    $successCount = 0
+    $failureCount = 0
+    $failedServices = @()
+
+    foreach ($serviceName in $PROD_SERVICES.Keys | Sort-Object) {
+        if (Build-SingleProductionImage -ServiceName $serviceName -Tag $Tag) {
+            if (Push-SingleProductionImage -ServiceName $serviceName -Tag $Tag) {
+                $successCount++
+            } else {
+                $failureCount++
+                $failedServices += $serviceName
+            }
+        } else {
+            $failureCount++
+            $failedServices += $serviceName
+        }
+    }
+
+    Write-Host "`n======================================================================"
+    Write-Host "Summary"
+    Write-Host "======================================================================`n"
+    Write-Host "Total services: $($PROD_SERVICES.Keys.Count)"
+    Write-Host "[SUCCESS] Successful: $successCount" -ForegroundColor Green
+
+    if ($failureCount -gt 0) {
+        Write-Host "[ERROR] Failed: $failureCount" -ForegroundColor Red
+        Write-Host "[ERROR] Failed services: $($failedServices -join ', ')" -ForegroundColor Red
+        exit 1
+    }
+
+    Write-Host "`n[SUCCESS] All production images deployed successfully!" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "Next steps:" -ForegroundColor Yellow
+    Write-Host "  1. Deploy to your production environment"
+    Write-Host "  2. Or test locally with: .\Make.ps1 prod-up" -ForegroundColor Cyan
+}
+
+function Start-ProductionServices {
+    Write-Host "Starting services with production images..." -ForegroundColor Cyan
+    docker-compose -f docker-compose.prod.yaml up -d
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "Production services started. Check status with '.\Make.ps1 ps'" -ForegroundColor Green
+    } else {
+        Write-Host "Failed to start production services" -ForegroundColor Red
+        exit 1
+    }
+}
+
+function Stop-ProductionServices {
+    Write-Host "Stopping production services..." -ForegroundColor Cyan
+    docker-compose -f docker-compose.prod.yaml down
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "Production services stopped" -ForegroundColor Green
+    } else {
+        Write-Host "Failed to stop production services" -ForegroundColor Red
+        exit 1
     }
 }
 
@@ -914,6 +1231,11 @@ switch ($Command.ToLower()) {
     "load-test"           { Run-LoadTest }
     "clean"               { Clean-Files }
     "clean-all"           { Clean-All }
+    "prod-build"          { Build-ProductionImages }
+    "prod-push"           { Push-ProductionImages }
+    "prod-deploy"         { Deploy-ProductionImages }
+    "prod-up"             { Start-ProductionServices }
+    "prod-down"           { Stop-ProductionServices }
     default {
         Write-Host "Unknown command: $Command" -ForegroundColor Red
         Write-Host ""
