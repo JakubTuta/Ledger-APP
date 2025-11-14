@@ -45,8 +45,8 @@ class CreateApiKeyResponse(pydantic.BaseModel):
         json_schema_extra={
             "example": {
                 "key_id": 789,
-                "full_key": "ldg_prod_1a2b3c4d5e6f7g8h9i0j",
-                "key_prefix": "ldg_prod_1a2b",
+                "full_key": "ledger_prod_1a2b3c4d5e6f7g8h9i0j",
+                "key_prefix": "ledger_prod_1a2b",
                 "warning": "Save this key now! It will not be shown again.",
             }
         }
@@ -84,8 +84,8 @@ class RevokeApiKeyResponse(pydantic.BaseModel):
                 "application/json": {
                     "example": {
                         "key_id": 789,
-                        "full_key": "ldg_prod_1a2b3c4d5e6f7g8h9i0j",
-                        "key_prefix": "ldg_prod_1a2b",
+                        "full_key": "ledger_prod_1a2b3c4d5e6f7g8h9i0j",
+                        "key_prefix": "ledger_prod_1a2b",
                         "warning": "Save this key now! It will not be shown again.",
                     }
                 }

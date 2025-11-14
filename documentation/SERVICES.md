@@ -20,20 +20,23 @@ The Gateway is like the front desk at a hotel - it's where everyone checks in, a
 The Gateway supports two types of authentication because you need different things:
 
 **Session Tokens (JWT):**
+
 - You get one when you register or login
 - Lasts for 1 hour
 - Use it for managing your account, creating projects, generating API keys
 - Stored in Redis so it's fast to validate
 
 **API Keys:**
+
 - Long-lived tokens for your applications
 - Use them for sending logs (the high-volume stuff)
-- Format looks like: `ldg_proj_1_abc123...`
+- Format looks like: `ledger_proj_1_abc123...`
 - First validation takes a bit (bcrypt check), then cached for 5 minutes
 
 ### Configuration
 
 The defaults work for most people:
+
 - Handles up to 1,000 requests per minute per project
 - Can process about 10,000 requests/second on decent hardware
 - 30-second timeout per request (plenty of time for normal operations)
@@ -51,6 +54,7 @@ Manages who you are and what you have access to. Every account, project, and API
 ### The Flow
 
 **When you first register:**
+
 1. You send email + password
 2. We hash your password (bcrypt, intentionally slow for security)
 3. Create your account
@@ -58,12 +62,14 @@ Manages who you are and what you have access to. Every account, project, and API
 5. Return everything you need to start using Ledger immediately
 
 **When you create an API key:**
+
 1. We generate a random key
 2. Show it to you once (save it!)
 3. Hash and store the hash (not the key itself)
 4. Future requests check against the hash
 
 **When you send logs later:**
+
 1. Gateway asks "is this API key valid?"
 2. First time: Check database (~100ms with bcrypt)
 3. Cache result in Redis
@@ -124,17 +130,20 @@ This is much faster than 1,000 individual requests. The Ingestion Service handle
 ### What Logs Look Like
 
 **Required fields:**
+
 - `timestamp` - When it happened (ISO 8601 format)
 - `level` - debug, info, warning, error, critical
 - `log_type` - console, logger, exception, custom
 - `importance` - low, standard, high
 
 **Optional but useful:**
+
 - `message` - The actual log message (up to 10,000 characters)
 - `error_type`, `error_message`, `stack_trace` - For exceptions
 - `attributes` - Custom data as JSON (up to 100KB)
 
 The Ingestion Service adds:
+
 - `ingested_at` - When we received it
 - `error_fingerprint` - SHA-256 hash for grouping similar errors
 
@@ -143,12 +152,14 @@ The Ingestion Service adds:
 Imagine your app suddenly gets featured and traffic 10x's. Your logging goes crazy. What happens?
 
 **With the queue system:**
+
 - Logs pile up in Redis queue (it's fast and can handle it)
 - Workers process them at a steady pace
 - Your application gets quick responses
 - Nothing crashes
 
 **Without the queue:**
+
 - Database gets overwhelmed with writes
 - Everything slows down
 - Requests start timing out
@@ -167,6 +178,7 @@ Helps you find logs when you need them. Whether you want "all errors from the la
 ### Two Types of Queries
 
 **Metrics (Pre-Computed):**
+
 - Error rates over time
 - Log volume by level
 - Top errors by occurrence
@@ -175,6 +187,7 @@ Helps you find logs when you need them. Whether you want "all errors from the la
 These are computed by Analytics Workers and cached in Redis. Queries are instant (under 5ms) because we already did the work.
 
 **Raw Logs (On-Demand):**
+
 - Specific logs matching filters
 - Full-text search across messages
 - Filtering by time, level, environment, etc.
@@ -184,6 +197,7 @@ These hit PostgreSQL but are optimized with smart indexes and partitioning. Typi
 ### Search Capabilities
 
 **Time range filtering:**
+
 ```
 GET /api/v1/logs?start_time=2025-11-14T09:00:00Z&end_time=2025-11-14T10:00:00Z
 ```
@@ -191,6 +205,7 @@ GET /api/v1/logs?start_time=2025-11-14T09:00:00Z&end_time=2025-11-14T10:00:00Z
 Only searches the relevant time partition. If you're asking for logs from this month, we don't scan data from last year.
 
 **Level filtering:**
+
 ```
 GET /api/v1/logs?level=error
 ```
@@ -198,6 +213,7 @@ GET /api/v1/logs?level=error
 Find just the errors, ignore everything else.
 
 **Full-text search:**
+
 ```
 GET /api/v1/logs/search?query=timeout
 ```
@@ -205,6 +221,7 @@ GET /api/v1/logs/search?query=timeout
 Searches across message and error_message fields. Uses PostgreSQL's full-text search capabilities.
 
 **Custom attributes:**
+
 ```
 GET /api/v1/logs?attributes.user_id=123
 ```
@@ -228,6 +245,7 @@ Metrics are cached with reasonable TTLs. Your dashboard doesn't re-compute "erro
 ### Pagination
 
 Results are paginated to keep things responsive:
+
 - Default: 100 logs per page
 - Maximum: 1,000 logs per page
 - Use `offset` for simple pagination or cursors for large datasets
@@ -243,16 +261,19 @@ While you're not looking, these workers crunch numbers so your dashboard is alwa
 ### The Jobs They Run
 
 **Every 5 minutes:**
+
 - Calculate error rates in 5-minute buckets for the last 24 hours
 - Count log volume by level (debug, info, warning, error, critical)
 - Write results to Redis cache
 
 **Every 15 minutes:**
+
 - Find top 50 most common errors (grouped by fingerprint)
 - Include first occurrence, last occurrence, and total count
 - Cache for instant dashboard loading
 
 **Every hour:**
+
 - Calculate daily usage statistics for the last 30 days
 - Track quota consumption per project
 - Help you see usage trends
@@ -260,7 +281,7 @@ While you're not looking, these workers crunch numbers so your dashboard is alwa
 ### Why Pre-Compute?
 
 **Without pre-computing:**
-You load your dashboard → It runs "SELECT COUNT(*) WHERE level='error' AND timestamp > NOW() - INTERVAL '1 hour'" → Takes several seconds on millions of rows → Dashboard feels slow
+You load your dashboard → It runs "SELECT COUNT(\*) WHERE level='error' AND timestamp > NOW() - INTERVAL '1 hour'" → Takes several seconds on millions of rows → Dashboard feels slow
 
 **With pre-computing:**
 You load your dashboard → It reads "error_rate:project_1" from Redis cache → Takes ~5ms → Dashboard feels instant
@@ -291,9 +312,10 @@ Analytics Workers can scale horizontally. Need to compute metrics for 100 projec
 **Authentication:** Bearer token in Authorization header
 
 Example:
+
 ```bash
 curl -X POST http://localhost:8000/api/v1/ingest/single \
-  -H "Authorization: Bearer ldg_proj_1_abc123..." \
+  -H "Authorization: Bearer ledger_proj_1_abc123..." \
   -H "Content-Type: application/json" \
   -d '{"level": "info", "message": "Hello"}'
 ```
@@ -315,12 +337,14 @@ You never see this - it's all internal. But it's why Ledger can handle high thro
 Stores accounts, projects, API keys, quotas.
 
 **Characteristics:**
+
 - Small (thousands of records)
 - Transactional (need consistency)
 - Frequently read (API key validation)
 - Rarely written (new accounts/projects are occasional)
 
 **Optimizations:**
+
 - Covering indexes for fast API key lookups
 - Redis caching to reduce database load
 
@@ -329,12 +353,14 @@ Stores accounts, projects, API keys, quotas.
 Stores all your logs.
 
 **Characteristics:**
+
 - Large (millions to billions of records)
 - Append-heavy (mostly inserts, few updates)
 - Time-series data (recent logs queried most often)
 - Can tolerate eventual consistency
 
 **Optimizations:**
+
 - Monthly partitions for fast time-range queries
 - BRIN indexes for efficient storage
 - JSONB for flexible custom attributes
@@ -345,12 +371,14 @@ Stores all your logs.
 The fast cache and queue system.
 
 **What it stores:**
+
 - Validated API keys (5-minute TTL)
 - Rate limit counters (expire automatically)
 - Log queues (temporary until workers process them)
 - Pre-computed metrics (TTL based on job frequency)
 
 **Why Redis:**
+
 - In-memory = extremely fast
 - Automatic expiration = no manual cleanup
 - Atomic operations = perfect for counters and queues
@@ -365,6 +393,7 @@ The fast cache and queue system.
 Everything runs via Docker Compose - both development and production.
 
 **Network architecture:**
+
 - Only Gateway (port 8000) is exposed to the internet
 - Everything else communicates on Docker's internal network
 - Internal services aren't accessible from outside
@@ -374,15 +403,15 @@ Even if someone compromises your server, they can't directly access PostgreSQL o
 
 ### Port Assignment
 
-| Service | Port | Access |
-|---------|------|--------|
-| Gateway | 8000 | External (you) |
-| Auth Service | 50051 | Internal (gRPC) |
+| Service           | Port  | Access          |
+| ----------------- | ----- | --------------- |
+| Gateway           | 8000  | External (you)  |
+| Auth Service      | 50051 | Internal (gRPC) |
 | Ingestion Service | 50052 | Internal (gRPC) |
-| Query Service | 50053 | Internal (gRPC) |
-| PostgreSQL (Auth) | 5432 | Internal only |
-| PostgreSQL (Logs) | 5433 | Internal only |
-| Redis | 6379 | Internal only |
+| Query Service     | 50053 | Internal (gRPC) |
+| PostgreSQL (Auth) | 5432  | Internal only   |
+| PostgreSQL (Logs) | 5433  | Internal only   |
+| Redis             | 6379  | Internal only   |
 
 ### Commands You'll Use
 
@@ -407,24 +436,29 @@ Even if someone compromises your server, they can't directly access PostgreSQL o
 ## What Each Service Depends On
 
 **Gateway depends on:**
+
 - Redis (for caching and rate limiting)
 - Auth Service (for validation)
 - Ingestion Service (for log ingestion)
 - Query Service (for retrieving logs)
 
 **Auth Service depends on:**
+
 - PostgreSQL Auth Database
 - Redis (for caching)
 
 **Ingestion Service depends on:**
+
 - Redis (for queuing)
 - PostgreSQL Logs Database (via workers)
 
 **Query Service depends on:**
+
 - PostgreSQL Logs Database
 - Redis (for metrics cache)
 
 **Analytics Workers depend on:**
+
 - PostgreSQL Logs Database (read aggregations)
 - Redis (write results)
 
@@ -433,10 +467,12 @@ Even if someone compromises your server, they can't directly access PostgreSQL o
 ## Production Examples
 
 **Live deployment:**
+
 - **API:** https://ledger-server.jtuta.cloud
 - **Dashboard:** https://ledger.jtuta.cloud
 
 Running on Docker Compose with:
+
 - Reverse proxy (nginx) for HTTPS
 - Pre-built images from Google Artifact Registry
 - Automated deployments
