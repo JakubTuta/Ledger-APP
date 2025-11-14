@@ -1,448 +1,350 @@
-# Ledger System Architecture
+# Understanding Ledger's Architecture
 
-## Overview
+## What We Built and Why
 
-Ledger is built on a microservices architecture designed for high throughput, reliability, and scalability. This document explains how the system works and why certain design decisions were made.
+Ledger is designed around one core idea: **logging should be fast, reliable, and not get in your way**. To make that happen, we built a microservices architecture that separates concerns so each part can do its job well.
 
-## System Components
+Think of it like a restaurant kitchen: you have different stations (prep, grill, plating) each focused on one thing, working together to get food to customers quickly. That's how Ledger works - specialized services working together.
+
+## The Big Picture
+
+Here's how everything connects:
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                        Your Applications                      │
-│              (Python SDK, Node SDK, Direct API)              │
-└──────────────────────┬───────────────────────────────────────┘
-                       │ HTTPS REST
-                       ▼
-┌──────────────────────────────────────────────────────────────┐
-│           Gateway Service (Public Port 8000)                 │
-│             ONLY EXTERNALLY ACCESSIBLE SERVICE               │
-│  ┌────────────┐  ┌──────────┐  ┌────────────┐              │
-│  │    Auth    │  │   Rate   │  │  Circuit   │              │
-│  │ Middleware │→ │ Limiting │→ │  Breaker   │              │
-│  └────────────┘  └──────────┘  └────────────┘              │
-└────────┬─────────────────┬─────────────┬────────────────────┘
-         │ gRPC            │ gRPC        │ gRPC
-         │ (Internal)      │ (Internal)  │ (Internal)
-         ▼                 ▼             ▼
-┌────────────────┐  ┌─────────────┐  ┌──────────────┐
-│  Auth Service  │  │  Ingestion  │  │    Query     │
-│  (Internal)    │  │   Service   │  │   Service    │
-│  :50051        │  │  (Internal) │  │  (Internal)  │
-└────────┬───────┘  │   :50052    │  │   :50053     │
-         │          └──────┬──────┘  └──────┬───────┘
-         │                 │                 │
-         ▼                 ▼                 ▼
-┌────────────────┐  ┌─────────────────────────────────┐
-│ PostgreSQL     │  │      Redis Cache & Queues       │
-│ (Auth DB)      │  ├─────────────────────────────────┤
-│ Internal :5432 │  │ • API key cache (5min TTL)      │
-└────────────────┘  │ • Rate limit counters           │
-                    │ • Log ingestion queues          │
-                    │ • Pre-computed metrics          │
-                    └──────────┬──────────────────────┘
-                               │
-                               ▼
-                    ┌─────────────────────┐
-                    │   PostgreSQL        │
-                    │   (Logs DB)         │
-                    │   Internal :5432    │
-                    │ • Time-partitioned  │
-                    │ • BRIN indexes      │
-                    └─────────────────────┘
-                               ▲
-                               │
-                    ┌──────────┴──────────┐
-                    │  Analytics Workers  │
-                    │ (Background Jobs)   │
-                    │ • Error aggregation │
-                    │ • Metrics           │
-                    └─────────────────────┘
-
-Note: All services except Gateway communicate via Docker's internal
-network and are NOT exposed externally for enhanced security.
+Your Application (using our SDK or sending HTTP requests)
+            │
+            ├──► Gateway Service (port 8000)
+            │    └─ The front door - handles auth, rate limits, routing
+            │
+            ├──► Auth Service
+            │    └─ Manages who you are and what you can access
+            │
+            ├──► Ingestion Service
+            │    └─ Receives your logs super fast, queues them for storage
+            │
+            ├──► Query Service
+            │    └─ Helps you find and retrieve your logs quickly
+            │
+            └──► Analytics Workers
+                 └─ Crunches numbers in the background for dashboards
 ```
 
-## Service Details
+**The important part:** Only the Gateway is accessible from the outside world. Everything else runs internally for security. You talk to the Gateway, and it handles the rest.
 
-### Gateway Service
+## How the Services Work Together
 
-**Purpose**: Single entry point for all external API requests
+### Gateway Service - Your Front Door
 
-**Key Responsibilities**:
-- Route REST requests to internal gRPC services
-- Authenticate requests (JWT session tokens or API keys)
-- Enforce rate limits per project
-- Provide fault tolerance with circuit breakers
+**What it does:** This is the only service you ever talk to directly. It's like a receptionist at a hotel - handling check-in (authentication), setting boundaries (rate limiting), and directing you to the right department.
 
-**Authentication Methods**:
-- **JWT Session Tokens**: Issued by `/register` and `/login` endpoints, valid for 1 hour
-  - Used for account-level operations (project management, settings)
-  - Stored in Redis with key format `session:{token}`
-  - Automatically provided after registration (no separate login needed)
-- **API Keys**: Long-lived keys for log ingestion
-  - Used for high-throughput data ingestion
-  - Validated via Auth Service with Redis caching
-  - Format: `ledger_<random_32_chars>`
+**Why we built it this way:**
+- **One entry point** means easier security - we only need to protect one service from the internet
+- **Centralized policies** let us enforce rate limits and authentication in one place
+- **REST API** is familiar and easy to use from any language or tool
+- **Shields internal services** from the chaos of the internet
 
-**Why it exists**:
-- Centralizes security and policy enforcement
-- Shields internal services from external traffic
-- Simplifies client integration (REST instead of gRPC)
-- Enables independent scaling of business logic services
+The Gateway can handle about 10,000 requests per second on a single instance. Need more? Just add another instance behind a load balancer.
 
-**Performance**:
-- Target: 10,000 requests/second per instance
-- Latency: <50ms (p99) with cached authentication
-- Horizontally scalable (stateless)
+### Auth Service - The Bouncer
 
-### Auth Service
+**What it does:** Manages everything about who you are - your account, your projects, your API keys. When you send a log, this service confirms "yes, this API key is valid and belongs to project X."
 
-**Purpose**: Manages user accounts, projects, and API keys
+**Why it's separate:**
+- **Security isolation** - if something goes wrong elsewhere, your credentials are safe
+- **Independent scaling** - authentication has different load patterns than log ingestion
+- **Caching layer** - we cache validated API keys in Redis so we're not hitting the database every time
 
-**Key Responsibilities**:
-- User registration and authentication
-- Multi-tenant project management
-- API key generation and validation
-- Daily usage tracking and quota enforcement
+When you first use an API key, it takes about 100 milliseconds to validate (we're checking your password hash with bcrypt, which is intentionally slow for security). After that? Cached in Redis, and validation takes less than 5 milliseconds. We hit that cache over 95% of the time, which keeps things fast.
 
-**Why it exists**:
-- Centralized security reduces attack surface
-- Shared authentication logic across all services
-- Independent scaling for auth-heavy workloads
+### Ingestion Service - The Speed Demon
 
-**Performance**:
-- API key validation: 5ms (cached), 100ms (uncached)
-- Uses Redis caching for 95%+ hit rate
-- bcrypt hashing with appropriate cost factors
+**What it does:** Receives your logs and gets them stored as fast as possible. Speed is everything here.
 
-### Ingestion Service
+**Here's how it works:**
+1. Your log arrives (validated by Gateway)
+2. We check that it's properly formatted
+3. We add some metadata (timestamps, error fingerprints for grouping)
+4. We push it to a Redis queue
+5. We immediately respond "got it!" (this is the fast part - usually under 10ms)
+6. Background workers pull from the queue and write to PostgreSQL in batches
 
-**Purpose**: High-throughput log collection and queuing
+**Why queuing matters:**
+Imagine your app suddenly gets a traffic spike and starts logging like crazy. Without a queue, we'd be trying to write directly to the database, which would slow down or even crash. With Redis queue buffering, we can handle those spikes smoothly - the queue absorbs the burst, and workers process it at a steady pace.
 
-**Key Responsibilities**:
-- Validate incoming logs
-- Enrich logs with metadata (timestamps, error fingerprints)
-- Queue logs in Redis for asynchronous processing
-- Monitor queue depth and apply backpressure
+You can send up to 1,000 logs in one batch request, which is much faster than sending them one at a time.
 
-**Why it exists**:
-- Decouples log reception from storage (async processing)
-- Handles traffic spikes with Redis queue buffering
-- Fast response times (202 Accepted immediately)
-- Prevents database overload during high traffic
+### Query Service - The Librarian
 
-**Performance**:
-- Accepts logs in <10ms
-- Batch ingestion up to 1,000 logs per request
-- MessagePack serialization for efficiency
-- Queue depth limit: 100,000 per project
+**What it does:** Helps you find your logs when you need them. Whether you're searching for "all errors in the last hour" or "logs containing the word 'timeout'", this service knows where to look.
 
-### Query Service
+**The secret sauce:**
+- **Partition pruning** - we store logs in monthly partitions. Looking for last week's logs? We only search this month's partition, ignoring everything else
+- **Smart indexes** - we use BRIN indexes that are tiny but super fast for time-series data
+- **Redis cache** - frequently accessed metrics are cached so dashboards load instantly
 
-**Purpose**: Fast log retrieval and search
+Raw log queries (going to the database) typically take under 200ms. Cached metrics? Under 5ms.
 
-**Key Responsibilities**:
-- Query raw logs from PostgreSQL with filters
-- Full-text search across log messages
-- Retrieve pre-computed metrics from Redis
-- Time-range queries with partition pruning
+### Analytics Workers - The Night Shift
 
-**Why it exists**:
-- Separates read operations from write operations
-- Optimized for query performance (connection pooling, indexes)
-- Read-only design enables horizontal scaling
-- Fast metrics via Redis cache
+**What they do:** While you sleep, these workers are calculating things like "how many errors happened in the last 5 minutes?" or "what are the top 10 most common errors this week?" They write results to Redis cache so when you load your dashboard, everything's already computed.
 
-**Performance**:
-- Raw log queries: <200ms (with partition pruning)
-- Metrics queries: <5ms (Redis cached)
-- Target: 5,000 queries/second per instance
+**Why pre-compute?**
+Running "count all errors in the last 24 hours" is slow if you're doing it live every time someone opens a dashboard. By calculating it every 5 minutes and caching the result, your dashboard loads instantly.
 
-### Analytics Workers
+Think of it like a newspaper: instead of researching every story when someone buys a paper, we do the research ahead of time and print it. Much faster.
 
-**Purpose**: Background processing for metrics and aggregations
+## How a Log Gets Stored
 
-**Key Responsibilities**:
-- Pre-compute error rates (5-minute buckets)
-- Aggregate log volumes by level and project
-- Calculate top errors by fingerprint
-- Generate daily usage statistics
+Let's follow one log from your application to the database:
 
-**Why it exists**:
-- Heavy aggregation queries don't impact user requests
-- Pre-computed metrics enable instant query responses
-- Scheduled jobs ensure data freshness
-- No user-facing API (internal only)
+**Step 1:** Your app calls `client.log.error("Payment failed")`
 
-**Performance**:
-- Runs scheduled jobs (every 5min, 15min, 1hour)
-- Writes results to Redis with TTL expiration
-- Scales horizontally for more projects
+**Step 2:** SDK sends HTTP request to Gateway with your API key
 
-## Data Flow
+**Step 3:** Gateway checks "is this API key valid?" - usually finds it cached in Redis (5ms)
 
-### Log Ingestion Flow
+**Step 4:** Gateway checks "has this project hit its rate limit?" - quick Redis counter check
 
-1. **Client sends log** → Gateway (REST API)
-2. **Gateway authenticates** → Validates API key (Redis cache or Auth Service)
-3. **Gateway checks rate limits** → Redis atomic counters
-4. **Gateway forwards** → Ingestion Service (gRPC)
-5. **Ingestion validates** → Pydantic validation
-6. **Ingestion enriches** → Adds fingerprint, timestamps
-7. **Ingestion queues** → Redis LPUSH (MessagePack)
-8. **Workers consume** → Redis BRPOP
-9. **Workers bulk insert** → PostgreSQL (COPY protocol)
+**Step 5:** Gateway sends your log to Ingestion Service via gRPC (internal communication)
 
-**Timeline**: Steps 1-7 complete in <10ms (async)
+**Step 6:** Ingestion Service validates the log structure and adds metadata like a timestamp and error fingerprint
 
-### Log Query Flow
+**Step 7:** Log gets pushed to Redis queue (this takes microseconds)
 
-1. **Client requests logs** → Gateway (REST API)
-2. **Gateway authenticates** → Validates API key (cached)
-3. **Gateway forwards** → Query Service (gRPC)
-4. **Query Service fetches** → PostgreSQL with filters
-5. **Query Service returns** → Results to Gateway
-6. **Gateway responds** → JSON to client
+**Step 8:** Gateway responds "202 Accepted" (your app can continue immediately)
 
-**Timeline**: <200ms for raw logs, <5ms for cached metrics
+**Step 9:** Background worker pulls log from queue and writes to PostgreSQL with hundreds of other logs in one batch
 
-### Authentication Flow
+**Total time to respond to your app:** Usually under 10ms. Your application doesn't wait for database writes.
 
-1. **Client includes API key** → Authorization header
-2. **Gateway checks Redis cache** → 95% cache hit (5ms)
-3. **On cache miss** → Gateway calls Auth Service (gRPC)
-4. **Auth Service queries DB** → Index-only scan (fast)
-5. **Auth Service verifies** → bcrypt check (100ms)
-6. **Auth Service returns** → Project ID + quotas
-7. **Gateway caches result** → Redis (5-minute TTL)
+## How You Get Logs Back
 
-## Design Decisions
+When you query for logs:
 
-### Why Microservices?
+**Step 1:** Your request hits Gateway
 
-**Benefits**:
-- **Independent Scaling**: Auth, Ingestion, and Query have different load patterns
-- **Technology Flexibility**: Can use different databases/languages per service
-- **Fault Isolation**: Ingestion failure doesn't affect queries
-- **Team Organization**: Clear service boundaries
+**Step 2:** Gateway authenticates and forwards to Query Service
 
-**Trade-offs**:
-- More operational complexity (multiple services to deploy)
-- Network latency between services (mitigated with gRPC)
+**Step 3:** Query Service looks at what you want:
+- Metrics like "error rate"? Check Redis cache (instant)
+- Specific logs? Query PostgreSQL with smart filtering
 
-### Why Separate Auth and Logs Databases?
+**Step 4:** Results come back to Gateway, then to you
 
-**Auth Database**:
-- Low volume, high consistency requirements
-- OLTP workload (transactions)
-- Critical for security
-- Needs point-in-time recovery
+**For metrics:** Usually under 5ms total
+**For raw logs:** Usually under 200ms total
 
-**Logs Database**:
-- High volume, eventual consistency acceptable
-- Time-series workload (append-heavy)
-- Can tolerate some data loss
-- Uses partitioning for performance
+## Design Decisions Explained
 
-**Benefits**: Independent scaling, backup strategies, and optimization
+### Why Microservices Instead of One Big Application?
 
-### Why gRPC for Internal Communication?
+**The restaurant analogy again:** Imagine if one chef had to take orders, cook every dish, and handle the register. They'd be overwhelmed. By having specialists (services), each can focus and scale independently.
 
-**Advantages**:
-- 2.5x smaller payloads than JSON (binary Protocol Buffers)
-- HTTP/2 multiplexing (multiple requests per connection)
-- Strong typing with .proto contracts
+**Real benefits:**
+- **Ingestion** needs to be fast and handle spikes → optimized for speed
+- **Queries** need to be accurate and flexible → optimized for search
+- **Auth** needs to be secure and consistent → optimized for safety
+
+If everything's in one app, you can't optimize for conflicting requirements.
+
+**The trade-off:** More complexity in deployment and monitoring. We use Docker Compose to make this manageable.
+
+### Why Two Separate Databases?
+
+We use one PostgreSQL database for auth stuff (accounts, API keys) and another for logs.
+
+**Auth database:**
+- Small amount of data (thousands of records, not millions)
+- Needs to be consistent (you don't want duplicate accounts)
+- Critical for security (must backup regularly)
+- Transactional workload (insert account, create project, etc.)
+
+**Logs database:**
+- Massive amount of data (millions or billions of logs)
+- Can tolerate some eventual consistency
+- Append-heavy (just writing, not updating)
+- Uses time-partitioning for performance
+
+Trying to optimize one database for both would make it worse at both jobs.
+
+### Why gRPC Internally but REST Externally?
+
+**For you (external):** We use REST with JSON because:
+- Works everywhere (every language has HTTP libraries)
+- Easy to test (just use curl)
+- Readable (JSON is human-friendly)
+
+**Internally between our services:** We use gRPC with Protocol Buffers because:
+- About 2.5x smaller payloads than JSON (faster over the network)
+- HTTP/2 under the hood (one connection, multiple requests)
+- Strongly typed (our services have contracts)
 - Built-in streaming support
 
-**Trade-off**: More complex than REST, but worth it for internal services
+It's about using the right tool for each job.
 
-### Why Redis for Everything Fast?
+### Why Redis for So Many Things?
 
-**Use Cases**:
-1. **API Key Cache**: Sub-millisecond lookups (95% hit rate)
-2. **Rate Limiting**: Atomic counters with automatic expiration
-3. **Log Queues**: LPUSH/BRPOP for async processing
-4. **Metrics Cache**: Pre-computed analytics results
+Redis is like a super-fast shared whiteboard for our services. We use it for:
 
-**Benefits**: Single source of truth for hot data, automatic TTL cleanup
+**1. Caching API keys:** After validating once, we remember "this key is valid" for 5 minutes
 
-### Why Connection Pooling?
+**2. Rate limiting:** We count "project X made 500 requests this minute" using Redis counters that automatically expire
 
-**Problem**: Creating new connections takes 50-100ms
+**3. Log queues:** Temporary buffer for logs before they're written to PostgreSQL
 
-**Solution**: Maintain pool of persistent connections
-- PostgreSQL: 20 base + 10 overflow connections
-- gRPC: 10 persistent channels with keepalive
-- Redis: 50 connection pool
+**4. Metrics cache:** Pre-computed dashboard numbers stored for instant access
 
-**Result**: Eliminates connection overhead, handles traffic bursts
+**Why Redis?** It's in-memory (super fast), handles automatic expiration (we don't need to clean up), and supports atomic operations (perfect for counters and queues).
 
-### Why Partition PostgreSQL Logs Table?
+### Why Partition the Logs Table?
 
-**Without Partitioning**:
-- Query scans entire table (millions/billions of rows)
-- Indexes grow huge (slow inserts and queries)
-- Hard to drop old data
+Without partitioning, querying old logs means scanning a table with billions of rows. Slow.
 
-**With Monthly Partitioning**:
-- Query scans only relevant partition (10-100x faster)
-- BRIN indexes are tiny (1000x smaller than B-tree)
-- Drop old partitions instantly (no DELETE needed)
+**With monthly partitions:**
+- Query for "logs from last week"? Only scan this month's partition
+- Drop logs older than 90 days? Drop three partition tables instantly (no DELETE needed)
+- Smaller indexes per partition (faster inserts and queries)
 
-**Example**: Query for last 7 days scans 1 partition, not 12
+Example: Searching for logs from yesterday without partitioning might scan 100 million rows. With partitioning? Maybe 3 million rows. That's a big difference.
 
-## Scalability
+## Keeping Things Reliable
 
-### Horizontal Scaling
+### Circuit Breaker - The Safety Valve
 
-All services are stateless and can be scaled independently:
+Imagine Auth Service crashes. Without protection, every request would wait, timeout, and fail. Your entire platform would grind to a halt.
 
-- **Gateway**: Add instances behind load balancer
-- **Auth Service**: Add instances (Redis cache shared)
-- **Ingestion Service**: Add instances (Redis queue shared)
-- **Query Service**: Add instances (read-only)
-- **Analytics Workers**: Distribute jobs across workers
+**Our circuit breaker:**
+- **Normally (CLOSED):** Everything works fine
+- **After failures (OPEN):** "Auth Service seems down, let's use emergency cache for a bit"
+- **Testing recovery (HALF_OPEN):** "Let's try one request to see if it's back"
 
-### Database Scaling
+We keep an emergency cache in Redis with longer TTL (10 minutes instead of 5). When Auth Service is down, we serve from stale cache. Better to let valid API keys work with old data than to reject everything.
 
-**PostgreSQL**:
-- Current: Single instance handles 5,000 queries/sec
-- Next: Read replicas for Query Service
-- Future: Sharding by project_id if needed
+### Rate Limiting - The Traffic Cop
 
-**Redis**:
-- Current: Single instance handles 100,000 ops/sec
-- Next: Redis Cluster if sustained >50,000 ops/sec
+**Why limit requests?**
+- Prevent one runaway client from affecting others
+- Protect against DDoS attacks
+- Enforce fair usage across projects
 
-### Performance Targets
+**How it works:**
+We use Redis to count requests per minute and per hour. When you make a request:
+1. Increment counter for "project_123:minute"
+2. If it's the first request this minute, set expiration to 60 seconds
+3. Check if count > 1,000 (default limit)
+4. If yes, return 429 Too Many Requests
+5. Same thing for hourly counter (default: 50,000/hour)
 
-| Component               | Target         | Current        |
-|-------------------------|----------------|----------------|
-| Gateway throughput      | 10K RPS        | Achieved       |
-| Log ingestion latency   | <10ms          | Achieved       |
-| Query latency (cached)  | <50ms          | Achieved       |
-| Query latency (raw)     | <200ms         | Achieved       |
-| Cache hit rate          | >95%           | Achieved       |
+It's fast (Redis atomic operations) and automatically cleans up (counters expire).
 
-## Reliability Features
+### Backpressure - Knowing When to Say No
 
-### Circuit Breaker
+If your app suddenly sends 100,000 logs per second, our queue would fill up and we'd run out of memory.
 
-**Problem**: Auth Service failure blocks all requests
+**Our solution:** Monitor queue depth. When it hits 100,000 logs for your project:
+- Return `503 Service Unavailable`
+- Include `Retry-After: 60` header (suggesting when to try again)
+- Your SDK automatically backs off and retries
 
-**Solution**: Circuit breaker with stale cache fallback
-- CLOSED: Normal operation
-- OPEN: After 5 failures, serve 10-minute emergency cache
-- HALF_OPEN: Test recovery after 30 seconds
+This keeps the system healthy instead of crashing.
 
-**Result**: System stays operational during Auth Service outages
+## Security by Design
 
-### Rate Limiting
+### Network Isolation
 
-**Protection Against**:
-- DDoS attacks
-- Quota abuse
-- Runaway clients
+**External world can access:** Only Gateway (port 8000)
 
-**Implementation**: Redis sliding window
-- Per-minute limit: 1,000 requests
-- Per-hour limit: 50,000 requests
-- Configurable per project
+**Everything else is internal:**
+- Auth Service
+- Ingestion Service
+- Query Service
+- Both PostgreSQL databases
+- Redis
 
-### Backpressure
-
-**Problem**: Too many logs can overwhelm storage
-
-**Solution**: Queue depth monitoring
-- Max 100,000 logs per project in queue
-- Returns 503 with Retry-After when full
-- Clients implement exponential backoff
-
-## Security
+They communicate over Docker's internal network. Even if someone compromises your server, they can't directly access the databases or internal services.
 
 ### API Key Security
 
-- Never stored in plaintext (bcrypt hashed)
-- Cached validation result, not the key itself
-- Keys can be revoked instantly
-- Shown once during creation
+**What we DON'T do:** Store your API key in plain text
+**What we DO:** Hash it with bcrypt (like passwords)
 
-### Network Security
+When you create an API key, we show it once. After that, it's hashed. When you send a request:
+1. We hash your key
+2. Look up the hash in our database
+3. Cache the result (not the key itself)
 
-**External Access**:
-- Only Gateway Service exposes port 8000 externally
-- All external traffic must go through Gateway (single entry point)
-- HTTPS/TLS 1.3 encryption (production)
-- All other services isolated from external access
+If our database leaks, your keys aren't exposed in plain text.
 
-**Internal Communication**:
-- Services communicate via Docker internal network
-- No direct external access to internal services
-- gRPC for inter-service communication (mTLS in production)
-- Service names resolve via Docker DNS (e.g., `ledger-auth-service:50051`)
+## Performance Characteristics
 
-**Database & Cache Security**:
-- Redis: Password protected, internal network only
-- PostgreSQL (Auth DB): Internal network only (:5432)
-- PostgreSQL (Logs DB): Internal network only (:5432)
-- No database ports exposed to host machine
+Rather than just throwing numbers at you, here's what they mean in practice:
 
-**Deployment Model**:
-- All services run in Docker Compose
-- Shared backend network for internal communication
-- Only Gateway port (8000) mapped to host
-- Enhanced security through network isolation
+**"Gateway handles 10,000 requests/second"**
+→ Your small app doing 10 requests/second? You're using 0.1% of capacity. Room to grow.
 
-### Multi-Tenancy
+**"Cached auth validation: 5ms"**
+→ Authentication adds almost no latency to your requests
 
-- Project-level isolation (data never shared)
-- API keys scoped to single project
-- Quotas enforced per project
-- Query Service validates ownership
+**"Raw log queries: under 200ms"**
+→ Fast enough for dashboards to feel instant to humans
 
-## Monitoring & Observability
+**"Metrics queries: under 5ms"**
+→ Pre-computed analytics load as fast as a static page
 
-### Health Checks
+**"Cache hit rate: >95%"**
+→ We're almost always serving from the fast path
 
-- `/health` - Basic liveness check
-- `/health/deep` - Dependency health (Redis, gRPC)
+## Scaling Strategy
 
-### Metrics (Prometheus format)
+### What Scales Horizontally (Add More Instances)
 
-- Request duration histograms (p50, p95, p99)
-- Cache hit rates
-- Error rates by service
-- Queue depths
-- Database connection pool usage
+- **Gateway:** Add instances behind a load balancer
+- **Auth Service:** Add instances (share same Redis cache)
+- **Ingestion Service:** Add instances (share same Redis queue)
+- **Query Service:** Add instances (all read-only)
+- **Analytics Workers:** Distribute jobs across workers
 
-### Logging
+All these services are stateless - they don't remember anything between requests. That makes them easy to scale.
 
-- Structured JSON logs
-- Correlation IDs for request tracing
-- Log levels: DEBUG, INFO, WARNING, ERROR, CRITICAL
+### What Scales Vertically (Bigger Server)
 
-## Future Enhancements
+- **PostgreSQL:** Currently handles thousands of queries/second on one instance. When needed, we can add read replicas for Query Service
+- **Redis:** Currently handles hundreds of thousands of operations/second. Can switch to Redis Cluster if needed
 
-- **Distributed Tracing**: OpenTelemetry integration
-- **Alerting**: PagerDuty/Slack notifications
-- **ML Anomaly Detection**: Automatic issue detection
-- **Hot/Cold Storage**: Move old logs to cheaper storage
-- **Read Replicas**: Scale Query Service reads
-- **Compression**: Reduce storage costs by 5-10x
+### When to Scale
 
----
+**You'll know you need more Gateway instances when:**
+- CPU usage stays above 70%
+- Response times creep up
+- Request rates approaching 10,000/sec
+
+**You'll know you need database scaling when:**
+- Query times consistently over 500ms
+- Connection pool saturation
+- Disk I/O maxed out
+
+## What's Next
+
+We've built a solid foundation, but there's always room to grow:
+
+- **Distributed tracing** to follow a request through all services
+- **Alerting** to notify you when things go wrong
+- **Anomaly detection** to catch weird patterns automatically
+- **Hot/cold storage** to move old logs to cheaper storage
+- **Compression** to reduce storage costs
+
+The architecture is designed to support all of these without major rewrites.
 
 ## Resources
 
-- **Server Repository**: https://github.com/JakubTuta/Ledger-APP
-- **SDK Repository**: https://github.com/JakubTuta/Ledger-SDK
-- **Frontend Repository**: https://github.com/JakubTuta/Ledger-WEB
-- **SDK on PyPI**: https://pypi.org/project/ledger-sdk/
-- **Production Server**: https://ledger-server.jtuta.cloud
-- **Frontend Dashboard**: https://ledger.jtuta.cloud
+- **[API Reference](https://bump.sh/tuta-corp/doc/ledger-api/)** - Complete REST API documentation
+- **[OpenAPI Spec](https://ledger-server.jtuta.cloud/openapi.json)** - Machine-readable API specification
+- **[Services Guide](SERVICES.md)** - Deep dive into each service
+- **[Main README](../README.md)** - Getting started
 
-## Related Documentation
+---
 
-- **[API Reference](API_REFERENCE.md)** - Complete REST API documentation
-- **[Services Guide](SERVICES.md)** - Detailed service information
-- **[Main README](../README.md)** - Getting started guide
+**Production Deployment:**
+- **Server:** https://ledger-server.jtuta.cloud
+- **Dashboard:** https://ledger.jtuta.cloud
+- **GitHub:** https://github.com/JakubTuta/Ledger-APP

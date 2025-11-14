@@ -1,395 +1,454 @@
-# Ledger Services Guide
+# Ledger Services - What Each One Does
 
-This document provides an overview of each service in the Ledger platform, what it does, and how it contributes to the system.
+This guide explains each service in Ledger, what problem it solves, and how to work with it. Think of it as getting to know the team members who make Ledger work.
 
-## Gateway Service
-
-### Overview
-The Gateway Service is your single entry point for all API interactions with Ledger. It handles authentication, rate limiting, and routes requests to the appropriate internal services.
-
-### Key Features
-- **REST API**: Standard HTTPS/JSON interface for all operations
-- **Dual Authentication**: Supports both session tokens (JWT) and API keys
-  - **Session Tokens**: For account operations (project management, settings)
-  - **API Keys**: For high-throughput log ingestion
-- **Rate Limiting**: Prevents abuse with configurable limits
-- **Circuit Breaker**: Maintains availability during service outages
-- **Request Translation**: Converts REST to internal gRPC calls
-
-### When You Use It
-Every single API request you make goes through the Gateway Service. It's the only externally accessible service.
-
-### Configuration
-- **Port**: 8000 (HTTP/HTTPS)
-- **Rate Limits**: 1,000 requests/minute, 50,000 requests/hour (default)
-- **Timeout**: 30 seconds per request
-
-### Performance
-- Target throughput: 10,000 requests/second
-- Average latency: <50ms (with cached auth)
-- Horizontally scalable
-
----
-
-## Auth Service
-
-### Overview
-The Auth Service manages all authentication and authorization for Ledger. It handles user accounts, projects, and API keys.
-
-### Key Features
-- **Account Management**: User registration and login with automatic session tokens
-- **Auto-Login**: Registration automatically returns a JWT token (no separate login needed)
-- **Multi-Tenancy**: Support for multiple projects per account
-- **API Key Management**: Generate, validate, and revoke API keys
-- **Quota Tracking**: Monitor and enforce daily log quotas
-- **Secure Storage**: bcrypt hashing for passwords and keys
-- **Session Management**: JWT tokens cached in Redis (1-hour expiration)
-
-### When You Use It
-Indirectly, every authenticated request uses the Auth Service for validation. Directly, you use it when:
-- Registering a new account (automatically provides session token)
-- Logging in (only needed for existing accounts)
-- Creating or managing projects
-- Generating API keys
-
-### Data Model
-- **Accounts**: Your user account with email/password
-- **Session Tokens**: Short-lived JWT tokens (1 hour) for account operations
-- **Projects**: Isolated environments (production, staging, dev)
-- **API Keys**: Long-lived per-project authentication tokens for log ingestion
-- **Quotas**: Daily log limits per project
-
-### Security Features
-- Password hashing (bcrypt, cost 12)
-- API key hashing (bcrypt, cost 10)
-- Session tokens stored in Redis with 1-hour expiration
-- Keys shown only once at creation
-- Redis caching (5-minute TTL for API keys) for fast validation
-- Circuit breaker fallback to emergency cache
-
-### Performance
-- Session token validation: <1ms (Redis lookup)
-- API key validation: 5ms (cached), 100ms (uncached)
-- Cache hit rate: >95%
-- Supports thousands of validations per second
-
----
-
-## Ingestion Service
-
-### Overview
-The Ingestion Service is responsible for receiving and processing incoming logs at high speed. It validates, enriches, and queues logs for storage.
-
-### Key Features
-- **High Throughput**: Handles thousands of logs per second
-- **Validation**: Ensures log data meets schema requirements
-- **Enrichment**: Adds metadata like timestamps and error fingerprints
-- **Queue Buffering**: Uses Redis to handle traffic spikes
-- **Backpressure**: Returns 503 when queue is full (prevents overload)
-- **Batch Support**: Accept up to 1,000 logs in a single request
-
-### When You Use It
-Every time you send logs to Ledger:
-- Single log: `POST /api/v1/ingest/single`
-- Batch logs: `POST /api/v1/ingest/batch`
-- Check queue: `GET /api/v1/queue/depth`
-
-### How It Works
-1. Receives log via Gateway
-2. Validates log structure (Pydantic)
-3. Enriches with metadata:
-   - `ingested_at`: Server timestamp
-   - `error_fingerprint`: SHA-256 hash for error grouping
-4. Serializes with MessagePack (faster than JSON)
-5. Pushes to Redis queue (LPUSH)
-6. Background workers consume queue (BRPOP)
-7. Bulk insert to PostgreSQL (COPY protocol)
-
-### Log Schema
-**Required Fields**:
-- `timestamp`: ISO 8601 format
-- `level`: debug, info, warning, error, critical
-- `log_type`: console, logger, exception, custom
-- `importance`: low, standard, high
-
-**Optional Fields**:
-- `message`: Log message (max 10,000 chars)
-- `error_type`, `error_message`, `stack_trace`: Exception details
-- `environment`, `release`, `platform`: Context
-- `attributes`: Custom JSONB data (max 100KB)
-
-### Performance
-- Accepts logs in <10ms
-- Queue depth limit: 100,000 per project
-- Batch size: Up to 1,000 logs
-- Background workers handle database writes asynchronously
-
-### Error Handling
-- Partial success for batch requests
-- Detailed error messages for rejected logs
-- Dead-letter queue for unprocessable logs
-- Graceful backpressure with Retry-After headers
-
----
-
-## Query Service
-
-### Overview
-The Query Service provides fast access to your stored logs and pre-computed metrics. It's optimized for read operations and supports complex filtering and search.
-
-### Key Features
-- **Log Retrieval**: Query logs with filters (time, level, type)
-- **Full-Text Search**: Search across log messages and attributes
-- **Pre-Computed Metrics**: Instant access to aggregated data
-- **Time-Range Queries**: Efficient partition pruning
-- **Pagination**: Handle large result sets
-
-### When You Use It
-Whenever you need to retrieve or search logs:
-- Query logs: `GET /api/v1/logs`
-- Search logs: `GET /api/v1/logs/search`
-- Get single log: `GET /api/v1/logs/{id}`
-- Error rates: `GET /api/v1/metrics/error-rate`
-- Log volumes: `GET /api/v1/metrics/log-volume`
-- Top errors: `GET /api/v1/metrics/top-errors`
-- Usage stats: `GET /api/v1/metrics/usage-stats`
-
-### Query Capabilities
-
-**Filters**:
-- Time range (start_time, end_time)
-- Log level (debug, info, warning, error, critical)
-- Log type (console, logger, exception, etc.)
-- Environment (production, staging, dev)
-- Custom attributes (JSONB queries)
-
-**Search**:
-- Full-text search on message and error_message
-- Attribute search: `attributes.user_id:"usr_123"`
-- Regex support: `message:/timeout|error/i`
-
-**Pagination**:
-- Limit (default: 100, max: 1,000)
-- Offset for simple pagination
-- Cursor-based for large datasets
-
-### Data Sources
-
-**PostgreSQL (Raw Logs)**:
-- Complete log history
-- Monthly partitions for fast queries
-- BRIN indexes for time-series
-- Full-text search capabilities
-
-**Redis (Metrics)**:
-- Pre-computed by Analytics Workers
-- Sub-5ms response times
-- Updated every 5-15 minutes
-
-### Performance
-- Raw log queries: <200ms (with partition pruning)
-- Metrics queries: <5ms (Redis cached)
-- Target: 5,000 queries/second per instance
-- Horizontally scalable (stateless)
-
-### Optimization Features
-- Partition pruning (only scan relevant months)
-- Covering indexes (index-only scans)
-- Connection pooling (30 base + 20 overflow)
-- Query result caching (60-second TTL)
-
----
-
-## Analytics Workers
-
-### Overview
-Analytics Workers run in the background to pre-compute metrics and aggregations. They read from the Logs Database and write results to Redis cache.
-
-### Key Features
-- **Scheduled Jobs**: Run at regular intervals (5min, 15min, 1hour)
-- **Metric Aggregation**: Calculate error rates, log volumes, top errors
-- **Error Grouping**: Group similar errors by fingerprint
-- **Usage Statistics**: Track quota usage per project
-- **Cache Population**: Write results to Redis for fast queries
+## Gateway Service - The Front Desk
 
 ### What It Does
-Unlike other services, Analytics Workers have no API. They run scheduled jobs:
 
-**Every 5 minutes**:
-- Error rate aggregation (5-minute buckets, last 24 hours)
-- Log volume by level and project
+The Gateway is like the front desk at a hotel - it's where everyone checks in, and it directs you to the right place. Every API request you make goes through here.
 
-**Every 15 minutes**:
-- Top errors by fingerprint (top 50, last 24 hours)
+### Why You'll Appreciate It
 
-**Every hour**:
-- Daily usage statistics (last 30 days)
+- **One URL to remember:** Everything goes to `http://localhost:8000` (or your production URL)
+- **Handles authentication:** You don't think about auth - the Gateway does it for you
+- **Protects you from rate limits:** Tells you before you hit limits, not after
+- **Stays up when things break:** Circuit breaker keeps working even if internal services hiccup
 
-### How It Works
-1. Scheduler triggers job (APScheduler)
-2. Query PostgreSQL Logs DB for time range
-3. Aggregate data (COUNT, GROUP BY)
-4. Serialize to JSON
-5. Write to Redis with TTL (2x job interval)
-6. Query Service reads from Redis
+### How Authentication Works
+
+The Gateway supports two types of authentication because you need different things:
+
+**Session Tokens (JWT):**
+- You get one when you register or login
+- Lasts for 1 hour
+- Use it for managing your account, creating projects, generating API keys
+- Stored in Redis so it's fast to validate
+
+**API Keys:**
+- Long-lived tokens for your applications
+- Use them for sending logs (the high-volume stuff)
+- Format looks like: `ldg_proj_1_abc123...`
+- First validation takes a bit (bcrypt check), then cached for 5 minutes
+
+### Configuration
+
+The defaults work for most people:
+- Handles up to 1,000 requests per minute per project
+- Can process about 10,000 requests/second on decent hardware
+- 30-second timeout per request (plenty of time for normal operations)
+
+You can adjust rate limits in your `.env` file if needed.
+
+---
+
+## Auth Service - The ID Checker
+
+### What It Does
+
+Manages who you are and what you have access to. Every account, project, and API key lives here.
+
+### The Flow
+
+**When you first register:**
+1. You send email + password
+2. We hash your password (bcrypt, intentionally slow for security)
+3. Create your account
+4. Automatically generate a session token
+5. Return everything you need to start using Ledger immediately
+
+**When you create an API key:**
+1. We generate a random key
+2. Show it to you once (save it!)
+3. Hash and store the hash (not the key itself)
+4. Future requests check against the hash
+
+**When you send logs later:**
+1. Gateway asks "is this API key valid?"
+2. First time: Check database (~100ms with bcrypt)
+3. Cache result in Redis
+4. Next 5 minutes: Instant validation from cache (~5ms)
+
+### Why It's Separate
+
+Security, mostly. If something goes wrong in the Ingestion Service (say, a weird log crashes it), your authentication data is safely isolated in its own service with its own database.
+
+Also, authentication scales differently than log ingestion. You might validate the same API key thousands of times per second (cache helps!), while user registration happens occasionally.
+
+### Data It Manages
+
+- **Accounts:** Your email, hashed password, name
+- **Projects:** Containers for your logs (production, staging, dev, etc.)
+- **API Keys:** Credentials for each project
+- **Quotas:** How many logs you can send per day
+- **Daily Usage:** Tracking to enforce quotas
+
+Everything is scoped to projects. Your production logs never mix with staging, and each project has its own API keys and limits.
+
+---
+
+## Ingestion Service - The Express Lane
+
+### What It Does
+
+Gets your logs into the system as fast as possible. That's it. That's the whole job.
+
+### How It's So Fast
+
+**The secret: we don't wait for the database.**
+
+Here's what happens when you send a log:
+
+1. **Validation** - Check that your log is properly formatted (Pydantic does this fast)
+2. **Enrichment** - Add server timestamp and error fingerprint for grouping
+3. **Queue It** - Push to Redis queue (this is microseconds)
+4. **Respond** - Tell you "got it!" with 202 Accepted
+5. **Later** - Background workers pull from queue and write to PostgreSQL in batches
+
+Your application doesn't wait for step 5. You get a response in under 10ms typically.
+
+### Batching for Performance
+
+You can send up to 1,000 logs in one request:
+
+```python
+client.log.batch([
+    {"level": "info", "message": "Event 1"},
+    {"level": "info", "message": "Event 2"},
+    # ... up to 1,000 logs
+])
+```
+
+This is much faster than 1,000 individual requests. The Ingestion Service handles the batch, validates each log, and queues them all at once.
+
+### What Logs Look Like
+
+**Required fields:**
+- `timestamp` - When it happened (ISO 8601 format)
+- `level` - debug, info, warning, error, critical
+- `log_type` - console, logger, exception, custom
+- `importance` - low, standard, high
+
+**Optional but useful:**
+- `message` - The actual log message (up to 10,000 characters)
+- `error_type`, `error_message`, `stack_trace` - For exceptions
+- `attributes` - Custom data as JSON (up to 100KB)
+
+The Ingestion Service adds:
+- `ingested_at` - When we received it
+- `error_fingerprint` - SHA-256 hash for grouping similar errors
+
+### Handling Traffic Spikes
+
+Imagine your app suddenly gets featured and traffic 10x's. Your logging goes crazy. What happens?
+
+**With the queue system:**
+- Logs pile up in Redis queue (it's fast and can handle it)
+- Workers process them at a steady pace
+- Your application gets quick responses
+- Nothing crashes
+
+**Without the queue:**
+- Database gets overwhelmed with writes
+- Everything slows down
+- Requests start timing out
+- Things break
+
+**Backpressure protection:** If the queue hits 100,000 logs for your project, we return `503 Service Unavailable` with a `Retry-After` header. Your SDK automatically backs off and retries. System stays healthy.
+
+---
+
+## Query Service - The Search Expert
+
+### What It Does
+
+Helps you find logs when you need them. Whether you want "all errors from the last hour" or "logs containing 'payment timeout'", the Query Service knows how to find them fast.
+
+### Two Types of Queries
+
+**Metrics (Pre-Computed):**
+- Error rates over time
+- Log volume by level
+- Top errors by occurrence
+- Daily usage statistics
+
+These are computed by Analytics Workers and cached in Redis. Queries are instant (under 5ms) because we already did the work.
+
+**Raw Logs (On-Demand):**
+- Specific logs matching filters
+- Full-text search across messages
+- Filtering by time, level, environment, etc.
+
+These hit PostgreSQL but are optimized with smart indexes and partitioning. Typically under 200ms.
+
+### Search Capabilities
+
+**Time range filtering:**
+```
+GET /api/v1/logs?start_time=2025-11-14T09:00:00Z&end_time=2025-11-14T10:00:00Z
+```
+
+Only searches the relevant time partition. If you're asking for logs from this month, we don't scan data from last year.
+
+**Level filtering:**
+```
+GET /api/v1/logs?level=error
+```
+
+Find just the errors, ignore everything else.
+
+**Full-text search:**
+```
+GET /api/v1/logs/search?query=timeout
+```
+
+Searches across message and error_message fields. Uses PostgreSQL's full-text search capabilities.
+
+**Custom attributes:**
+```
+GET /api/v1/logs?attributes.user_id=123
+```
+
+Query your custom data. Stored as JSONB in PostgreSQL, which supports efficient queries.
+
+### Performance Tricks
+
+**Monthly Partitions:**
+Logs are split into monthly tables. Asking for last week's logs? We only scan this month's partition, not the entire history. This can be 10-100x faster.
+
+**BRIN Indexes:**
+For time-series data, these indexes are tiny (1000x smaller than traditional B-tree) but super fast. Perfect for our "usually querying recent logs" use case.
+
+**Covering Indexes:**
+For common queries (like fetching by project_id + time), the index contains all the data we need. No need to read the actual table rows - just the index. Much faster.
+
+**Redis Cache:**
+Metrics are cached with reasonable TTLs. Your dashboard doesn't re-compute "error rate for last hour" every time you refresh - it reads from cache.
+
+### Pagination
+
+Results are paginated to keep things responsive:
+- Default: 100 logs per page
+- Maximum: 1,000 logs per page
+- Use `offset` for simple pagination or cursors for large datasets
+
+---
+
+## Analytics Workers - The Night Crew
+
+### What They Do
+
+While you're not looking, these workers crunch numbers so your dashboard is always up-to-date. They run in the background on a schedule.
+
+### The Jobs They Run
+
+**Every 5 minutes:**
+- Calculate error rates in 5-minute buckets for the last 24 hours
+- Count log volume by level (debug, info, warning, error, critical)
+- Write results to Redis cache
+
+**Every 15 minutes:**
+- Find top 50 most common errors (grouped by fingerprint)
+- Include first occurrence, last occurrence, and total count
+- Cache for instant dashboard loading
+
+**Every hour:**
+- Calculate daily usage statistics for the last 30 days
+- Track quota consumption per project
+- Help you see usage trends
 
 ### Why Pre-Compute?
-- **Speed**: Instant dashboard loads (<5ms)
-- **Efficiency**: Heavy queries don't impact user requests
-- **Scalability**: Add workers for more projects/metrics
-- **Predictability**: Controlled resource usage
 
-### Performance
-- Jobs complete in seconds (time-bounded queries)
-- Idempotent (safe to run multiple times)
-- Horizontal scaling via job distribution
+**Without pre-computing:**
+You load your dashboard → It runs "SELECT COUNT(*) WHERE level='error' AND timestamp > NOW() - INTERVAL '1 hour'" → Takes several seconds on millions of rows → Dashboard feels slow
 
-### Monitoring
-- Health check via file-based monitoring
-- Job execution time tracking
-- Redis cache hit rate monitoring
+**With pre-computing:**
+You load your dashboard → It reads "error_rate:project_1" from Redis cache → Takes ~5ms → Dashboard feels instant
+
+The workers do the heavy lifting when you're not waiting for results.
+
+### How They Work
+
+1. Scheduled job triggers (APScheduler)
+2. Query PostgreSQL Logs database
+3. Aggregate data (COUNT, GROUP BY, etc.)
+4. Serialize to JSON
+5. Write to Redis with TTL (2x the job interval - so data is fresh but not stale)
+6. Query Service reads from Redis when you request metrics
+
+### Scaling
+
+Analytics Workers can scale horizontally. Need to compute metrics for 100 projects? Run more workers and distribute the load. Each worker handles a subset of projects.
 
 ---
 
-## Service Communication
+## How Services Talk to Each Other
 
-### External (Your Apps → Ledger)
-- **Protocol**: HTTPS REST
-- **Format**: JSON
-- **Authentication**: Bearer tokens in Authorization header
-  - Session tokens (JWT) for account operations
-  - API keys for log ingestion
-- **Endpoint**: Gateway Service (port 8000)
+### External (You → Ledger)
+
+**Protocol:** HTTPS with REST API
+**Format:** JSON (easy to read and debug)
+**Authentication:** Bearer token in Authorization header
+
+Example:
+```bash
+curl -X POST http://localhost:8000/api/v1/ingest/single \
+  -H "Authorization: Bearer ldg_proj_1_abc123..." \
+  -H "Content-Type: application/json" \
+  -d '{"level": "info", "message": "Hello"}'
+```
 
 ### Internal (Service → Service)
-- **Protocol**: gRPC
-- **Format**: Protocol Buffers (binary)
-- **Authentication**: Mutual TLS (production)
-- **Benefits**: 2.5x smaller payloads, HTTP/2 multiplexing
 
-### Why Different Protocols?
-- **REST for external**: Easy integration, wide support
-- **gRPC for internal**: Performance, strong typing, efficiency
+**Protocol:** gRPC (Google's RPC framework)
+**Format:** Protocol Buffers (binary, very compact)
+**Why:** About 2.5x smaller payloads, HTTP/2 multiplexing, strong typing
+
+You never see this - it's all internal. But it's why Ledger can handle high throughput without melting.
 
 ---
 
-## Database Architecture
+## Database Setup
 
 ### Auth Database (PostgreSQL)
-**Purpose**: Store account, project, and API key data
 
-**Tables**:
-- `accounts`: User credentials
-- `projects`: Project configurations
-- `api_keys`: Hashed API keys with rate limits
-- `daily_usage`: Quota tracking
+Stores accounts, projects, API keys, quotas.
 
-**Optimization**: Covering indexes for fast API key lookups
+**Characteristics:**
+- Small (thousands of records)
+- Transactional (need consistency)
+- Frequently read (API key validation)
+- Rarely written (new accounts/projects are occasional)
+
+**Optimizations:**
+- Covering indexes for fast API key lookups
+- Redis caching to reduce database load
 
 ### Logs Database (PostgreSQL)
-**Purpose**: Store all log entries
 
-**Tables**:
-- `logs`: Main log storage (partitioned by month)
-- `error_groups`: Aggregated error tracking
+Stores all your logs.
 
-**Optimization**: Monthly partitions, BRIN indexes, JSONB for attributes
+**Characteristics:**
+- Large (millions to billions of records)
+- Append-heavy (mostly inserts, few updates)
+- Time-series data (recent logs queried most often)
+- Can tolerate eventual consistency
+
+**Optimizations:**
+- Monthly partitions for fast time-range queries
+- BRIN indexes for efficient storage
+- JSONB for flexible custom attributes
+- Bulk inserts via COPY protocol
 
 ### Redis
-**Purpose**: Fast caching and queue buffering
 
-**Use Cases**:
-- API key validation cache (5-minute TTL)
-- Rate limiting counters (atomic operations)
-- Log ingestion queues (LPUSH/BRPOP)
-- Pre-computed metrics (written by Analytics Workers)
+The fast cache and queue system.
+
+**What it stores:**
+- Validated API keys (5-minute TTL)
+- Rate limit counters (expire automatically)
+- Log queues (temporary until workers process them)
+- Pre-computed metrics (TTL based on job frequency)
+
+**Why Redis:**
+- In-memory = extremely fast
+- Automatic expiration = no manual cleanup
+- Atomic operations = perfect for counters and queues
+- Supports complex data types = flexible for our needs
 
 ---
 
 ## Deployment
 
-### Docker Compose Deployment (Required)
-Ledger is designed to run exclusively via Docker Compose for both development and production:
+### How It All Runs
+
+Everything runs via Docker Compose - both development and production.
+
+**Network architecture:**
+- Only Gateway (port 8000) is exposed to the internet
+- Everything else communicates on Docker's internal network
+- Internal services aren't accessible from outside
+
+**Why this matters:**
+Even if someone compromises your server, they can't directly access PostgreSQL or Redis. They'd have to go through Gateway, which has authentication and rate limiting.
+
+### Port Assignment
+
+| Service | Port | Access |
+|---------|------|--------|
+| Gateway | 8000 | External (you) |
+| Auth Service | 50051 | Internal (gRPC) |
+| Ingestion Service | 50052 | Internal (gRPC) |
+| Query Service | 50053 | Internal (gRPC) |
+| PostgreSQL (Auth) | 5432 | Internal only |
+| PostgreSQL (Logs) | 5433 | Internal only |
+| Redis | 6379 | Internal only |
+
+### Commands You'll Use
 
 ```bash
-# Development
-./scripts/Make.ps1 up    # Windows
-make -C scripts up       # Linux/Mac
+# Start everything
+./scripts/Make.ps1 up
 
-# Production
-./scripts/Make.ps1 prod-up    # Windows (uses production images)
-make -C scripts prod-up       # Linux/Mac
-```
+# Check health
+./scripts/Make.ps1 health
 
-### Network Architecture
-- **Only Gateway Service (port 8000) is exposed externally**
-- All other services communicate via Docker's internal network
-- Internal services (Auth, Ingestion, Query, PostgreSQL, Redis) are NOT accessible from outside
-- Enhanced security through network isolation
+# View logs
+./scripts/Make.ps1 logs-gateway
+./scripts/Make.ps1 logs-auth
+./scripts/Make.ps1 logs-ingestion
 
-**Port Mapping**:
-- `8000` (Gateway) → External access (HTTPS in production)
-- `50051` (Auth gRPC) → Internal only
-- `50052` (Ingestion gRPC) → Internal only
-- `50053` (Query gRPC) → Internal only
-- `5432` (PostgreSQL) → Internal only
-- `6379` (Redis) → Internal only
-
-### Production Deployment
-The application is production-ready with Docker Compose:
-- **Production Server**: https://ledger-server.jtuta.cloud
-- Uses pre-built Docker images from Google Artifact Registry
-- All services run in a single Docker network (`ledger-network`)
-- Reverse proxy (nginx/Traefik) handles HTTPS and routing to Gateway
-- Automated builds and deployments via CI/CD
-
-### Security Benefits
-- **Reduced Attack Surface**: Only 1 port exposed vs 7
-- **Network Isolation**: Internal services completely isolated
-- **Defense in Depth**: Even if Gateway is compromised, internal services remain protected
-- **Simplified Firewall Rules**: Only port 8000 needs to be open
-
----
-
-## Service Dependencies
-
-```
-Gateway
-  ├─ Depends on: Redis, Auth Service, Ingestion Service, Query Service
-  └─ Accessed by: External clients
-
-Auth Service
-  ├─ Depends on: PostgreSQL (Auth DB), Redis
-  └─ Accessed by: Gateway
-
-Ingestion Service
-  ├─ Depends on: Redis, PostgreSQL (Logs DB)
-  └─ Accessed by: Gateway
-
-Query Service
-  ├─ Depends on: PostgreSQL (Logs DB), Redis
-  └─ Accessed by: Gateway
-
-Analytics Workers
-  ├─ Depends on: PostgreSQL (Logs DB), Redis
-  └─ Accessed by: Nobody (internal background jobs)
+# Stop everything
+./scripts/Make.ps1 down
 ```
 
 ---
+
+## What Each Service Depends On
+
+**Gateway depends on:**
+- Redis (for caching and rate limiting)
+- Auth Service (for validation)
+- Ingestion Service (for log ingestion)
+- Query Service (for retrieving logs)
+
+**Auth Service depends on:**
+- PostgreSQL Auth Database
+- Redis (for caching)
+
+**Ingestion Service depends on:**
+- Redis (for queuing)
+- PostgreSQL Logs Database (via workers)
+
+**Query Service depends on:**
+- PostgreSQL Logs Database
+- Redis (for metrics cache)
+
+**Analytics Workers depend on:**
+- PostgreSQL Logs Database (read aggregations)
+- Redis (write results)
+
+---
+
+## Production Examples
+
+**Live deployment:**
+- **API:** https://ledger-server.jtuta.cloud
+- **Dashboard:** https://ledger.jtuta.cloud
+
+Running on Docker Compose with:
+- Reverse proxy (nginx) for HTTPS
+- Pre-built images from Google Artifact Registry
+- Automated deployments
+
+The same Docker Compose setup you use locally works in production. Scale by adding more Gateway instances behind a load balancer when needed.
 
 ---
 
 ## Resources
 
-- **Server Repository**: https://github.com/JakubTuta/Ledger-APP
-- **SDK Repository**: https://github.com/JakubTuta/Ledger-SDK
-- **Frontend Repository**: https://github.com/JakubTuta/Ledger-WEB
-- **SDK on PyPI**: https://pypi.org/project/ledger-sdk/
-- **Production Server**: https://ledger-server.jtuta.cloud
-- **Frontend Dashboard**: https://ledger.jtuta.cloud
-
-## Related Documentation
-
-- **[API Reference](API_REFERENCE.md)** - Complete REST API documentation
-- **[Architecture](ARCHITECTURE.md)** - System design and overview
+- **[API Reference](https://bump.sh/tuta-corp/doc/ledger-api/)** - Complete REST API documentation
+- **[OpenAPI Spec](https://ledger-server.jtuta.cloud/openapi.json)** - Machine-readable API specification
+- **[Architecture Guide](ARCHITECTURE.md)** - System design and decisions
 - **[Main README](../README.md)** - Getting started guide
+- **[GitHub](https://github.com/JakubTuta/Ledger-APP)** - Source code and issues
