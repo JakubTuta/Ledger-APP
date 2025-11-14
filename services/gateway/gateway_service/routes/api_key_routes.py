@@ -3,7 +3,7 @@ import logging
 
 import fastapi
 import grpc
-import pydantic
+import gateway_service.schemas as schemas
 from gateway_service import dependencies
 from gateway_service.proto import auth_pb2, auth_pb2_grpc
 from gateway_service.services import grpc_pool
@@ -13,66 +13,13 @@ logger = logging.getLogger(__name__)
 router = fastapi.APIRouter(tags=["API Keys"])
 
 
-# ==================== REQUEST/RESPONSE MODELS ====================
-
-
-class CreateApiKeyRequest(pydantic.BaseModel):
-    name: str = pydantic.Field(
-        ...,
-        min_length=1,
-        max_length=255,
-        description="Descriptive name for the API key",
-        examples=["Production API Key"],
-    )
-
-    model_config = pydantic.ConfigDict(
-        json_schema_extra={"example": {"name": "Production API Key"}}
-    )
-
-
-class CreateApiKeyResponse(pydantic.BaseModel):
-    key_id: int = pydantic.Field(..., description="Unique API key identifier")
-    full_key: str = pydantic.Field(
-        ..., description="Complete API key (only shown once!)"
-    )
-    key_prefix: str = pydantic.Field(..., description="Key prefix for identification")
-    warning: str = pydantic.Field(
-        default="Save this key now! It will not be shown again.",
-        description="Security warning",
-    )
-
-    model_config = pydantic.ConfigDict(
-        json_schema_extra={
-            "example": {
-                "key_id": 789,
-                "full_key": "ledger_prod_1a2b3c4d5e6f7g8h9i0j",
-                "key_prefix": "ledger_prod_1a2b",
-                "warning": "Save this key now! It will not be shown again.",
-            }
-        }
-    )
-
-
-class RevokeApiKeyResponse(pydantic.BaseModel):
-    success: bool = pydantic.Field(..., description="Whether revocation succeeded")
-    message: str = pydantic.Field(..., description="Status message")
-
-    model_config = pydantic.ConfigDict(
-        json_schema_extra={
-            "example": {
-                "success": True,
-                "message": "API key 789 has been revoked",
-            }
-        }
-    )
-
-
 # ==================== ROUTE HANDLERS ====================
+# Note: Request/Response models moved to gateway_service/schemas/api_keys.py
 
 
 @router.post(
     "/projects/{project_id}/api-keys",
-    response_model=CreateApiKeyResponse,
+    response_model=schemas.CreateApiKeyResponse,
     status_code=fastapi.status.HTTP_201_CREATED,
     summary="Create API key",
     description="Generate a new API key for log ingestion and project access. The full key is only shown once.",
@@ -121,7 +68,7 @@ async def create_api_key(
     project_id: int = fastapi.Path(
         ..., description="Project ID to create API key for", examples=[456]
     ),
-    request_data: CreateApiKeyRequest = fastapi.Body(...),
+    request_data: schemas.CreateApiKeyRequest = fastapi.Body(...),
     grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
 ):
     """
@@ -157,7 +104,7 @@ async def create_api_key(
             f"project_id={project_id}, prefix={response.key_prefix}"
         )
 
-        return CreateApiKeyResponse(
+        return schemas.CreateApiKeyResponse(
             key_id=response.key_id,
             full_key=response.full_key,
             key_prefix=response.key_prefix,
@@ -194,7 +141,7 @@ async def create_api_key(
 
 @router.delete(
     "/api-keys/{key_id}",
-    response_model=RevokeApiKeyResponse,
+    response_model=schemas.RevokeApiKeyResponse,
     summary="Revoke API key",
     description="Permanently revoke an API key. This action cannot be undone and the key will immediately stop working.",
     response_description="Revocation confirmation",
@@ -260,7 +207,7 @@ async def revoke_api_key(
         if response.success:
             logger.info(f"API key revoked: key_id={key_id}")
 
-            return RevokeApiKeyResponse(
+            return schemas.RevokeApiKeyResponse(
                 success=True, message=f"API key {key_id} has been revoked"
             )
 

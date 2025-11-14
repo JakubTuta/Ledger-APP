@@ -126,6 +126,44 @@ class GetProjectsResponse(_message.Message):
     projects: _containers.RepeatedCompositeFieldContainer[ProjectInfo]
     def __init__(self, projects: _Optional[_Iterable[_Union[ProjectInfo, _Mapping]]] = ...) -> None: ...
 
+class GetProjectByIdRequest(_message.Message):
+    __slots__ = ("project_id",)
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    def __init__(self, project_id: _Optional[int] = ...) -> None: ...
+
+class GetProjectByIdResponse(_message.Message):
+    __slots__ = ("project_id", "name", "slug", "environment", "retention_days", "daily_quota")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    SLUG_FIELD_NUMBER: _ClassVar[int]
+    ENVIRONMENT_FIELD_NUMBER: _ClassVar[int]
+    RETENTION_DAYS_FIELD_NUMBER: _ClassVar[int]
+    DAILY_QUOTA_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    name: str
+    slug: str
+    environment: str
+    retention_days: int
+    daily_quota: int
+    def __init__(self, project_id: _Optional[int] = ..., name: _Optional[str] = ..., slug: _Optional[str] = ..., environment: _Optional[str] = ..., retention_days: _Optional[int] = ..., daily_quota: _Optional[int] = ...) -> None: ...
+
+class GetDailyUsageRequest(_message.Message):
+    __slots__ = ("project_id", "date")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    DATE_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    date: str
+    def __init__(self, project_id: _Optional[int] = ..., date: _Optional[str] = ...) -> None: ...
+
+class GetDailyUsageResponse(_message.Message):
+    __slots__ = ("log_count", "date")
+    LOG_COUNT_FIELD_NUMBER: _ClassVar[int]
+    DATE_FIELD_NUMBER: _ClassVar[int]
+    log_count: int
+    date: str
+    def __init__(self, log_count: _Optional[int] = ..., date: _Optional[str] = ...) -> None: ...
+
 class CreateApiKeyRequest(_message.Message):
     __slots__ = ("project_id", "name")
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]

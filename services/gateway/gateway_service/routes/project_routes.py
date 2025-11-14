@@ -4,7 +4,7 @@ import typing
 
 import fastapi
 import grpc
-import pydantic
+import gateway_service.schemas as schemas
 from gateway_service import dependencies
 from gateway_service.proto import auth_pb2, auth_pb2_grpc
 from gateway_service.services import grpc_pool
@@ -14,106 +14,13 @@ logger = logging.getLogger(__name__)
 router = fastapi.APIRouter(tags=["Projects"])
 
 
-# ==================== REQUEST/RESPONSE MODELS ====================
-
-
-class CreateProjectRequest(pydantic.BaseModel):
-    name: str = pydantic.Field(
-        ...,
-        min_length=1,
-        max_length=255,
-        description="Project display name",
-        examples=["My Production App"],
-    )
-    slug: str = pydantic.Field(
-        ...,
-        min_length=1,
-        max_length=255,
-        pattern=r"^[a-z0-9-]+$",
-        description="Unique project identifier (lowercase, alphanumeric, hyphens only)",
-        examples=["my-production-app"],
-    )
-    environment: str = pydantic.Field(
-        default="production",
-        pattern=r"^(production|staging|dev)$",
-        description="Deployment environment (production, staging, or dev)",
-        examples=["production"],
-    )
-
-    @pydantic.field_validator("slug")
-    @classmethod
-    def validate_slug(cls, v: str) -> str:
-        if not v.replace("-", "").replace("_", "").isalnum():
-            raise ValueError(
-                "Slug must contain only alphanumeric characters, hyphens, and underscores"
-            )
-
-        return v.lower()
-
-    model_config = pydantic.ConfigDict(
-        json_schema_extra={
-            "example": {
-                "name": "My Production App",
-                "slug": "my-production-app",
-                "environment": "production",
-            }
-        }
-    )
-
-
-class ProjectResponse(pydantic.BaseModel):
-    project_id: int = pydantic.Field(..., description="Unique project identifier")
-    name: str = pydantic.Field(..., description="Project display name")
-    slug: str = pydantic.Field(..., description="Project slug")
-    environment: str = pydantic.Field(..., description="Deployment environment")
-    retention_days: int = pydantic.Field(..., description="Log retention period in days")
-    daily_quota: int = pydantic.Field(..., description="Daily log ingestion quota")
-
-    model_config = pydantic.ConfigDict(
-        json_schema_extra={
-            "example": {
-                "project_id": 456,
-                "name": "My Production App",
-                "slug": "my-production-app",
-                "environment": "production",
-                "retention_days": 30,
-                "daily_quota": 1000000,
-            }
-        }
-    )
-
-
-class ProjectListResponse(pydantic.BaseModel):
-    projects: typing.List[ProjectResponse] = pydantic.Field(
-        ..., description="List of projects"
-    )
-    total: int = pydantic.Field(..., description="Total number of projects")
-
-    model_config = pydantic.ConfigDict(
-        json_schema_extra={
-            "example": {
-                "projects": [
-                    {
-                        "project_id": 456,
-                        "name": "My Production App",
-                        "slug": "my-production-app",
-                        "environment": "production",
-                        "retention_days": 30,
-                        "daily_quota": 1000000,
-                    }
-                ],
-                "total": 1,
-            }
-        }
-    )
-
-
 # ==================== ROUTE HANDLERS ====================
+# Note: Request/Response models moved to gateway_service/schemas/projects.py
 
 
 @router.post(
     "/projects",
-    response_model=ProjectResponse,
+    response_model=schemas.ProjectResponse,
     status_code=fastapi.status.HTTP_201_CREATED,
     summary="Create new project",
     description="Create a new project for organizing and isolating logs. Each project has its own API keys, quotas, and settings.",
@@ -161,7 +68,7 @@ class ProjectListResponse(pydantic.BaseModel):
     },
 )
 async def create_project(
-    request_data: CreateProjectRequest,
+    request_data: schemas.CreateProjectRequest,
     account_id: int = fastapi.Depends(dependencies.get_current_account_id),
     grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
 ):
@@ -190,7 +97,7 @@ async def create_project(
 
         response = await asyncio.wait_for(stub.CreateProject(grpc_request), timeout=5.0)
 
-        return ProjectResponse(
+        return schemas.ProjectResponse(
             project_id=response.project_id,
             name=response.name,
             slug=response.slug,
@@ -229,7 +136,7 @@ async def create_project(
 
 @router.get(
     "/projects",
-    response_model=ProjectListResponse,
+    response_model=schemas.ProjectListResponse,
     summary="List projects",
     description="Retrieve all projects owned by the authenticated account",
     response_description="List of projects with metadata",
@@ -281,7 +188,7 @@ async def list_projects(
         response = await asyncio.wait_for(stub.GetProjects(grpc_request), timeout=5.0)
 
         projects = [
-            ProjectResponse(
+            schemas.ProjectResponse(
                 project_id=p.project_id,
                 name=p.name,
                 slug=p.slug,
@@ -292,7 +199,7 @@ async def list_projects(
             for p in response.projects
         ]
 
-        return ProjectListResponse(projects=projects, total=len(projects))
+        return schemas.ProjectListResponse(projects=projects, total=len(projects))
 
     except asyncio.TimeoutError:
         raise fastapi.HTTPException(
@@ -310,7 +217,7 @@ async def list_projects(
 
 @router.get(
     "/projects/{project_slug}",
-    response_model=ProjectResponse,
+    response_model=schemas.ProjectResponse,
     summary="Get project by slug",
     description="Retrieve detailed information about a specific project using its slug identifier",
     response_description="Project details",
@@ -367,7 +274,7 @@ async def get_project_by_slug(
 
         for p in response.projects:
             if p.slug == project_slug:
-                return ProjectResponse(
+                return schemas.ProjectResponse(
                     project_id=p.project_id,
                     name=p.name,
                     slug=p.slug,

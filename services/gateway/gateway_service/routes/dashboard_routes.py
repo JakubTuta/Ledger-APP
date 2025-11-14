@@ -3,7 +3,7 @@ import logging
 
 import fastapi
 import grpc
-import pydantic
+import gateway_service.schemas as schemas
 from gateway_service import dependencies
 from gateway_service.proto import auth_pb2, auth_pb2_grpc
 from gateway_service.services import grpc_pool
@@ -13,161 +13,13 @@ logger = logging.getLogger(__name__)
 router = fastapi.APIRouter(tags=["Dashboard"])
 
 
-class PanelRequest(pydantic.BaseModel):
-    name: str = pydantic.Field(
-        ...,
-        min_length=1,
-        max_length=255,
-        description="Panel display name",
-        examples=["Error Rate - Last 24h"],
-    )
-    index: int = pydantic.Field(
-        ..., ge=0, description="Panel position index", examples=[0]
-    )
-    project_id: str = pydantic.Field(
-        ..., min_length=1, description="Project ID", examples=["456"]
-    )
-    time_range_from: str = pydantic.Field(
-        ...,
-        description="Start of time range (ISO 8601)",
-        examples=["2024-01-15T00:00:00Z"],
-    )
-    time_range_to: str = pydantic.Field(
-        ...,
-        description="End of time range (ISO 8601)",
-        examples=["2024-01-16T00:00:00Z"],
-    )
-    type: str = pydantic.Field(
-        ...,
-        pattern=r"^(logs|errors|metrics)$",
-        description="Panel type (logs, errors, metrics)",
-        examples=["errors"],
-    )
-
-    model_config = pydantic.ConfigDict(
-        json_schema_extra={
-            "example": {
-                "name": "Error Rate - Last 24h",
-                "index": 0,
-                "project_id": "456",
-                "time_range_from": "2024-01-15T00:00:00Z",
-                "time_range_to": "2024-01-16T00:00:00Z",
-                "type": "errors",
-            }
-        }
-    )
-
-
-class PanelResponse(pydantic.BaseModel):
-    id: str = pydantic.Field(..., description="Unique panel identifier")
-    name: str = pydantic.Field(..., description="Panel display name")
-    index: int = pydantic.Field(..., description="Panel position index")
-    project_id: str = pydantic.Field(..., description="Associated project ID")
-    time_range_from: str = pydantic.Field(..., description="Time range start")
-    time_range_to: str = pydantic.Field(..., description="Time range end")
-    type: str = pydantic.Field(..., description="Panel type")
-
-    model_config = pydantic.ConfigDict(
-        json_schema_extra={
-            "example": {
-                "id": "panel_abc123",
-                "name": "Error Rate - Last 24h",
-                "index": 0,
-                "project_id": "456",
-                "time_range_from": "2024-01-15T00:00:00Z",
-                "time_range_to": "2024-01-16T00:00:00Z",
-                "type": "errors",
-            }
-        }
-    )
-
-
-class PanelListResponse(pydantic.BaseModel):
-    panels: list[PanelResponse] = pydantic.Field(..., description="List of panels")
-    total: int = pydantic.Field(..., description="Total number of panels")
-
-    model_config = pydantic.ConfigDict(
-        json_schema_extra={
-            "example": {
-                "panels": [
-                    {
-                        "id": "panel_abc123",
-                        "name": "Error Rate - Last 24h",
-                        "index": 0,
-                        "project_id": "456",
-                        "time_range_from": "2024-01-15T00:00:00Z",
-                        "time_range_to": "2024-01-16T00:00:00Z",
-                        "type": "errors",
-                    }
-                ],
-                "total": 1,
-            }
-        }
-    )
-
-
-class UpdatePanelRequest(pydantic.BaseModel):
-    name: str = pydantic.Field(
-        ...,
-        min_length=1,
-        max_length=255,
-        description="Panel display name",
-        examples=["Error Rate - Last 24h"],
-    )
-    index: int = pydantic.Field(
-        ..., ge=0, description="Panel position index", examples=[0]
-    )
-    project_id: str = pydantic.Field(
-        ..., min_length=1, description="Project ID", examples=["456"]
-    )
-    time_range_from: str = pydantic.Field(
-        ...,
-        description="Start of time range (ISO 8601)",
-        examples=["2024-01-15T00:00:00Z"],
-    )
-    time_range_to: str = pydantic.Field(
-        ...,
-        description="End of time range (ISO 8601)",
-        examples=["2024-01-16T00:00:00Z"],
-    )
-    type: str = pydantic.Field(
-        ...,
-        pattern=r"^(logs|errors|metrics)$",
-        description="Panel type (logs, errors, metrics)",
-        examples=["errors"],
-    )
-
-    model_config = pydantic.ConfigDict(
-        json_schema_extra={
-            "example": {
-                "name": "Error Rate - Last 24h",
-                "index": 0,
-                "project_id": "456",
-                "time_range_from": "2024-01-15T00:00:00Z",
-                "time_range_to": "2024-01-16T00:00:00Z",
-                "type": "errors",
-            }
-        }
-    )
-
-
-class DeletePanelResponse(pydantic.BaseModel):
-    success: bool = pydantic.Field(..., description="Whether deletion succeeded")
-    message: str = pydantic.Field(..., description="Status message")
-
-    model_config = pydantic.ConfigDict(
-        json_schema_extra={
-            "example": {
-                "success": True,
-                "message": "Panel panel_abc123 deleted successfully",
-            }
-        }
-    )
+# ==================== ROUTE HANDLERS ====================
+# Note: Request/Response models moved to gateway_service/schemas/dashboard.py
 
 
 @router.get(
     "/dashboard/panels",
-    response_model=PanelListResponse,
+    response_model=schemas.PanelListResponse,
     summary="Get dashboard panels",
     description="Retrieve all dashboard panels for the authenticated user",
 )
@@ -192,7 +44,7 @@ async def get_dashboard_panels(
         )
 
         panels = [
-            PanelResponse(
+            schemas.PanelResponse(
                 id=panel.id,
                 name=panel.name,
                 index=panel.index,
@@ -204,7 +56,7 @@ async def get_dashboard_panels(
             for panel in response.panels
         ]
 
-        return PanelListResponse(panels=panels, total=len(panels))
+        return schemas.PanelListResponse(panels=panels, total=len(panels))
 
     except asyncio.TimeoutError:
         logger.error("Auth Service timeout getting dashboard panels")
@@ -237,13 +89,13 @@ async def get_dashboard_panels(
 
 @router.post(
     "/dashboard/panels",
-    response_model=PanelResponse,
+    response_model=schemas.PanelResponse,
     status_code=fastapi.status.HTTP_201_CREATED,
     summary="Create dashboard panel",
     description="Create a new dashboard panel for the authenticated user",
 )
 async def create_dashboard_panel(
-    request_data: PanelRequest,
+    request_data: schemas.PanelRequest,
     account_id: int = fastapi.Depends(dependencies.get_current_account_id),
     grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
 ):
@@ -280,7 +132,7 @@ async def create_dashboard_panel(
                 detail="Failed to create panel",
             )
 
-        return PanelResponse(
+        return schemas.PanelResponse(
             id=response.panel.id,
             name=response.panel.name,
             index=response.panel.index,
@@ -321,13 +173,13 @@ async def create_dashboard_panel(
 
 @router.put(
     "/dashboard/panels/{panel_id}",
-    response_model=PanelResponse,
+    response_model=schemas.PanelResponse,
     summary="Update dashboard panel",
     description="Update an existing dashboard panel for the authenticated user",
 )
 async def update_dashboard_panel(
     panel_id: str,
-    request_data: UpdatePanelRequest,
+    request_data: schemas.UpdatePanelRequest,
     account_id: int = fastapi.Depends(dependencies.get_current_account_id),
     grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
 ):
@@ -366,7 +218,7 @@ async def update_dashboard_panel(
                 detail=f"Panel {panel_id} not found",
             )
 
-        return PanelResponse(
+        return schemas.PanelResponse(
             id=response.panel.id,
             name=response.panel.name,
             index=response.panel.index,
@@ -412,7 +264,7 @@ async def update_dashboard_panel(
 
 @router.delete(
     "/dashboard/panels/{panel_id}",
-    response_model=DeletePanelResponse,
+    response_model=schemas.DeletePanelResponse,
     summary="Delete dashboard panel",
     description="Delete a dashboard panel for the authenticated user",
 )
@@ -444,7 +296,7 @@ async def delete_dashboard_panel(
         )
 
         if response.success:
-            return DeletePanelResponse(
+            return schemas.DeletePanelResponse(
                 success=True, message=f"Panel {panel_id} deleted successfully"
             )
         else:

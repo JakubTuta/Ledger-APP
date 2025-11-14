@@ -181,6 +181,38 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
             context.set_details(f"Internal error: {str(e)}")
             return auth_pb2.GetProjectsResponse()
 
+    async def GetProjectById(
+        self,
+        request: auth_pb2.GetProjectByIdRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.GetProjectByIdResponse:
+        """Get project by ID."""
+        try:
+            async with database.get_session() as session:
+                project = await self.auth_service.get_project_by_id(
+                    session=session,
+                    project_id=request.project_id,
+                )
+
+                if not project:
+                    context.set_code(grpc.StatusCode.NOT_FOUND)
+                    context.set_details("Project not found")
+                    return auth_pb2.GetProjectByIdResponse()
+
+                return auth_pb2.GetProjectByIdResponse(
+                    project_id=project.id,
+                    name=project.name,
+                    slug=project.slug,
+                    environment=project.environment,
+                    retention_days=project.retention_days,
+                    daily_quota=project.daily_quota,
+                )
+
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.GetProjectByIdResponse()
+
     # ==================== API Key Operations ====================
 
     async def CreateApiKey(
@@ -271,6 +303,38 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f"Internal error: {str(e)}")
             return auth_pb2.RevokeApiKeyResponse(success=False)
+
+    # ==================== Usage Tracking Operations ====================
+
+    async def GetDailyUsage(
+        self,
+        request: auth_pb2.GetDailyUsageRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.GetDailyUsageResponse:
+        """Get daily usage statistics for a project."""
+        try:
+            async with database.get_session() as session:
+                usage = await self.auth_service.get_daily_usage(
+                    session=session,
+                    project_id=request.project_id,
+                    date=request.date,
+                )
+
+                if not usage:
+                    return auth_pb2.GetDailyUsageResponse(
+                        log_count=0,
+                        date=request.date,
+                    )
+
+                return auth_pb2.GetDailyUsageResponse(
+                    log_count=usage.logs_ingested,
+                    date=request.date,
+                )
+
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.GetDailyUsageResponse(log_count=0, date=request.date)
 
     # ==================== Dashboard Panel Operations ====================
 

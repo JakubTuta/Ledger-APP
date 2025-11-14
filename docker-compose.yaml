@@ -30,7 +30,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - backend
+      - ledger-server-network
 
   # ==================== PostgreSQL (Logs DB) ====================
   ledger-postgres-logs:
@@ -65,7 +65,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - backend
+      - ledger-server-network
 
   # ==================== Redis ====================
   ledger-redis:
@@ -81,7 +81,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - backend
+      - ledger-server-network
     command: >
       redis-server
       --maxmemory 2gb
@@ -109,7 +109,7 @@ services:
       ledger-redis:
         condition: service_healthy
     networks:
-      - backend
+      - ledger-server-network
     volumes:
       # Mount for development (hot reload)
       - ./services/auth/auth_service:/app/auth_service:ro
@@ -147,7 +147,7 @@ services:
     ports:
       - "${GATEWAY_HTTP_PORT}:8000"
     networks:
-      - backend
+      - ledger-server-network
     volumes:
       # Mount for development (hot reload)
       - ./services/gateway/gateway_service:/app/gateway_service:ro
@@ -181,7 +181,7 @@ services:
       ledger-redis:
         condition: service_healthy
     networks:
-      - backend
+      - ledger-server-network
     volumes:
       # Mount for development (hot reload)
       - ./services/ingestion/ingestion_service:/app/ingestion_service:ro
@@ -218,7 +218,7 @@ services:
       ledger-ingestion:
         condition: service_started
     networks:
-      - backend
+      - ledger-server-network
     volumes:
       # Mount for development (hot reload)
       - ./services/ingestion/ingestion_service:/app/ingestion_service:ro
@@ -245,7 +245,7 @@ services:
       ledger-redis:
         condition: service_healthy
     networks:
-      - backend
+      - ledger-server-network
     volumes:
       # Mount for development (hot reload)
       - ./services/analytics/analytics_workers:/app/analytics_workers:ro

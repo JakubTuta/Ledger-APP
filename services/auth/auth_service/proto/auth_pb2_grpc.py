@@ -59,6 +59,11 @@ class AuthServiceStub(object):
                 request_serializer=auth__pb2.GetProjectsRequest.SerializeToString,
                 response_deserializer=auth__pb2.GetProjectsResponse.FromString,
                 _registered_method=True)
+        self.GetProjectById = channel.unary_unary(
+                '/auth.AuthService/GetProjectById',
+                request_serializer=auth__pb2.GetProjectByIdRequest.SerializeToString,
+                response_deserializer=auth__pb2.GetProjectByIdResponse.FromString,
+                _registered_method=True)
         self.CreateApiKey = channel.unary_unary(
                 '/auth.AuthService/CreateApiKey',
                 request_serializer=auth__pb2.CreateApiKeyRequest.SerializeToString,
@@ -73,6 +78,11 @@ class AuthServiceStub(object):
                 '/auth.AuthService/RevokeApiKey',
                 request_serializer=auth__pb2.RevokeApiKeyRequest.SerializeToString,
                 response_deserializer=auth__pb2.RevokeApiKeyResponse.FromString,
+                _registered_method=True)
+        self.GetDailyUsage = channel.unary_unary(
+                '/auth.AuthService/GetDailyUsage',
+                request_serializer=auth__pb2.GetDailyUsageRequest.SerializeToString,
+                response_deserializer=auth__pb2.GetDailyUsageResponse.FromString,
                 _registered_method=True)
         self.GetDashboardPanels = channel.unary_unary(
                 '/auth.AuthService/GetDashboardPanels',
@@ -131,6 +141,12 @@ class AuthServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetProjectById(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def CreateApiKey(self, request, context):
         """API key operations
         """
@@ -146,6 +162,13 @@ class AuthServiceServicer(object):
 
     def RevokeApiKey(self, request, context):
         """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetDailyUsage(self, request, context):
+        """Usage tracking operations
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -203,6 +226,11 @@ def add_AuthServiceServicer_to_server(servicer, server):
                     request_deserializer=auth__pb2.GetProjectsRequest.FromString,
                     response_serializer=auth__pb2.GetProjectsResponse.SerializeToString,
             ),
+            'GetProjectById': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetProjectById,
+                    request_deserializer=auth__pb2.GetProjectByIdRequest.FromString,
+                    response_serializer=auth__pb2.GetProjectByIdResponse.SerializeToString,
+            ),
             'CreateApiKey': grpc.unary_unary_rpc_method_handler(
                     servicer.CreateApiKey,
                     request_deserializer=auth__pb2.CreateApiKeyRequest.FromString,
@@ -217,6 +245,11 @@ def add_AuthServiceServicer_to_server(servicer, server):
                     servicer.RevokeApiKey,
                     request_deserializer=auth__pb2.RevokeApiKeyRequest.FromString,
                     response_serializer=auth__pb2.RevokeApiKeyResponse.SerializeToString,
+            ),
+            'GetDailyUsage': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetDailyUsage,
+                    request_deserializer=auth__pb2.GetDailyUsageRequest.FromString,
+                    response_serializer=auth__pb2.GetDailyUsageResponse.SerializeToString,
             ),
             'GetDashboardPanels': grpc.unary_unary_rpc_method_handler(
                     servicer.GetDashboardPanels,
@@ -385,6 +418,33 @@ class AuthService(object):
             _registered_method=True)
 
     @staticmethod
+    def GetProjectById(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/GetProjectById',
+            auth__pb2.GetProjectByIdRequest.SerializeToString,
+            auth__pb2.GetProjectByIdResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
     def CreateApiKey(request,
             target,
             options=(),
@@ -455,6 +515,33 @@ class AuthService(object):
             '/auth.AuthService/RevokeApiKey',
             auth__pb2.RevokeApiKeyRequest.SerializeToString,
             auth__pb2.RevokeApiKeyResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetDailyUsage(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/GetDailyUsage',
+            auth__pb2.GetDailyUsageRequest.SerializeToString,
+            auth__pb2.GetDailyUsageResponse.FromString,
             options,
             channel_credentials,
             insecure,

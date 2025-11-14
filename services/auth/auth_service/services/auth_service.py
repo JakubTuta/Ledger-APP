@@ -161,6 +161,28 @@ class AuthService:
         )
         return result.scalar_one_or_none()
 
+    async def get_daily_usage(
+        self,
+        session: AsyncSession,
+        project_id: int,
+        date: str,
+    ) -> models.DailyUsage | None:
+        """Get daily usage for a project on a specific date."""
+        from datetime import datetime
+
+        date_obj = datetime.fromisoformat(date)
+        start_of_day = date_obj.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_of_day = start_of_day.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+        result = await session.execute(
+            select(models.DailyUsage).where(
+                models.DailyUsage.project_id == project_id,
+                models.DailyUsage.date >= start_of_day,
+                models.DailyUsage.date <= end_of_day,
+            )
+        )
+        return result.scalar_one_or_none()
+
     # ==================== API Keys ====================
 
     async def create_api_key(

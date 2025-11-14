@@ -11,11 +11,15 @@ service AuthService {
   // Project operations
   rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse);
   rpc GetProjects(GetProjectsRequest) returns (GetProjectsResponse);
+  rpc GetProjectById(GetProjectByIdRequest) returns (GetProjectByIdResponse);
   
   // API key operations
   rpc CreateApiKey(CreateApiKeyRequest) returns (CreateApiKeyResponse);
   rpc ValidateApiKey(ValidateApiKeyRequest) returns (ValidateApiKeyResponse);
   rpc RevokeApiKey(RevokeApiKeyRequest) returns (RevokeApiKeyResponse);
+
+  // Usage tracking operations
+  rpc GetDailyUsage(GetDailyUsageRequest) returns (GetDailyUsageResponse);
 
   // Dashboard panel operations
   rpc GetDashboardPanels(GetDashboardPanelsRequest) returns (GetDashboardPanelsResponse);
@@ -97,6 +101,31 @@ message ProjectInfo {
 
 message GetProjectsResponse {
   repeated ProjectInfo projects = 1;
+}
+
+message GetProjectByIdRequest {
+  int64 project_id = 1;
+}
+
+message GetProjectByIdResponse {
+  int64 project_id = 1;
+  string name = 2;
+  string slug = 3;
+  string environment = 4;
+  int32 retention_days = 5;
+  int64 daily_quota = 6;
+}
+
+// ==================== Usage Tracking Messages ====================
+
+message GetDailyUsageRequest {
+  int64 project_id = 1;
+  string date = 2;
+}
+
+message GetDailyUsageResponse {
+  int64 log_count = 1;
+  string date = 2;
 }
 
 // ==================== API Key Messages ====================
