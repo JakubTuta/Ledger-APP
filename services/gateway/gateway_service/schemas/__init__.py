@@ -1,6 +1,8 @@
 from gateway_service.schemas.api_keys import (
+    ApiKeyInfo,
     CreateApiKeyRequest,
     CreateApiKeyResponse,
+    ListApiKeysResponse,
     RevokeApiKeyResponse,
 )
 from gateway_service.schemas.auth import (
@@ -52,6 +54,8 @@ __all__ = [
     "CreateApiKeyRequest",
     "CreateApiKeyResponse",
     "RevokeApiKeyResponse",
+    "ApiKeyInfo",
+    "ListApiKeysResponse",
     # Dashboard schemas
     "PanelRequest",
     "PanelResponse",
