@@ -139,6 +139,152 @@ async def create_api_key(
             )
 
 
+@router.get(
+    "/projects/{project_id}/api-keys",
+    response_model=schemas.ListApiKeysResponse,
+    summary="List API keys",
+    description="Retrieve all API keys for a specific project. Shows key metadata but not the full key value.",
+    response_description="List of API keys with metadata",
+    responses={
+        200: {
+            "description": "API keys retrieved successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "api_keys": [
+                            {
+                                "key_id": 789,
+                                "project_id": 456,
+                                "name": "Production API Key",
+                                "key_prefix": "ledger_prod_1a2b",
+                                "status": "active",
+                                "created_at": "2024-01-15T10:30:00Z",
+                                "last_used_at": "2024-01-20T15:45:00Z",
+                            }
+                        ],
+                        "total": 1,
+                    }
+                }
+            },
+        },
+        403: {
+            "description": "Permission denied (don't own this project)",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "You don't have permission to view API keys for this project"
+                    }
+                }
+            },
+        },
+        404: {
+            "description": "Project not found",
+            "content": {
+                "application/json": {"example": {"detail": "Project 456 not found"}}
+            },
+        },
+        503: {
+            "description": "Service timeout",
+            "content": {
+                "application/json": {"example": {"detail": "Service timeout"}}
+            },
+        },
+    },
+)
+async def list_api_keys(
+    project_id: int = fastapi.Path(
+        ..., description="Project ID to list API keys for", examples=[456]
+    ),
+    account_id: int = fastapi.Depends(dependencies.get_current_account_id),
+    grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
+):
+    """
+    List all API keys for a project.
+
+    Returns metadata about all API keys including:
+    - Key ID (for revocation)
+    - Key prefix (for identification)
+    - Name and creation date
+    - Last used timestamp
+    - Status (active/revoked)
+
+    **IMPORTANT:** The full API key value is never returned for security.
+    Only the prefix is shown for identification purposes.
+
+    Requires JWT authentication and project ownership.
+    """
+
+    try:
+        stub = grpc_pool.get_stub("auth", auth_pb2_grpc.AuthServiceStub)
+
+        projects_request = auth_pb2.GetProjectsRequest(account_id=account_id)
+        projects_response = await asyncio.wait_for(
+            stub.GetProjects(projects_request), timeout=5.0
+        )
+
+        project_ids = [p.project_id for p in projects_response.projects]
+        if project_id not in project_ids:
+            raise fastapi.HTTPException(
+                status_code=fastapi.status.HTTP_403_FORBIDDEN,
+                detail="You don't have permission to view API keys for this project",
+            )
+
+        grpc_request = auth_pb2.ListApiKeysRequest(project_id=project_id)
+
+        response = await asyncio.wait_for(
+            stub.ListApiKeys(grpc_request),
+            timeout=5.0,
+        )
+
+        api_keys = [
+            schemas.ApiKeyInfo(
+                key_id=key.key_id,
+                project_id=key.project_id,
+                name=key.name,
+                key_prefix=key.key_prefix,
+                status=key.status,
+                created_at=key.created_at,
+                last_used_at=key.last_used_at if key.last_used_at else None,
+            )
+            for key in response.api_keys
+        ]
+
+        logger.info(
+            f"Listed {len(api_keys)} API keys for project_id={project_id}, "
+            f"account_id={account_id}"
+        )
+
+        return schemas.ListApiKeysResponse(api_keys=api_keys, total=len(api_keys))
+
+    except asyncio.TimeoutError:
+        logger.error("Auth Service timeout during API key listing")
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Service timeout",
+        )
+
+    except grpc.RpcError as e:
+        logger.error(f"gRPC error listing API keys: {e.code()} - {e.details()}")
+
+        if e.code() == grpc.StatusCode.NOT_FOUND:
+            raise fastapi.HTTPException(
+                status_code=fastapi.status.HTTP_404_NOT_FOUND,
+                detail=f"Project {project_id} not found",
+            )
+
+        elif e.code() == grpc.StatusCode.PERMISSION_DENIED:
+            raise fastapi.HTTPException(
+                status_code=fastapi.status.HTTP_403_FORBIDDEN,
+                detail="You don't have permission to view API keys for this project",
+            )
+
+        else:
+            raise fastapi.HTTPException(
+                status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to list API keys",
+            )
+
+
 @router.delete(
     "/api-keys/{key_id}",
     response_model=schemas.RevokeApiKeyResponse,

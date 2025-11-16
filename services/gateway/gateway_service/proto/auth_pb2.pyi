@@ -222,6 +222,36 @@ class RevokeApiKeyResponse(_message.Message):
     success: bool
     def __init__(self, success: bool = ...) -> None: ...
 
+class ListApiKeysRequest(_message.Message):
+    __slots__ = ("project_id",)
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    def __init__(self, project_id: _Optional[int] = ...) -> None: ...
+
+class ApiKeyInfo(_message.Message):
+    __slots__ = ("key_id", "project_id", "name", "key_prefix", "status", "created_at", "last_used_at")
+    KEY_ID_FIELD_NUMBER: _ClassVar[int]
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    KEY_PREFIX_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    CREATED_AT_FIELD_NUMBER: _ClassVar[int]
+    LAST_USED_AT_FIELD_NUMBER: _ClassVar[int]
+    key_id: int
+    project_id: int
+    name: str
+    key_prefix: str
+    status: str
+    created_at: str
+    last_used_at: str
+    def __init__(self, key_id: _Optional[int] = ..., project_id: _Optional[int] = ..., name: _Optional[str] = ..., key_prefix: _Optional[str] = ..., status: _Optional[str] = ..., created_at: _Optional[str] = ..., last_used_at: _Optional[str] = ...) -> None: ...
+
+class ListApiKeysResponse(_message.Message):
+    __slots__ = ("api_keys",)
+    API_KEYS_FIELD_NUMBER: _ClassVar[int]
+    api_keys: _containers.RepeatedCompositeFieldContainer[ApiKeyInfo]
+    def __init__(self, api_keys: _Optional[_Iterable[_Union[ApiKeyInfo, _Mapping]]] = ...) -> None: ...
+
 class Panel(_message.Message):
     __slots__ = ("id", "name", "index", "project_id", "time_range_from", "time_range_to", "type")
     ID_FIELD_NUMBER: _ClassVar[int]

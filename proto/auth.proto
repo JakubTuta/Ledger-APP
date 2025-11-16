@@ -17,6 +17,7 @@ service AuthService {
   rpc CreateApiKey(CreateApiKeyRequest) returns (CreateApiKeyResponse);
   rpc ValidateApiKey(ValidateApiKeyRequest) returns (ValidateApiKeyResponse);
   rpc RevokeApiKey(RevokeApiKeyRequest) returns (RevokeApiKeyResponse);
+  rpc ListApiKeys(ListApiKeysRequest) returns (ListApiKeysResponse);
 
   // Usage tracking operations
   rpc GetDailyUsage(GetDailyUsageRequest) returns (GetDailyUsageResponse);
@@ -163,6 +164,24 @@ message RevokeApiKeyRequest {
 
 message RevokeApiKeyResponse {
   bool success = 1;
+}
+
+message ListApiKeysRequest {
+  int64 project_id = 1;
+}
+
+message ApiKeyInfo {
+  int64 key_id = 1;
+  int64 project_id = 2;
+  string name = 3;
+  string key_prefix = 4;
+  string status = 5;
+  string created_at = 6;
+  string last_used_at = 7;
+}
+
+message ListApiKeysResponse {
+  repeated ApiKeyInfo api_keys = 1;
 }
 
 // ==================== Dashboard Panel Messages ====================

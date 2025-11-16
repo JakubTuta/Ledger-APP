@@ -305,3 +305,19 @@ class AuthService:
         async for key in self.redis.scan_iter(match=pattern):
             await self.redis.delete(key)
             await self.redis.delete(key)
+
+    async def list_api_keys(
+        self,
+        session: AsyncSession,
+        project_id: int,
+    ) -> list[models.ApiKey]:
+        """List all API keys for a project."""
+
+        result = await session.execute(
+            select(models.ApiKey)
+            .where(models.ApiKey.project_id == project_id)
+            .order_by(models.ApiKey.created_at.desc())
+        )
+        api_keys = result.scalars().all()
+
+        return list(api_keys)

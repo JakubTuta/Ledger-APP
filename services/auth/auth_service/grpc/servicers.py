@@ -297,12 +297,42 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
         except ValueError as e:
             context.set_code(grpc.StatusCode.NOT_FOUND)
             context.set_details(str(e))
-            return auth_pb2.RevokeApiKeyResponse(success=False)
+
+    async def ListApiKeys(
+        self,
+        request: auth_pb2.ListApiKeysRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.ListApiKeysResponse:
+        """List all API keys for a project."""
+        try:
+            async with database.get_session() as session:
+                api_keys = await self.auth_service.list_api_keys(
+                    session=session,
+                    project_id=request.project_id,
+                )
+
+                api_key_infos = []
+                for api_key in api_keys:
+                    api_key_infos.append(
+                        auth_pb2.ApiKeyInfo(
+                            key_id=api_key.id,
+                            project_id=api_key.project_id,
+                            name=api_key.name or "",
+                            key_prefix=api_key.key_prefix,
+                            status=api_key.status,
+                            created_at=api_key.created_at.isoformat(),
+                            last_used_at=api_key.last_used_at.isoformat()
+                            if api_key.last_used_at
+                            else "",
+                        )
+                    )
+
+                return auth_pb2.ListApiKeysResponse(api_keys=api_key_infos)
 
         except Exception as e:
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f"Internal error: {str(e)}")
-            return auth_pb2.RevokeApiKeyResponse(success=False)
+            return auth_pb2.ListApiKeysResponse()
 
     # ==================== Usage Tracking Operations ====================
 
