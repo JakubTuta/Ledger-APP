@@ -2,15 +2,14 @@ import asyncio
 import signal
 import sys
 
-import apscheduler.schedulers.asyncio as async_scheduler
-import apscheduler.triggers.interval as interval_trigger
-
 import analytics_workers.config as config
 import analytics_workers.database as database
 import analytics_workers.health as health
 import analytics_workers.jobs as jobs
 import analytics_workers.redis_client as redis_client
 import analytics_workers.utils.logging as logging_utils
+import apscheduler.schedulers.asyncio as async_scheduler
+import apscheduler.triggers.interval as interval_trigger
 
 logger = logging_utils.setup_logging()
 settings = config.get_settings()
@@ -97,7 +96,7 @@ def setup_jobs() -> None:
     scheduler.add_job(
         jobs.generate_usage_stats,
         trigger=interval_trigger.IntervalTrigger(
-            hours=settings.USAGE_STATS_INTERVAL_HOURS
+            minutes=settings.USAGE_STATS_INTERVAL_MINUTES
         ),
         id="generate_usage_stats",
         name="Generate Usage Stats",
@@ -121,9 +120,7 @@ async def main() -> None:
     loop = asyncio.get_event_loop()
 
     for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(
-            sig, lambda s=sig: asyncio.create_task(shutdown(s))
-        )
+        loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(shutdown(s)))
 
     health_task = asyncio.create_task(health.health_check_loop())
 

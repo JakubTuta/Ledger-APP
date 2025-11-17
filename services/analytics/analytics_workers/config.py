@@ -167,11 +167,11 @@ class Settings(pydantic_settings.BaseSettings):
         description="Top errors computation job interval (minutes)",
     )
 
-    USAGE_STATS_INTERVAL_HOURS: int = pydantic.Field(
+    USAGE_STATS_INTERVAL_MINUTES: int = pydantic.Field(
         default=1,
         ge=1,
-        le=24,
-        description="Usage stats generation job interval (hours)",
+        le=60,
+        description="Usage stats generation job interval (minutes)",
     )
 
     ERROR_RATE_TTL: int = pydantic.Field(
