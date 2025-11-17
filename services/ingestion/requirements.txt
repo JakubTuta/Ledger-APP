@@ -13,6 +13,9 @@ redis[hiredis]==6.4.0
 # MessagePack for serialization
 msgpack==1.1.2
 
+# Scheduling
+apscheduler==3.10.4
+
 # Configuration & Validation
 pydantic==2.12.3
 pydantic-settings==2.11.0

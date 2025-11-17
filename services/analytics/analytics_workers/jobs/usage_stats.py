@@ -63,6 +63,26 @@ async def generate_usage_stats() -> None:
                         "quota_used_percent": quota_used_percent,
                     })
 
+                    upsert_query = sa.text("""
+                        INSERT INTO daily_usage (project_id, date, logs_ingested, logs_queried, storage_bytes, created_at, updated_at)
+                        VALUES (:project_id, :date, :log_count, 0, 0, NOW(), NOW())
+                        ON CONFLICT (project_id, date)
+                        DO UPDATE SET
+                            logs_ingested = EXCLUDED.logs_ingested,
+                            updated_at = NOW()
+                    """)
+                    await auth_session.execute(
+                        upsert_query,
+                        {
+                            "project_id": project_id,
+                            "date": date,
+                            "log_count": log_count,
+                        }
+                    )
+
+                await auth_session.commit()
+                logger.info(f"Synced {len(rows)} daily usage records to Auth DB")
+
                 for project_id, usage in by_project.items():
                     cache_key = f"metrics:usage_stats:{project_id}"
                     cache_value = json.dumps(usage)
