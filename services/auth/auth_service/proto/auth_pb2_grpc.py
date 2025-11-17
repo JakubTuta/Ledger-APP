@@ -49,6 +49,16 @@ class AuthServiceStub(object):
                 request_serializer=auth__pb2.GetAccountRequest.SerializeToString,
                 response_deserializer=auth__pb2.GetAccountResponse.FromString,
                 _registered_method=True)
+        self.UpdateAccountName = channel.unary_unary(
+                '/auth.AuthService/UpdateAccountName',
+                request_serializer=auth__pb2.UpdateAccountNameRequest.SerializeToString,
+                response_deserializer=auth__pb2.UpdateAccountNameResponse.FromString,
+                _registered_method=True)
+        self.ChangePassword = channel.unary_unary(
+                '/auth.AuthService/ChangePassword',
+                request_serializer=auth__pb2.ChangePasswordRequest.SerializeToString,
+                response_deserializer=auth__pb2.ChangePasswordResponse.FromString,
+                _registered_method=True)
         self.CreateProject = channel.unary_unary(
                 '/auth.AuthService/CreateProject',
                 request_serializer=auth__pb2.CreateProjectRequest.SerializeToString,
@@ -128,6 +138,18 @@ class AuthServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def GetAccount(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def UpdateAccountName(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ChangePassword(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -226,6 +248,16 @@ def add_AuthServiceServicer_to_server(servicer, server):
                     servicer.GetAccount,
                     request_deserializer=auth__pb2.GetAccountRequest.FromString,
                     response_serializer=auth__pb2.GetAccountResponse.SerializeToString,
+            ),
+            'UpdateAccountName': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateAccountName,
+                    request_deserializer=auth__pb2.UpdateAccountNameRequest.FromString,
+                    response_serializer=auth__pb2.UpdateAccountNameResponse.SerializeToString,
+            ),
+            'ChangePassword': grpc.unary_unary_rpc_method_handler(
+                    servicer.ChangePassword,
+                    request_deserializer=auth__pb2.ChangePasswordRequest.FromString,
+                    response_serializer=auth__pb2.ChangePasswordResponse.SerializeToString,
             ),
             'CreateProject': grpc.unary_unary_rpc_method_handler(
                     servicer.CreateProject,
@@ -369,6 +401,60 @@ class AuthService(object):
             '/auth.AuthService/GetAccount',
             auth__pb2.GetAccountRequest.SerializeToString,
             auth__pb2.GetAccountResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UpdateAccountName(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/UpdateAccountName',
+            auth__pb2.UpdateAccountNameRequest.SerializeToString,
+            auth__pb2.UpdateAccountNameResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ChangePassword(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/ChangePassword',
+            auth__pb2.ChangePasswordRequest.SerializeToString,
+            auth__pb2.ChangePasswordResponse.FromString,
             options,
             channel_credentials,
             insecure,

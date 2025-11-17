@@ -106,3 +106,45 @@ class ProjectListResponse(pydantic.BaseModel):
             ]
         }
     )
+
+
+class ProjectQuotaResponse(pydantic.BaseModel):
+    """Project quota and usage information for frontend display."""
+
+    project_id: int = pydantic.Field(..., description="Project identifier")
+    project_name: str = pydantic.Field(..., description="Project display name")
+    project_slug: str = pydantic.Field(..., description="Project slug")
+    environment: str = pydantic.Field(..., description="Deployment environment")
+    daily_quota: int = pydantic.Field(
+        ..., description="Maximum logs allowed per day", ge=0
+    )
+    daily_usage: int = pydantic.Field(
+        ..., description="Number of logs ingested today", ge=0
+    )
+    quota_remaining: int = pydantic.Field(
+        ..., description="Remaining quota for today", ge=0
+    )
+    quota_reset_at: str = pydantic.Field(
+        ..., description="When the daily quota resets (midnight UTC, ISO 8601)"
+    )
+    retention_days: int = pydantic.Field(
+        ..., description="Log retention period in days"
+    )
+
+    model_config = pydantic.ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "project_id": 456,
+                    "project_name": "My Production App",
+                    "project_slug": "my-production-app",
+                    "environment": "production",
+                    "daily_quota": 1000000,
+                    "daily_usage": 45678,
+                    "quota_remaining": 954322,
+                    "quota_reset_at": "2024-01-16T00:00:00Z",
+                    "retention_days": 30,
+                }
+            ]
+        }
+    )

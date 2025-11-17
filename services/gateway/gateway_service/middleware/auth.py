@@ -87,12 +87,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
         Returns:
             Tuple of (token, auth_type) where auth_type is either 'session' or 'api_key'
         """
+        api_key_header = request.headers.get("X-API-Key")
+        if api_key_header:
+            return (api_key_header, "api_key")
+
         auth_header = request.headers.get("Authorization")
 
         if not auth_header:
             raise fastapi.HTTPException(
                 status_code=fastapi.status.HTTP_401_UNAUTHORIZED,
-                detail="Missing Authorization header",
+                detail="Missing authentication header (X-API-Key or Authorization)",
                 headers={"WWW-Authenticate": "Bearer"},
             )
 

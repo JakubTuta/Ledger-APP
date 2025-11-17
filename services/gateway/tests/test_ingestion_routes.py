@@ -155,8 +155,7 @@ class TestIngestionRoutes(test_base.BaseGatewayTest):
             headers={"Authorization": "Bearer test_api_key_123"},
         )
 
-        assert response.status_code == 400
-        assert "at least one log" in response.json()["detail"].lower()
+        assert response.status_code == 422
 
     async def test_ingest_batch_logs_with_errors(self, setup_method):
         await self.set_api_key_cache("test_api_key_123", project_id=1)

@@ -32,7 +32,7 @@ class Settings(pydantic_settings.BaseSettings):
     )
 
     LOGS_DB_PORT: int = pydantic.Field(
-        default=5432,
+        default=5433,
         description="Logs database port",
     )
 
@@ -48,7 +48,7 @@ class Settings(pydantic_settings.BaseSettings):
 
     LOGS_DB_PASSWORD: str = pydantic.Field(
         default="postgres",
-        description="Logs database password",
+        description="Logs database password (override in .env for production)",
     )
 
     DB_POOL_SIZE: int = pydantic.Field(

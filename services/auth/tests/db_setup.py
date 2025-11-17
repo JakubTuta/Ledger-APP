@@ -1,17 +1,24 @@
 import asyncio
 import os
 
+import asyncpg
 import auth_service.config as config
 import auth_service.database as database
 import sqlalchemy
 import sqlalchemy.ext.asyncio as sa_async
 import sqlalchemy.pool as sa_pool
 
-TEST_DB_HOST = os.getenv("TEST_DB_HOST", "localhost")
+TEST_DB_HOST = "localhost"
+TEST_DB_PORT = "5432"
 TEST_DB_NAME = "test_auth_db"
 TEST_DB_URL = (
     f"postgresql+asyncpg://{config.settings.AUTH_DB_USER}:{config.settings.AUTH_DB_PASSWORD}"
-    f"@{TEST_DB_HOST}:{config.settings.AUTH_DB_PORT}/{TEST_DB_NAME}"
+    f"@{TEST_DB_HOST}:{TEST_DB_PORT}/{TEST_DB_NAME}"
+)
+
+POSTGRES_URL = (
+    f"postgresql://{config.settings.AUTH_DB_USER}:{config.settings.AUTH_DB_PASSWORD}"
+    f"@{TEST_DB_HOST}:{TEST_DB_PORT}/postgres"
 )
 
 
@@ -69,7 +76,27 @@ async def get_test_db():
     return _test_db
 
 
+async def ensure_test_database_exists():
+    try:
+        conn = await asyncpg.connect(POSTGRES_URL)
+        try:
+            exists = await conn.fetchval(
+                "SELECT 1 FROM pg_database WHERE datname = $1", TEST_DB_NAME
+            )
+            if not exists:
+                await conn.execute(f'CREATE DATABASE "{TEST_DB_NAME}"')
+                print(f"Created test database: {TEST_DB_NAME}")
+            else:
+                print(f"Test database already exists: {TEST_DB_NAME}")
+        finally:
+            await conn.close()
+    except Exception as e:
+        print(f"Error ensuring test database exists: {e}")
+        raise
+
+
 async def setup_test_database():
+    await ensure_test_database_exists()
     db = await get_test_db()
     await db.create_tables()
 

@@ -7,10 +7,14 @@ from gateway_service.schemas.api_keys import (
 )
 from gateway_service.schemas.auth import (
     AccountInfoResponse,
+    ChangePasswordRequest,
+    ChangePasswordResponse,
     LoginRequest,
     LoginResponse,
     RegisterRequest,
     RegisterResponse,
+    UpdateAccountNameRequest,
+    UpdateAccountNameResponse,
 )
 from gateway_service.schemas.dashboard import (
     DeletePanelResponse,
@@ -28,6 +32,7 @@ from gateway_service.schemas.ingestion import (
 from gateway_service.schemas.projects import (
     CreateProjectRequest,
     ProjectListResponse,
+    ProjectQuotaResponse,
     ProjectResponse,
 )
 from gateway_service.schemas.settings import (
@@ -46,10 +51,15 @@ __all__ = [
     "LoginRequest",
     "LoginResponse",
     "AccountInfoResponse",
+    "UpdateAccountNameRequest",
+    "UpdateAccountNameResponse",
+    "ChangePasswordRequest",
+    "ChangePasswordResponse",
     # Project schemas
     "CreateProjectRequest",
     "ProjectResponse",
     "ProjectListResponse",
+    "ProjectQuotaResponse",
     # API Key schemas
     "CreateApiKeyRequest",
     "CreateApiKeyResponse",

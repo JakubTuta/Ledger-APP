@@ -398,6 +398,217 @@ async def get_current_account(
         )
 
 
+@router.patch(
+    "/accounts/me/name",
+    response_model=schemas.UpdateAccountNameResponse,
+    summary="Update account name",
+    description="Update the name for the currently authenticated user",
+    response_description="Updated account information",
+    responses={
+        200: {
+            "description": "Account name updated successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "name": "Jane Smith",
+                        "message": "Account name updated successfully",
+                    }
+                }
+            },
+        },
+        400: {
+            "description": "Invalid input (empty name or too long)",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Name cannot be empty"}
+                }
+            },
+        },
+        401: {
+            "description": "Not authenticated",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Authentication required"}
+                }
+            },
+        },
+        503: {
+            "description": "Service timeout",
+            "content": {
+                "application/json": {"example": {"detail": "Service timeout"}}
+            },
+        },
+    },
+)
+async def update_account_name(
+    request: fastapi.Request,
+    body: schemas.UpdateAccountNameRequest,
+    grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
+):
+    """
+    Update the name for the currently authenticated account.
+
+    The name must be:
+    - Non-empty (after trimming whitespace)
+    - Maximum 255 characters
+
+    Requires a valid JWT token in the Authorization header.
+    """
+
+    if not hasattr(request.state, "account_id"):
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
+
+    account_id = request.state.account_id
+
+    try:
+        stub = grpc_pool.get_stub("auth", auth_pb2_grpc.AuthServiceStub)
+
+        grpc_request = auth_pb2.UpdateAccountNameRequest(
+            account_id=account_id,
+            name=body.name,
+        )
+
+        response = await asyncio.wait_for(
+            stub.UpdateAccountName(grpc_request), timeout=5.0
+        )
+
+        if not response.success:
+            raise fastapi.HTTPException(
+                status_code=fastapi.status.HTTP_400_BAD_REQUEST,
+                detail="Failed to update account name",
+            )
+
+        return schemas.UpdateAccountNameResponse(name=response.name)
+
+    except asyncio.TimeoutError:
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Service timeout",
+        )
+
+    except grpc.RpcError as e:
+        if e.code() == grpc.StatusCode.INVALID_ARGUMENT:
+            raise fastapi.HTTPException(
+                status_code=fastapi.status.HTTP_400_BAD_REQUEST,
+                detail=e.details(),
+            )
+
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update account name",
+        )
+
+
+@router.post(
+    "/accounts/me/password",
+    response_model=schemas.ChangePasswordResponse,
+    summary="Change account password",
+    description="Change password for the currently authenticated user",
+    response_description="Password change confirmation",
+    responses={
+        200: {
+            "description": "Password changed successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "message": "Password changed successfully",
+                    }
+                }
+            },
+        },
+        400: {
+            "description": "Invalid input (wrong old password or weak new password)",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Current password is incorrect"}
+                }
+            },
+        },
+        401: {
+            "description": "Not authenticated",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Authentication required"}
+                }
+            },
+        },
+        503: {
+            "description": "Service timeout",
+            "content": {
+                "application/json": {"example": {"detail": "Service timeout"}}
+            },
+        },
+    },
+)
+async def change_password(
+    request: fastapi.Request,
+    body: schemas.ChangePasswordRequest,
+    grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
+):
+    """
+    Change password for the currently authenticated account.
+
+    Requires both the current password for verification and a new password.
+    The new password must meet the following requirements:
+    - Minimum 8 characters
+    - At least one uppercase letter
+    - At least one lowercase letter
+    - At least one digit
+
+    Requires a valid JWT token in the Authorization header.
+    """
+
+    if not hasattr(request.state, "account_id"):
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
+
+    account_id = request.state.account_id
+
+    try:
+        stub = grpc_pool.get_stub("auth", auth_pb2_grpc.AuthServiceStub)
+
+        grpc_request = auth_pb2.ChangePasswordRequest(
+            account_id=account_id,
+            old_password=body.old_password,
+            new_password=body.new_password,
+        )
+
+        response = await asyncio.wait_for(
+            stub.ChangePassword(grpc_request), timeout=5.0
+        )
+
+        if not response.success:
+            raise fastapi.HTTPException(
+                status_code=fastapi.status.HTTP_400_BAD_REQUEST,
+                detail="Failed to change password",
+            )
+
+        return schemas.ChangePasswordResponse()
+
+    except asyncio.TimeoutError:
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Service timeout",
+        )
+
+    except grpc.RpcError as e:
+        if e.code() == grpc.StatusCode.INVALID_ARGUMENT:
+            raise fastapi.HTTPException(
+                status_code=fastapi.status.HTTP_400_BAD_REQUEST,
+                detail=e.details(),
+            )
+
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to change password",
+        )
+
+
 # ==================== HELPER FUNCTIONS ====================
 
 

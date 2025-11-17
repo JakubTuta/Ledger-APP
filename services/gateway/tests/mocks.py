@@ -258,6 +258,17 @@ class MockAuthStub:
             created_at="2024-01-01T00:00:00Z",
         )
 
+    async def UpdateAccountName(self, request):
+        return auth_pb2.UpdateAccountNameResponse(
+            success=True,
+            name=request.name,
+        )
+
+    async def ChangePassword(self, request):
+        return auth_pb2.ChangePasswordResponse(
+            success=True,
+        )
+
 
 class MockIngestionStub:
     def __init__(self):

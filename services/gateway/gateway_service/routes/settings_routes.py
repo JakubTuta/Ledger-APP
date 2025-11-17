@@ -60,6 +60,16 @@ logger = logging.getLogger(__name__)
                 }
             },
         },
+        400: {
+            "description": "API key required (JWT token not supported)",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "This endpoint requires API key authentication (X-API-Key or Authorization: Bearer <api_key>). JWT session tokens are not supported."
+                    }
+                }
+            },
+        },
         404: {
             "description": "Project not found",
             "content": {
@@ -111,6 +121,12 @@ async def get_settings(request: fastapi.Request) -> schemas.SettingsResponse:
     """
     grpc_pool = request.app.state.grpc_pool
     project_id = request.state.project_id
+
+    if not project_id:
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_400_BAD_REQUEST,
+            detail="This endpoint requires API key authentication (X-API-Key or Authorization: Bearer <api_key>). JWT session tokens are not supported.",
+        )
 
     try:
         async with grpc_pool.get_auth_stub() as stub:

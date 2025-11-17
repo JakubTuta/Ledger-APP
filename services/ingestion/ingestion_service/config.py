@@ -49,7 +49,7 @@ class Settings(pydantic_settings.BaseSettings):
     )
 
     LOGS_DB_PORT: int = pydantic.Field(
-        default=5432,
+        default=5433,
         description="Logs database port",
     )
 

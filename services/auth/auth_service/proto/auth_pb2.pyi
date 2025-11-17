@@ -70,6 +70,38 @@ class GetAccountResponse(_message.Message):
     created_at: str
     def __init__(self, account_id: _Optional[int] = ..., email: _Optional[str] = ..., plan: _Optional[str] = ..., status: _Optional[str] = ..., name: _Optional[str] = ..., created_at: _Optional[str] = ...) -> None: ...
 
+class UpdateAccountNameRequest(_message.Message):
+    __slots__ = ("account_id", "name")
+    ACCOUNT_ID_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    account_id: int
+    name: str
+    def __init__(self, account_id: _Optional[int] = ..., name: _Optional[str] = ...) -> None: ...
+
+class UpdateAccountNameResponse(_message.Message):
+    __slots__ = ("success", "name")
+    SUCCESS_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    success: bool
+    name: str
+    def __init__(self, success: bool = ..., name: _Optional[str] = ...) -> None: ...
+
+class ChangePasswordRequest(_message.Message):
+    __slots__ = ("account_id", "old_password", "new_password")
+    ACCOUNT_ID_FIELD_NUMBER: _ClassVar[int]
+    OLD_PASSWORD_FIELD_NUMBER: _ClassVar[int]
+    NEW_PASSWORD_FIELD_NUMBER: _ClassVar[int]
+    account_id: int
+    old_password: str
+    new_password: str
+    def __init__(self, account_id: _Optional[int] = ..., old_password: _Optional[str] = ..., new_password: _Optional[str] = ...) -> None: ...
+
+class ChangePasswordResponse(_message.Message):
+    __slots__ = ("success",)
+    SUCCESS_FIELD_NUMBER: _ClassVar[int]
+    success: bool
+    def __init__(self, success: bool = ...) -> None: ...
+
 class CreateProjectRequest(_message.Message):
     __slots__ = ("account_id", "name", "slug", "environment")
     ACCOUNT_ID_FIELD_NUMBER: _ClassVar[int]

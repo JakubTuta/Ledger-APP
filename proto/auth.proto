@@ -7,7 +7,9 @@ service AuthService {
   rpc Register(RegisterRequest) returns (RegisterResponse);
   rpc Login(LoginRequest) returns (LoginResponse);
   rpc GetAccount(GetAccountRequest) returns (GetAccountResponse);
-  
+  rpc UpdateAccountName(UpdateAccountNameRequest) returns (UpdateAccountNameResponse);
+  rpc ChangePassword(ChangePasswordRequest) returns (ChangePasswordResponse);
+
   // Project operations
   rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse);
   rpc GetProjects(GetProjectsRequest) returns (GetProjectsResponse);
@@ -67,6 +69,26 @@ message GetAccountResponse {
   string status = 4;
   string name = 5;
   string created_at = 6;
+}
+
+message UpdateAccountNameRequest {
+  int64 account_id = 1;
+  string name = 2;
+}
+
+message UpdateAccountNameResponse {
+  bool success = 1;
+  string name = 2;
+}
+
+message ChangePasswordRequest {
+  int64 account_id = 1;
+  string old_password = 2;
+  string new_password = 3;
+}
+
+message ChangePasswordResponse {
+  bool success = 1;
 }
 
 // ==================== Project Messages ====================

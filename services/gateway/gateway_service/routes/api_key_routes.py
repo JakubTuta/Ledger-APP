@@ -54,6 +54,16 @@ router = fastapi.APIRouter(tags=["API Keys"])
                 "application/json": {"example": {"detail": "Project 456 not found"}}
             },
         },
+        409: {
+            "description": "API key name already exists",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "API key with name 'Production API Key' already exists for this project"
+                    }
+                }
+            },
+        },
         503: {
             "description": "Service timeout",
             "content": {
@@ -130,6 +140,12 @@ async def create_api_key(
             raise fastapi.HTTPException(
                 status_code=fastapi.status.HTTP_403_FORBIDDEN,
                 detail="You don't have permission to create API keys for this project",
+            )
+
+        elif e.code() == grpc.StatusCode.ALREADY_EXISTS:
+            raise fastapi.HTTPException(
+                status_code=fastapi.status.HTTP_409_CONFLICT,
+                detail=e.details(),
             )
 
         else:

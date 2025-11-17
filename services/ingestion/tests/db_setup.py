@@ -8,16 +8,17 @@ import sqlalchemy
 import sqlalchemy.ext.asyncio as sa_async
 import sqlalchemy.pool as sa_pool
 
-TEST_DB_HOST = os.getenv("TEST_DB_HOST", "localhost")
+TEST_DB_HOST = "localhost"
+TEST_DB_PORT = "5433"
 TEST_DB_NAME = "test_logs_db"
 TEST_DB_URL = (
     f"postgresql+asyncpg://{config.settings.LOGS_DB_USER}:{config.settings.LOGS_DB_PASSWORD}"
-    f"@{TEST_DB_HOST}:{config.settings.LOGS_DB_PORT}/{TEST_DB_NAME}"
+    f"@{TEST_DB_HOST}:{TEST_DB_PORT}/{TEST_DB_NAME}"
 )
 
 POSTGRES_URL = (
     f"postgresql://{config.settings.LOGS_DB_USER}:{config.settings.LOGS_DB_PASSWORD}"
-    f"@{TEST_DB_HOST}:{config.settings.LOGS_DB_PORT}/postgres"
+    f"@{TEST_DB_HOST}:{TEST_DB_PORT}/postgres"
 )
 
 

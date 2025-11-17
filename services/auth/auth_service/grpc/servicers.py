@@ -112,6 +112,62 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
             context.set_details(f"Internal error: {str(e)}")
             return auth_pb2.GetAccountResponse()
 
+    async def UpdateAccountName(
+        self,
+        request: auth_pb2.UpdateAccountNameRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.UpdateAccountNameResponse:
+        """Update account name."""
+        try:
+            async with database.get_session() as session:
+                account = await self.auth_service.update_account_name(
+                    session=session,
+                    account_id=request.account_id,
+                    name=request.name,
+                )
+
+                return auth_pb2.UpdateAccountNameResponse(
+                    success=True,
+                    name=account.name,
+                )
+
+        except ValueError as e:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(str(e))
+            return auth_pb2.UpdateAccountNameResponse(success=False)
+
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.UpdateAccountNameResponse(success=False)
+
+    async def ChangePassword(
+        self,
+        request: auth_pb2.ChangePasswordRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.ChangePasswordResponse:
+        """Change account password."""
+        try:
+            async with database.get_session() as session:
+                await self.auth_service.change_password(
+                    session=session,
+                    account_id=request.account_id,
+                    old_password=request.old_password,
+                    new_password=request.new_password,
+                )
+
+                return auth_pb2.ChangePasswordResponse(success=True)
+
+        except ValueError as e:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(str(e))
+            return auth_pb2.ChangePasswordResponse(success=False)
+
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.ChangePasswordResponse(success=False)
+
     # ==================== Project Operations ====================
 
     async def CreateProject(
@@ -234,6 +290,11 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     full_key=full_key,
                     key_prefix=api_key.key_prefix,
                 )
+
+        except ValueError as e:
+            context.set_code(grpc.StatusCode.ALREADY_EXISTS)
+            context.set_details(str(e))
+            return auth_pb2.CreateApiKeyResponse()
 
         except Exception as e:
             context.set_code(grpc.StatusCode.INTERNAL)

@@ -189,3 +189,110 @@ class AccountInfoResponse(pydantic.BaseModel):
             ]
         }
     )
+
+
+class UpdateAccountNameRequest(pydantic.BaseModel):
+    """Request body for updating account name."""
+
+    name: str = pydantic.Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="New account name",
+        examples=["Jane Smith"],
+    )
+
+    model_config = pydantic.ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "name": "Jane Smith",
+                }
+            ]
+        }
+    )
+
+
+class UpdateAccountNameResponse(pydantic.BaseModel):
+    """Response from successful name update."""
+
+    name: str = pydantic.Field(..., description="Updated account name")
+    message: str = pydantic.Field(
+        default="Account name updated successfully", description="Success message"
+    )
+
+    model_config = pydantic.ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "name": "Jane Smith",
+                    "message": "Account name updated successfully",
+                }
+            ]
+        }
+    )
+
+
+class ChangePasswordRequest(pydantic.BaseModel):
+    """Request body for changing account password."""
+
+    old_password: str = pydantic.Field(
+        ...,
+        min_length=8,
+        max_length=64,
+        description="Current password for verification",
+        examples=["OldPassword123"],
+    )
+    new_password: str = pydantic.Field(
+        ...,
+        min_length=8,
+        max_length=64,
+        description="New secure password (min 8 chars, must include uppercase, lowercase, and digit)",
+        examples=["NewSecurePass456"],
+    )
+
+    @pydantic.field_validator("new_password")
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters")
+
+        if not any(c.isupper() for c in v):
+            raise ValueError("Password must contain uppercase letter")
+
+        if not any(c.islower() for c in v):
+            raise ValueError("Password must contain lowercase letter")
+
+        if not any(c.isdigit() for c in v):
+            raise ValueError("Password must contain digit")
+
+        return v
+
+    model_config = pydantic.ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "old_password": "OldPassword123",
+                    "new_password": "NewSecurePass456",
+                }
+            ]
+        }
+    )
+
+
+class ChangePasswordResponse(pydantic.BaseModel):
+    """Response from successful password change."""
+
+    message: str = pydantic.Field(
+        default="Password changed successfully", description="Success message"
+    )
+
+    model_config = pydantic.ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "message": "Password changed successfully",
+                }
+            ]
+        }
+    )

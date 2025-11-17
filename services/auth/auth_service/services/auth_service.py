@@ -101,8 +101,69 @@ class AuthService:
         )
         return result.scalar_one_or_none()
 
+    async def update_account_name(
+        self,
+        session: AsyncSession,
+        account_id: int,
+        name: str,
+    ) -> models.Account:
+        """Update account name."""
+
+        if not name or not name.strip():
+            raise ValueError("Name cannot be empty")
+
+        if len(name) > 255:
+            raise ValueError("Name is too long (max 255 characters)")
+
+        result = await session.execute(
+            select(models.Account).where(models.Account.id == account_id)
+        )
+        account = result.scalar_one_or_none()
+
+        if not account:
+            raise ValueError("Account not found")
+
+        account.name = name.strip()
+        await session.commit()
+        await session.refresh(account)
+
+        return account
+
+    async def change_password(
+        self,
+        session: AsyncSession,
+        account_id: int,
+        old_password: str,
+        new_password: str,
+    ) -> models.Account:
+        """Change account password."""
+
+        if not self._validate_password(new_password):
+            raise ValueError("New password does not meet complexity requirements")
+
+        result = await session.execute(
+            select(models.Account).where(models.Account.id == account_id)
+        )
+        account = result.scalar_one_or_none()
+
+        if not account:
+            raise ValueError("Account not found")
+
+        if not bcrypt.checkpw(old_password.encode(), account.password_hash.encode()):
+            raise ValueError("Current password is incorrect")
+
+        new_password_hash = bcrypt.hashpw(
+            new_password.encode(), bcrypt.gensalt(rounds=config.settings.BCRYPT_ROUNDS)
+        ).decode()
+
+        account.password_hash = new_password_hash
+        await session.commit()
+        await session.refresh(account)
+
+        return account
+
     def _validate_password(self, password: str) -> bool:
-        """Validate password strength."""
+        """Validate password length."""
         if len(password) < 8 or len(password) > 64:
             return False
         return True
@@ -196,6 +257,19 @@ class AuthService:
         Returns: (full_key, api_key_record)
         WARNING: full_key is shown only once!
         """
+
+        if name:
+            result = await session.execute(
+                select(models.ApiKey).where(
+                    models.ApiKey.project_id == project_id,
+                    models.ApiKey.name == name,
+                    models.ApiKey.status == "active",
+                )
+            )
+            if result.scalar_one_or_none():
+                raise ValueError(
+                    f"API key with name '{name}' already exists for this project"
+                )
 
         random_part = secrets.token_urlsafe(32)
         full_key = f"ledger_{random_part}"

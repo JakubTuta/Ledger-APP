@@ -18,6 +18,8 @@ services:
     volumes:
       - ledger-postgres-data:/var/lib/postgresql/data
       - ./database_schema/init_auth_db.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
     deploy:
       resources:
         limits:
@@ -53,6 +55,8 @@ services:
     volumes:
       - ledger-postgres-logs-data:/var/lib/postgresql/data
       - ./database_schema/init_logs_db.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5433:5432"
     deploy:
       resources:
         limits:
@@ -75,6 +79,8 @@ services:
     env_file: .env
     volumes:
       - ledger-redis-data:/data
+    ports:
+      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
