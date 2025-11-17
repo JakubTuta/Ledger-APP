@@ -152,6 +152,18 @@ class Settings(pydantic_settings.BaseSettings):
         description="Number of storage workers",
     )
 
+    PARTITION_MONTHS_AHEAD: int = pydantic.Field(
+        default=6,
+        ge=1,
+        le=24,
+        description="Number of months ahead to create partitions",
+    )
+
+    ENABLE_PARTITION_SCHEDULER: bool = pydantic.Field(
+        default=True,
+        description="Enable automatic partition creation scheduler",
+    )
+
     MAX_LOG_MESSAGE_LENGTH: int = pydantic.Field(
         default=10_000,
         ge=1_000,

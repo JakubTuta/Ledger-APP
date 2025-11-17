@@ -10,6 +10,8 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 import ingestion_service.config as config
 import ingestion_service.database as database
 import ingestion_service.models as models
+import ingestion_service.services.partition_manager as partition_manager
+import ingestion_service.services.partition_scheduler as partition_scheduler
 import ingestion_service.services.queue_service as queue_service
 import ingestion_service.services.redis_client as redis_client
 
@@ -33,12 +35,14 @@ class StorageWorker:
         async with database.get_session() as session:
             try:
                 log_records = []
+                required_partitions = set()
+
                 for log_data in logs:
+                    timestamp = datetime.datetime.fromisoformat(log_data["timestamp"])
+
                     log_record = {
                         "project_id": log_data["project_id"],
-                        "timestamp": datetime.datetime.fromisoformat(
-                            log_data["timestamp"]
-                        ),
+                        "timestamp": timestamp,
                         "ingested_at": datetime.datetime.fromisoformat(
                             log_data["ingested_at"]
                         ),
@@ -58,6 +62,12 @@ class StorageWorker:
                         "error_fingerprint": log_data.get("error_fingerprint"),
                     }
                     log_records.append(log_record)
+                    required_partitions.add(timestamp.date())
+
+                for partition_date in required_partitions:
+                    await partition_manager.ensure_partition_for_date(
+                        session, "logs", partition_date
+                    )
 
                 await session.execute(insert(models.Log).values(log_records))
 
@@ -187,6 +197,24 @@ async def main():
     database.get_engine()
     logger.info("Database engine initialized")
 
+    try:
+        async with database.get_session() as session:
+            await partition_manager.ensure_all_partitions(
+                session,
+                months_ahead=config.settings.PARTITION_MONTHS_AHEAD,
+            )
+        logger.info("Partition management complete")
+    except Exception as e:
+        logger.error(f"Failed to ensure partitions exist: {e}", exc_info=True)
+        logger.warning("Worker will continue, but may fail if partitions are missing")
+
+    if config.settings.ENABLE_PARTITION_SCHEDULER:
+        scheduler = partition_scheduler.get_partition_scheduler()
+        scheduler.start()
+        logger.info("Partition scheduler started")
+    else:
+        logger.info("Partition scheduler disabled by configuration")
+
     redis_client.get_redis_client()
     logger.info("Redis client initialized")
 
@@ -207,6 +235,12 @@ async def main():
 
 async def shutdown(manager: WorkerManager):
     await manager.stop()
+
+    if config.settings.ENABLE_PARTITION_SCHEDULER:
+        scheduler = partition_scheduler.get_partition_scheduler()
+        scheduler.stop()
+        logger.info("Partition scheduler stopped")
+
     await redis_client.close_redis()
     await database.close_db()
     logger.info("Shutdown complete")
