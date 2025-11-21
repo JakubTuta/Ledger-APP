@@ -121,6 +121,20 @@ class Settings(pydantic_settings.BaseSettings):
     def INGESTION_SERVICE_URL(self) -> str:
         return f"{self.INGESTION_SERVICE_HOST}:{self.INGESTION_GRPC_PORT}"
 
+    QUERY_SERVICE_HOST: str = pydantic.Field(
+        default="localhost",
+        description="Query Service host",
+    )
+
+    QUERY_SERVICE_PORT: int = pydantic.Field(
+        default=50053,
+        description="Query Service gRPC port",
+    )
+
+    @property
+    def QUERY_SERVICE_URL(self) -> str:
+        return f"{self.QUERY_SERVICE_HOST}:{self.QUERY_SERVICE_PORT}"
+
     GRPC_POOL_SIZE: int = pydantic.Field(
         default=10,
         ge=1,

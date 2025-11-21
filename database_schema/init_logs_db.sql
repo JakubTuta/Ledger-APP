@@ -184,7 +184,67 @@ ALTER TABLE error_groups ADD CONSTRAINT check_error_status
 CHECK (status IN ('unresolved', 'resolved', 'ignored', 'muted'));
 
 -- ============================================
--- 3. INGESTION METRICS (Performance Monitoring)
+-- 3. AGGREGATED METRICS (Hourly Analytics)
+-- ============================================
+-- Pre-aggregated metrics for exceptions and endpoint monitoring
+-- Enables fast dashboard queries without scanning full logs table
+
+CREATE TABLE aggregated_metrics (
+    id BIGSERIAL PRIMARY KEY,
+    project_id BIGINT NOT NULL,
+
+    -- Time bucket
+    date VARCHAR(8) NOT NULL,  -- YYYYMMDD format
+    hour SMALLINT NOT NULL,  -- 0-23
+
+    -- Metric type
+    metric_type VARCHAR(20) NOT NULL,  -- exception, endpoint
+
+    -- Endpoint identification (NULL for exceptions)
+    endpoint_method VARCHAR(10),  -- GET, POST, PUT, DELETE, etc.
+    endpoint_path VARCHAR(500),  -- /api/users/{id}
+
+    -- Counts
+    log_count INTEGER DEFAULT 0 NOT NULL,
+    error_count INTEGER DEFAULT 0 NOT NULL,  -- 4xx+5xx for endpoints, all for exceptions
+
+    -- Performance metrics (endpoint only)
+    avg_duration_ms FLOAT,
+    min_duration_ms INTEGER,
+    max_duration_ms INTEGER,
+    p95_duration_ms INTEGER,
+    p99_duration_ms INTEGER,
+
+    -- Additional metadata
+    extra_metadata JSONB,
+
+    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+);
+
+-- Composite index for fast lookups by project, date, and type
+CREATE INDEX idx_aggregated_metrics_lookup
+ON aggregated_metrics(project_id, date, metric_type);
+
+-- Partial index for endpoint queries
+CREATE INDEX idx_aggregated_metrics_endpoint
+ON aggregated_metrics(project_id, date, endpoint_path)
+WHERE metric_type = 'endpoint';
+
+-- Unique constraint for UPSERT operations
+CREATE UNIQUE INDEX uq_aggregated_metrics
+ON aggregated_metrics(project_id, date, hour, metric_type,
+    COALESCE(endpoint_method, ''), COALESCE(endpoint_path, ''));
+
+-- Constraints
+ALTER TABLE aggregated_metrics ADD CONSTRAINT check_metric_type
+CHECK (metric_type IN ('exception', 'endpoint'));
+
+ALTER TABLE aggregated_metrics ADD CONSTRAINT check_hour_range
+CHECK (hour >= 0 AND hour <= 23);
+
+-- ============================================
+-- 4. INGESTION METRICS (Performance Monitoring)
 -- ============================================
 -- Tracks ingestion service performance over time
 

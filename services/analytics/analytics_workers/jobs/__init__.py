@@ -1,3 +1,4 @@
+from analytics_workers.jobs.aggregated_metrics import aggregate_hourly_metrics
 from analytics_workers.jobs.error_rates import aggregate_error_rates
 from analytics_workers.jobs.log_volumes import aggregate_log_volumes
 from analytics_workers.jobs.top_errors import compute_top_errors
@@ -8,4 +9,5 @@ __all__ = [
     "aggregate_log_volumes",
     "compute_top_errors",
     "generate_usage_stats",
+    "aggregate_hourly_metrics",
 ]

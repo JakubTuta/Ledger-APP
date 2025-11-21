@@ -7,6 +7,7 @@ import grpc
 from gateway_service import config
 from gateway_service.proto import auth_pb2_grpc
 from gateway_service.proto import ingestion_pb2_grpc
+from gateway_service.proto import query_pb2_grpc
 
 logger = logging.getLogger(__name__)
 
@@ -140,6 +141,25 @@ class GRPCPoolManager:
         """
         try:
             stub = self.get_stub("ingestion", ingestion_pb2_grpc.IngestionServiceStub)
+            yield stub
+        except grpc.RpcError as e:
+            logger.error(f"gRPC error: {e.code()} - {e.details()}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error: {e}", exc_info=True)
+            raise
+
+    @contextlib.asynccontextmanager
+    async def get_query_stub(self):
+        """
+        Context manager for Query Service stub.
+
+        Usage:
+            async with grpc_pool.get_query_stub() as stub:
+                response = await stub.GetLog(request)
+        """
+        try:
+            stub = self.get_stub("query", query_pb2_grpc.QueryServiceStub)
             yield stub
         except grpc.RpcError as e:
             logger.error(f"gRPC error: {e.code()} - {e.details()}")

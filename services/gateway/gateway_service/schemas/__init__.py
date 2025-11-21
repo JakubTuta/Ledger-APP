@@ -35,6 +35,11 @@ from gateway_service.schemas.projects import (
     ProjectQuotaResponse,
     ProjectResponse,
 )
+from gateway_service.schemas.query import (
+    AggregatedMetricDataResponse,
+    AggregatedMetricsResponse,
+    LogEntryResponse,
+)
 from gateway_service.schemas.settings import (
     Constraints,
     Features,
@@ -84,4 +89,8 @@ __all__ = [
     "BatchLogRequest",
     "IngestResponse",
     "QueueDepthResponse",
+    # Query schemas
+    "LogEntryResponse",
+    "AggregatedMetricDataResponse",
+    "AggregatedMetricsResponse",
 ]

@@ -6,6 +6,7 @@ import grpc
 import query_service.proto.query_pb2 as query_pb2
 import query_service.proto.query_pb2_grpc as query_pb2_grpc
 import query_service.schemas as schemas
+import query_service.services.aggregated_metrics as aggregated_metrics_service
 import query_service.services.log_query as log_query
 import query_service.services.metrics as metrics_service
 
@@ -331,4 +332,69 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
         except Exception as e:
             await context.abort(
                 grpc.StatusCode.INTERNAL, f"Get usage stats failed: {str(e)}"
+            )
+
+    async def GetAggregatedMetrics(
+        self,
+        request: query_pb2.GetAggregatedMetricsRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> query_pb2.GetAggregatedMetricsResponse:
+        try:
+            period_from = None
+            period_to = None
+
+            if request.period_from:
+                period_from = datetime.date.fromisoformat(request.period_from)
+            if request.period_to:
+                period_to = datetime.date.fromisoformat(request.period_to)
+
+            result = await aggregated_metrics_service.get_aggregated_metrics(
+                project_id=request.project_id,
+                metric_type=request.metric_type,
+                period=request.period if request.period else None,
+                period_from=period_from,
+                period_to=period_to,
+            )
+
+            start_date, end_date = aggregated_metrics_service._parse_period(
+                period=request.period if request.period else None,
+                period_from=period_from,
+                period_to=period_to,
+            )
+
+            is_single_day = start_date == end_date
+            granularity = "hourly" if is_single_day else "daily"
+
+            data_entries = [
+                query_pb2.AggregatedMetricData(
+                    date=item.date,
+                    hour=item.hour if item.hour is not None else 0,
+                    endpoint_method=item.endpoint_method or "",
+                    endpoint_path=item.endpoint_path or "",
+                    log_count=item.log_count,
+                    error_count=item.error_count,
+                    avg_duration_ms=item.avg_duration_ms or 0.0,
+                    min_duration_ms=item.min_duration_ms or 0,
+                    max_duration_ms=item.max_duration_ms or 0,
+                    p95_duration_ms=item.p95_duration_ms or 0,
+                    p99_duration_ms=item.p99_duration_ms or 0,
+                )
+                for item in result
+            ]
+
+            return query_pb2.GetAggregatedMetricsResponse(
+                project_id=request.project_id,
+                metric_type=request.metric_type,
+                granularity=granularity,
+                start_date=start_date.strftime("%Y%m%d"),
+                end_date=end_date.strftime("%Y%m%d"),
+                data=data_entries,
+            )
+
+        except ValueError as e:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
+
+        except Exception as e:
+            await context.abort(
+                grpc.StatusCode.INTERNAL, f"Get aggregated metrics failed: {str(e)}"
             )

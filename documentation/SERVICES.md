@@ -183,8 +183,11 @@ Helps you find logs when you need them. Whether you want "all errors from the la
 - Log volume by level
 - Top errors by occurrence
 - Daily usage statistics
+- Aggregated hourly/daily metrics for exceptions and endpoints
 
-These are computed by Analytics Workers and cached in Redis. Queries are instant (under 5ms) because we already did the work.
+The first four are computed by Analytics Workers and cached in Redis. Queries are instant (under 5ms) because we already did the work.
+
+The aggregated metrics are pre-computed hourly and stored in PostgreSQL for efficient querying. They provide automatic granularity switching: hourly data for single-day queries, daily summaries for longer periods.
 
 **Raw Logs (On-Demand):**
 
@@ -277,6 +280,10 @@ While you're not looking, these workers crunch numbers so your dashboard is alwa
 - Calculate daily usage statistics for the last 30 days
 - Track quota consumption per project
 - Help you see usage trends
+- Aggregate hourly metrics for exceptions and endpoints
+  - Exception counts and error rates
+  - Endpoint performance: request counts, error rates, latency percentiles (p95, p99)
+  - Stored in PostgreSQL for fast time-range queries
 
 ### Why Pre-Compute?
 

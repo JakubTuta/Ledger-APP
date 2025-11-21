@@ -103,6 +103,16 @@ def setup_jobs() -> None:
         replace_existing=True,
     )
 
+    scheduler.add_job(
+        jobs.aggregate_hourly_metrics,
+        trigger=interval_trigger.IntervalTrigger(
+            minutes=settings.AGGREGATED_METRICS_INTERVAL_MINUTES
+        ),
+        id="aggregate_hourly_metrics",
+        name="Aggregate Hourly Metrics",
+        replace_existing=True,
+    )
+
     logger.info(f"Registered {len(scheduler.get_jobs())} scheduled jobs")
 
 

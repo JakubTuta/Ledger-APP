@@ -192,3 +192,106 @@ class ErrorGroup(Base):
             f"<ErrorGroup(id={self.id}, project_id={self.project_id}, "
             f"error_type={self.error_type}, status={self.status})>"
         )
+
+
+class AggregatedMetric(Base):
+    __tablename__ = "aggregated_metrics"
+
+    id: orm.Mapped[int] = orm.mapped_column(
+        sqlalchemy.BigInteger, primary_key=True, autoincrement=True
+    )
+    project_id: orm.Mapped[int] = orm.mapped_column(
+        sqlalchemy.BigInteger, nullable=False, index=True
+    )
+
+    date: orm.Mapped[str] = orm.mapped_column(
+        sqlalchemy.VARCHAR(8), nullable=False
+    )
+    hour: orm.Mapped[int] = orm.mapped_column(sqlalchemy.SmallInteger, nullable=False)
+    metric_type: orm.Mapped[str] = orm.mapped_column(
+        sqlalchemy.VARCHAR(20), nullable=False
+    )
+
+    endpoint_method: orm.Mapped[str | None] = orm.mapped_column(
+        sqlalchemy.VARCHAR(10), nullable=True
+    )
+    endpoint_path: orm.Mapped[str | None] = orm.mapped_column(
+        sqlalchemy.VARCHAR(500), nullable=True
+    )
+
+    log_count: orm.Mapped[int] = orm.mapped_column(
+        sqlalchemy.Integer, nullable=False, default=0
+    )
+    error_count: orm.Mapped[int] = orm.mapped_column(
+        sqlalchemy.Integer, nullable=False, default=0
+    )
+
+    avg_duration_ms: orm.Mapped[float | None] = orm.mapped_column(
+        sqlalchemy.Float, nullable=True
+    )
+    min_duration_ms: orm.Mapped[int | None] = orm.mapped_column(
+        sqlalchemy.Integer, nullable=True
+    )
+    max_duration_ms: orm.Mapped[int | None] = orm.mapped_column(
+        sqlalchemy.Integer, nullable=True
+    )
+    p95_duration_ms: orm.Mapped[int | None] = orm.mapped_column(
+        sqlalchemy.Integer, nullable=True
+    )
+    p99_duration_ms: orm.Mapped[int | None] = orm.mapped_column(
+        sqlalchemy.Integer, nullable=True
+    )
+
+    extra_metadata: orm.Mapped[dict | None] = orm.mapped_column(
+        postgresql.JSONB, nullable=True
+    )
+
+    created_at: orm.Mapped[datetime.datetime] = orm.mapped_column(
+        sqlalchemy.DateTime(timezone=True),
+        default=datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+    updated_at: orm.Mapped[datetime.datetime] = orm.mapped_column(
+        sqlalchemy.DateTime(timezone=True),
+        default=datetime.datetime.now(datetime.timezone.utc),
+        onupdate=datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        sqlalchemy.Index(
+            "idx_aggregated_metrics_lookup",
+            "project_id",
+            "date",
+            "metric_type",
+        ),
+        sqlalchemy.Index(
+            "idx_aggregated_metrics_endpoint",
+            "project_id",
+            "date",
+            "endpoint_path",
+            postgresql_where=sqlalchemy.text("metric_type = 'endpoint'"),
+        ),
+        sqlalchemy.UniqueConstraint(
+            "project_id",
+            "date",
+            "hour",
+            "metric_type",
+            "endpoint_method",
+            "endpoint_path",
+            name="uq_aggregated_metrics",
+        ),
+        sqlalchemy.CheckConstraint(
+            "metric_type IN ('exception', 'endpoint')",
+            name="check_metric_type",
+        ),
+        sqlalchemy.CheckConstraint(
+            "hour >= 0 AND hour <= 23", name="check_hour_range"
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<AggregatedMetric(id={self.id}, project_id={self.project_id}, "
+            f"date={self.date}, hour={self.hour}, type={self.metric_type})>"
+        )

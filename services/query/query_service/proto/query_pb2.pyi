@@ -263,3 +263,59 @@ class GetUsageStatsResponse(_message.Message):
     project_id: int
     usage: _containers.RepeatedCompositeFieldContainer[UsageStatsData]
     def __init__(self, project_id: _Optional[int] = ..., usage: _Optional[_Iterable[_Union[UsageStatsData, _Mapping]]] = ...) -> None: ...
+
+class GetAggregatedMetricsRequest(_message.Message):
+    __slots__ = ("project_id", "metric_type", "period", "period_from", "period_to")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    METRIC_TYPE_FIELD_NUMBER: _ClassVar[int]
+    PERIOD_FIELD_NUMBER: _ClassVar[int]
+    PERIOD_FROM_FIELD_NUMBER: _ClassVar[int]
+    PERIOD_TO_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    metric_type: str
+    period: str
+    period_from: str
+    period_to: str
+    def __init__(self, project_id: _Optional[int] = ..., metric_type: _Optional[str] = ..., period: _Optional[str] = ..., period_from: _Optional[str] = ..., period_to: _Optional[str] = ...) -> None: ...
+
+class AggregatedMetricData(_message.Message):
+    __slots__ = ("date", "hour", "endpoint_method", "endpoint_path", "log_count", "error_count", "avg_duration_ms", "min_duration_ms", "max_duration_ms", "p95_duration_ms", "p99_duration_ms")
+    DATE_FIELD_NUMBER: _ClassVar[int]
+    HOUR_FIELD_NUMBER: _ClassVar[int]
+    ENDPOINT_METHOD_FIELD_NUMBER: _ClassVar[int]
+    ENDPOINT_PATH_FIELD_NUMBER: _ClassVar[int]
+    LOG_COUNT_FIELD_NUMBER: _ClassVar[int]
+    ERROR_COUNT_FIELD_NUMBER: _ClassVar[int]
+    AVG_DURATION_MS_FIELD_NUMBER: _ClassVar[int]
+    MIN_DURATION_MS_FIELD_NUMBER: _ClassVar[int]
+    MAX_DURATION_MS_FIELD_NUMBER: _ClassVar[int]
+    P95_DURATION_MS_FIELD_NUMBER: _ClassVar[int]
+    P99_DURATION_MS_FIELD_NUMBER: _ClassVar[int]
+    date: str
+    hour: int
+    endpoint_method: str
+    endpoint_path: str
+    log_count: int
+    error_count: int
+    avg_duration_ms: float
+    min_duration_ms: int
+    max_duration_ms: int
+    p95_duration_ms: int
+    p99_duration_ms: int
+    def __init__(self, date: _Optional[str] = ..., hour: _Optional[int] = ..., endpoint_method: _Optional[str] = ..., endpoint_path: _Optional[str] = ..., log_count: _Optional[int] = ..., error_count: _Optional[int] = ..., avg_duration_ms: _Optional[float] = ..., min_duration_ms: _Optional[int] = ..., max_duration_ms: _Optional[int] = ..., p95_duration_ms: _Optional[int] = ..., p99_duration_ms: _Optional[int] = ...) -> None: ...
+
+class GetAggregatedMetricsResponse(_message.Message):
+    __slots__ = ("project_id", "metric_type", "granularity", "start_date", "end_date", "data")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    METRIC_TYPE_FIELD_NUMBER: _ClassVar[int]
+    GRANULARITY_FIELD_NUMBER: _ClassVar[int]
+    START_DATE_FIELD_NUMBER: _ClassVar[int]
+    END_DATE_FIELD_NUMBER: _ClassVar[int]
+    DATA_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    metric_type: str
+    granularity: str
+    start_date: str
+    end_date: str
+    data: _containers.RepeatedCompositeFieldContainer[AggregatedMetricData]
+    def __init__(self, project_id: _Optional[int] = ..., metric_type: _Optional[str] = ..., granularity: _Optional[str] = ..., start_date: _Optional[str] = ..., end_date: _Optional[str] = ..., data: _Optional[_Iterable[_Union[AggregatedMetricData, _Mapping]]] = ...) -> None: ...

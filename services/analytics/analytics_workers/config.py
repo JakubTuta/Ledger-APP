@@ -174,6 +174,13 @@ class Settings(pydantic_settings.BaseSettings):
         description="Usage stats generation job interval (minutes)",
     )
 
+    AGGREGATED_METRICS_INTERVAL_MINUTES: int = pydantic.Field(
+        default=60,
+        ge=1,
+        le=120,
+        description="Aggregated metrics job interval (minutes)",
+    )
+
     ERROR_RATE_TTL: int = pydantic.Field(
         default=600,
         ge=300,

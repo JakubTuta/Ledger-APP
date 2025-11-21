@@ -139,3 +139,26 @@ class UsageStatsData(pydantic.BaseModel):
 class UsageStatsResponse(pydantic.BaseModel):
     project_id: int
     usage: list[UsageStatsData]
+
+
+class AggregatedMetricData(pydantic.BaseModel):
+    date: str
+    hour: int | None = None
+    endpoint_method: str | None = None
+    endpoint_path: str | None = None
+    log_count: int
+    error_count: int
+    avg_duration_ms: float | None = None
+    min_duration_ms: int | None = None
+    max_duration_ms: int | None = None
+    p95_duration_ms: int | None = None
+    p99_duration_ms: int | None = None
+
+
+class AggregatedMetricsResponse(pydantic.BaseModel):
+    project_id: int
+    metric_type: str
+    granularity: typing.Literal["hourly", "daily"]
+    start_date: str
+    end_date: str
+    data: list[AggregatedMetricData]

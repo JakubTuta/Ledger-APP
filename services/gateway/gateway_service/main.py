@@ -12,6 +12,7 @@ from gateway_service.routes import (
     dashboard_routes,
     ingestion_routes,
     project_routes,
+    query_routes,
     settings_routes,
 )
 from gateway_service.services import grpc_pool, redis_client
@@ -49,6 +50,12 @@ class GatewayApp:
         await self.grpc_pool.add_service(
             service_name="ingestion",
             address=config.settings.INGESTION_SERVICE_URL,
+            pool_size=10,
+        )
+
+        await self.grpc_pool.add_service(
+            service_name="query",
+            address=config.settings.QUERY_SERVICE_URL,
             pool_size=10,
         )
 
@@ -164,6 +171,10 @@ def custom_openapi():
         {
             "name": "Ingestion",
             "description": "High-throughput log ingestion endpoints (single and batch)",
+        },
+        {
+            "name": "Query",
+            "description": "Log retrieval and analytics query endpoints",
         },
         {
             "name": "Dashboard",
@@ -294,6 +305,7 @@ include_router(project_routes.router, prefix="/api/v1")
 include_router(api_key_routes.router, prefix="/api/v1")
 include_router(dashboard_routes.router, prefix="/api/v1")
 include_router(ingestion_routes.router, prefix="/api/v1")
+include_router(query_routes.router, prefix="/api/v1")
 include_router(settings_routes.router, prefix="/api/v1")
 
 

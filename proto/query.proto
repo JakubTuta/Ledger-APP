@@ -10,6 +10,7 @@ service QueryService {
     rpc GetLogVolume(GetLogVolumeRequest) returns (GetLogVolumeResponse);
     rpc GetTopErrors(GetTopErrorsRequest) returns (GetTopErrorsResponse);
     rpc GetUsageStats(GetUsageStatsRequest) returns (GetUsageStatsResponse);
+    rpc GetAggregatedMetrics(GetAggregatedMetricsRequest) returns (GetAggregatedMetricsResponse);
 }
 
 message QueryLogsRequest {
@@ -158,4 +159,35 @@ message UsageStatsData {
 message GetUsageStatsResponse {
     int64 project_id = 1;
     repeated UsageStatsData usage = 2;
+}
+
+message GetAggregatedMetricsRequest {
+    int64 project_id = 1;
+    string metric_type = 2;
+    optional string period = 3;
+    optional string period_from = 4;
+    optional string period_to = 5;
+}
+
+message AggregatedMetricData {
+    string date = 1;
+    optional int32 hour = 2;
+    optional string endpoint_method = 3;
+    optional string endpoint_path = 4;
+    int32 log_count = 5;
+    int32 error_count = 6;
+    optional float avg_duration_ms = 7;
+    optional int32 min_duration_ms = 8;
+    optional int32 max_duration_ms = 9;
+    optional int32 p95_duration_ms = 10;
+    optional int32 p99_duration_ms = 11;
+}
+
+message GetAggregatedMetricsResponse {
+    int64 project_id = 1;
+    string metric_type = 2;
+    string granularity = 3;
+    string start_date = 4;
+    string end_date = 5;
+    repeated AggregatedMetricData data = 6;
 }

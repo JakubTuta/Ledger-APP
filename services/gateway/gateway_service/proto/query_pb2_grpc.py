@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from . import query_pb2 as query__pb2
+import gateway_service.proto.query_pb2 as query__pb2
 
 GRPC_GENERATED_VERSION = '1.75.1'
 GRPC_VERSION = grpc.__version__
@@ -69,6 +69,11 @@ class QueryServiceStub(object):
                 request_serializer=query__pb2.GetUsageStatsRequest.SerializeToString,
                 response_deserializer=query__pb2.GetUsageStatsResponse.FromString,
                 _registered_method=True)
+        self.GetAggregatedMetrics = channel.unary_unary(
+                '/query.QueryService/GetAggregatedMetrics',
+                request_serializer=query__pb2.GetAggregatedMetricsRequest.SerializeToString,
+                response_deserializer=query__pb2.GetAggregatedMetricsResponse.FromString,
+                _registered_method=True)
 
 
 class QueryServiceServicer(object):
@@ -116,6 +121,12 @@ class QueryServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetAggregatedMetrics(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_QueryServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -153,6 +164,11 @@ def add_QueryServiceServicer_to_server(servicer, server):
                     servicer.GetUsageStats,
                     request_deserializer=query__pb2.GetUsageStatsRequest.FromString,
                     response_serializer=query__pb2.GetUsageStatsResponse.SerializeToString,
+            ),
+            'GetAggregatedMetrics': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetAggregatedMetrics,
+                    request_deserializer=query__pb2.GetAggregatedMetricsRequest.FromString,
+                    response_serializer=query__pb2.GetAggregatedMetricsResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -344,6 +360,33 @@ class QueryService(object):
             '/query.QueryService/GetUsageStats',
             query__pb2.GetUsageStatsRequest.SerializeToString,
             query__pb2.GetUsageStatsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetAggregatedMetrics(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/query.QueryService/GetAggregatedMetrics',
+            query__pb2.GetAggregatedMetricsRequest.SerializeToString,
+            query__pb2.GetAggregatedMetricsResponse.FromString,
             options,
             channel_credentials,
             insecure,
