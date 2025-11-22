@@ -2,7 +2,6 @@ import asyncio
 import logging
 
 import grpc
-
 import ingestion_service.config as config
 import ingestion_service.database as database
 import ingestion_service.grpc.servicers as servicers
@@ -16,14 +15,10 @@ logger = logging.getLogger(__name__)
 
 
 async def serve():
-    logger.info("Ingestion Service starting up...")
-
     redis = redis_client.get_redis_client()
     await redis.ping()
-    logger.info("Redis connection initialized")
 
     db_engine = database.get_engine()
-    logger.info("Database engine initialized")
 
     server = grpc.aio.server(
         options=[
@@ -40,30 +35,21 @@ async def serve():
         servicers.IngestionServicer(), server
     )
 
-    listen_addr = f"{config.settings.INGESTION_HOST}:{config.settings.INGESTION_GRPC_PORT}"
+    listen_addr = (
+        f"{config.settings.INGESTION_HOST}:{config.settings.INGESTION_GRPC_PORT}"
+    )
     server.add_insecure_port(listen_addr)
 
-    logger.info(f"Starting gRPC server on {listen_addr}")
     await server.start()
-    logger.info(f"Ingestion Service gRPC server listening on {listen_addr}")
 
     try:
         await server.wait_for_termination()
-    except KeyboardInterrupt:
-        logger.info("Received shutdown signal")
     finally:
-        logger.info("Shutting down...")
-
         await server.stop(grace=5)
-        logger.info("gRPC server stopped")
 
         await redis_client.close_redis()
-        logger.info("Redis connection closed")
 
         await database.close_db()
-        logger.info("Database connections closed")
-
-        logger.info("Shutdown complete")
 
 
 if __name__ == "__main__":

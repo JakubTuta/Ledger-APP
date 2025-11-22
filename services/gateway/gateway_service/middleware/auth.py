@@ -51,10 +51,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
             request.state.project_id = auth_data.get("project_id")
             request.state.account_id = auth_data["account_id"]
-            request.state.rate_limits = auth_data.get("rate_limits", {
-                "per_minute": auth_data.get("rate_limit_per_minute", 1000),
-                "per_hour": auth_data.get("rate_limit_per_hour", 50000),
-            })
+            request.state.rate_limits = auth_data.get(
+                "rate_limits",
+                {
+                    "per_minute": auth_data.get("rate_limit_per_minute", 1000),
+                    "per_hour": auth_data.get("rate_limit_per_hour", 50000),
+                },
+            )
             request.state.daily_quota = auth_data.get("daily_quota", 1000000)
 
             return await call_next(request)
@@ -137,7 +140,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 )
 
             import ast
-            session_data = ast.literal_eval(session_data_str.decode() if isinstance(session_data_str, bytes) else session_data_str)
+
+            session_data = ast.literal_eval(
+                session_data_str.decode()
+                if isinstance(session_data_str, bytes)
+                else session_data_str
+            )
 
             return {
                 "account_id": session_data["account_id"],
@@ -158,13 +166,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         if cached_data:
             self._cache_hits += 1
-            logger.debug(
-                f"Cache HIT for API key (hit rate: {self._get_hit_rate():.1f}%)"
-            )
             return cached_data
 
         self._cache_misses += 1
-        logger.debug(f"Cache MISS for API key (hit rate: {self._get_hit_rate():.1f}%)")
 
         auth_data = await self._fetch_from_auth_service(api_key)
 

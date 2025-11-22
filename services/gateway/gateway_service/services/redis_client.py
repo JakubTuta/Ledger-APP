@@ -37,9 +37,6 @@ class RedisClient:
             )
 
             await self.client.ping()
-            logger.info(
-                f"Redis connected: {self.url} (pool size: {self.max_connections})"
-            )
 
         except RedisError as e:
             logger.error(f"Failed to connect to Redis: {e}")
@@ -48,7 +45,6 @@ class RedisClient:
     async def close(self):
         if self.client:
             await self.client.close()
-            logger.info("Redis connection closed")
 
     async def ping(self) -> bool:
         try:
@@ -108,8 +104,6 @@ class RedisClient:
             data = json.loads(data_bytes)
 
             if ttl_remaining > 0 and ttl_remaining < 60 and random.random() < 0.1:
-                logger.info(f"Probabilistic refresh triggered (TTL: {ttl_remaining}s)")
-
                 asyncio.create_task(refresh_callback(api_key))
 
             return data

@@ -1,12 +1,11 @@
 import datetime
 import json
 
-import sqlalchemy as sa
-
 import analytics_workers.config as config
 import analytics_workers.database as database
 import analytics_workers.redis_client as redis_client
 import analytics_workers.utils.logging as logging
+import sqlalchemy as sa
 
 logger = logging.get_logger("jobs.log_volumes")
 
@@ -15,11 +14,10 @@ async def aggregate_log_volumes() -> None:
     settings = config.get_settings()
     redis = redis_client.get_redis()
 
-    logger.info("Starting log volume aggregation job")
-
     try:
         async with database.get_logs_session() as session:
-            query = sa.text("""
+            query = sa.text(
+                """
                 SELECT
                     project_id,
                     date_trunc('hour', timestamp) as bucket,
@@ -29,7 +27,8 @@ async def aggregate_log_volumes() -> None:
                 WHERE timestamp > NOW() - INTERVAL '7 days'
                 GROUP BY project_id, bucket, level
                 ORDER BY project_id, bucket DESC
-            """)
+            """
+            )
 
             result = await session.execute(query)
             rows = result.fetchall()
@@ -70,14 +69,6 @@ async def aggregate_log_volumes() -> None:
                     settings.LOG_VOLUME_TTL,
                     cache_value,
                 )
-
-                logger.debug(
-                    f"Cached log volumes for project {project_id}: {len(data)} buckets"
-                )
-
-            logger.info(
-                f"Log volume aggregation completed for {len(by_project)} projects"
-            )
 
     except Exception as e:
         logger.error(f"Log volume aggregation failed: {e}", exc_info=True)

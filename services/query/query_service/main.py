@@ -4,7 +4,6 @@ import logging
 import signal
 
 import grpc
-
 import query_service.config as config
 import query_service.database as database
 import query_service.grpc.servicers as servicers
@@ -19,13 +18,9 @@ logger = logging.getLogger(__name__)
 
 
 async def serve():
-    logger.info("Initializing Query Service...")
-
     await database.init_db()
-    logger.info("Database initialized")
 
     await redis_client.init_redis()
-    logger.info("Redis initialized")
 
     server = grpc.aio.server(
         concurrent.futures.ThreadPoolExecutor(
@@ -54,16 +49,11 @@ async def serve():
     )
 
     await server.start()
-    logger.info(
-        f"Query Service gRPC server started on port {config.settings.GRPC_SERVER_PORT}"
-    )
 
     async def shutdown(sig):
-        logger.info(f"Received signal {sig.name}, shutting down gracefully...")
         await server.stop(grace=5)
         await redis_client.close_redis()
         await database.close_db()
-        logger.info("Cleanup complete")
 
     loop = asyncio.get_event_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):
@@ -72,7 +62,7 @@ async def serve():
     try:
         await server.wait_for_termination()
     except KeyboardInterrupt:
-        logger.info("Keyboard interrupt received")
+        pass
 
 
 def main():

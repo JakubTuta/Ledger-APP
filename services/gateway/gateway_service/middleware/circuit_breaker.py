@@ -75,10 +75,6 @@ class CircuitBreaker:
             async with self._lock:
                 if self.half_open_calls >= self.half_open_max_calls:
                     self._rejected_calls += 1
-                    logger.debug(
-                        f"Circuit breaker HALF_OPEN limit reached for "
-                        f"{self.service_name}"
-                    )
                     raise fastapi.HTTPException(
                         status_code=fastapi.status.HTTP_503_SERVICE_UNAVAILABLE,
                         detail=f"{self.service_name} is recovering, try again",
@@ -120,10 +116,6 @@ class CircuitBreaker:
                     and time.time() - self.last_failure_time >= self.recovery_timeout
                 ):
 
-                    logger.info(
-                        f"Circuit breaker transitioning to HALF_OPEN for "
-                        f"{self.service_name}"
-                    )
                     self.state = CircuitState.HALF_OPEN
                     self.half_open_calls = 0
 
@@ -132,10 +124,6 @@ class CircuitBreaker:
     async def _on_success(self):
         async with self._lock:
             if self.state == CircuitState.HALF_OPEN:
-                logger.info(
-                    f"Circuit breaker transitioning to CLOSED for "
-                    f"{self.service_name}"
-                )
                 self.state = CircuitState.CLOSED
                 self.failure_count = 0
                 self.last_failure_time = None
@@ -207,7 +195,6 @@ class CircuitBreakerMiddleware(BaseHTTPMiddleware):
             recovery_timeout=config.settings.CIRCUIT_BREAKER_RECOVERY_TIMEOUT,
             half_open_max_calls=config.settings.CIRCUIT_BREAKER_HALF_OPEN_MAX_CALLS,
         )
-        logger.info(f"Initialized circuit breaker for {service_name}")
 
     def get_breaker(self, service_name: str) -> CircuitBreaker:
         if service_name not in self.breakers:

@@ -39,13 +39,15 @@ async def check_partition_exists(
         if partition_name in _partition_cache:
             return True
 
-    check_sql = text("""
+    check_sql = text(
+        """
         SELECT EXISTS (
             SELECT 1 FROM pg_tables
             WHERE schemaname = 'public'
             AND tablename = :partition_name
         )
-    """)
+    """
+    )
 
     result = await session.execute(check_sql, {"partition_name": partition_name})
     exists = result.scalar()
@@ -66,10 +68,12 @@ async def create_partition(
     range_start, range_end = _get_partition_range(date)
 
     try:
-        create_partition_sql = text(f"""
+        create_partition_sql = text(
+            f"""
             CREATE TABLE IF NOT EXISTS {partition_name} PARTITION OF {table_name}
             FOR VALUES FROM ('{range_start}') TO ('{range_end}')
-        """)
+        """
+        )
 
         await session.execute(create_partition_sql)
         await session.commit()
@@ -77,10 +81,6 @@ async def create_partition(
         async with _cache_lock:
             _partition_cache.add(partition_name)
 
-        logger.info(
-            f"Created partition: {partition_name} "
-            f"(range: {range_start} to {range_end})"
-        )
         return True
 
     except Exception as e:
@@ -97,9 +97,6 @@ async def ensure_partition_for_date(
     exists = await check_partition_exists(session, table_name, date)
 
     if not exists:
-        logger.info(
-            f"Partition for {table_name} on {date} does not exist, creating..."
-        )
         return await create_partition(session, table_name, date)
 
     return True
@@ -150,7 +147,9 @@ async def ensure_metrics_partitions(
     months_ahead: int = 3,
 ) -> int:
     today = datetime.date.today()
-    return await ensure_partitions_range(session, "ingestion_metrics", today, months_ahead)
+    return await ensure_partitions_range(
+        session, "ingestion_metrics", today, months_ahead
+    )
 
 
 async def ensure_all_partitions(
@@ -159,13 +158,6 @@ async def ensure_all_partitions(
 ) -> dict[str, int]:
     logs_created = await ensure_logs_partitions(session, months_ahead)
     metrics_created = await ensure_metrics_partitions(session, months_ahead)
-
-    logger.info(
-        f"Partition management complete: "
-        f"logs={logs_created} created, "
-        f"metrics={metrics_created} created, "
-        f"covering {months_ahead + 1} months"
-    )
 
     return {
         "logs": logs_created,
@@ -176,4 +168,3 @@ async def ensure_all_partitions(
 def clear_partition_cache() -> None:
     global _partition_cache
     _partition_cache.clear()
-    logger.info("Partition cache cleared")

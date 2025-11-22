@@ -29,15 +29,12 @@ class GatewayApp:
         self.redis_client: redis_client.RedisClient | None = None
 
     async def startup(self):
-        logger.info("Gateway Service starting up...")
-
         self.redis_client = redis_client.RedisClient(
             url=config.settings.REDIS_URL,
             max_connections=50,
             decode_responses=False,
         )
         await self.redis_client.connect()
-        logger.info("Redis connection pool initialized")
 
         self.grpc_pool = grpc_pool.GRPCPoolManager()
 
@@ -59,20 +56,12 @@ class GatewayApp:
             pool_size=10,
         )
 
-        logger.info(f"gRPC pool initialized: {self.grpc_pool.get_stats()}")
-
     async def shutdown(self):
-        logger.info("Gateway Service shutting down...")
-
         if self.grpc_pool:
             await self.grpc_pool.close_all()
-            logger.info("gRPC channels closed")
 
         if self.redis_client:
             await self.redis_client.close()
-            logger.info("Redis connection closed")
-
-        logger.info("Shutdown complete")
 
 
 gateway_app = GatewayApp()

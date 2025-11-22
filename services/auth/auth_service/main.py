@@ -26,8 +26,6 @@ async def serve():
         max_connections=50,
     )
 
-    logger.info("Initializing Auth Service...")
-
     server = grpc.aio.server(
         concurrent.futures.ThreadPoolExecutor(max_workers=10),
         options=[
@@ -51,19 +49,13 @@ async def serve():
     server.add_insecure_port(f"0.0.0.0:{config.settings.AUTH_GRPC_PORT}")
 
     await server.start()
-    logger.info(
-        f"Auth Service gRPC server started on port {config.settings.AUTH_GRPC_PORT}"
-    )
 
     try:
         await server.wait_for_termination()
-    except KeyboardInterrupt:
-        logger.info("Shutting down gracefully...")
     finally:
         await server.stop(grace=5)
         await redis.close()
         await database.close_db()
-        logger.info("Cleanup complete")
 
 
 def main():

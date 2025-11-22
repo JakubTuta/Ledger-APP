@@ -3,8 +3,8 @@ import logging
 import typing
 
 import fastapi
-import grpc
 import gateway_service.schemas as schemas
+import grpc
 from gateway_service import dependencies
 from gateway_service.proto import auth_pb2, auth_pb2_grpc
 from gateway_service.services import grpc_pool, redis_client
@@ -46,18 +46,14 @@ router = fastapi.APIRouter(tags=["Authentication"])
             "description": "Invalid input (email format, password requirements)",
             "content": {
                 "application/json": {
-                    "example": {
-                        "detail": "Password must contain uppercase letter"
-                    }
+                    "example": {"detail": "Password must contain uppercase letter"}
                 }
             },
         },
         409: {
             "description": "Email already registered",
             "content": {
-                "application/json": {
-                    "example": {"detail": "Email already registered"}
-                }
+                "application/json": {"example": {"detail": "Email already registered"}}
             },
         },
         503: {
@@ -179,9 +175,7 @@ async def register_account(
         401: {
             "description": "Invalid email or password",
             "content": {
-                "application/json": {
-                    "example": {"detail": "Invalid email or password"}
-                }
+                "application/json": {"example": {"detail": "Invalid email or password"}}
             },
         },
         503: {
@@ -302,8 +296,6 @@ async def logout_account(
     session_key = f"session:{token}"
     await redis.delete(session_key)
 
-    logger.info("User logged out successfully")
-
 
 @router.get(
     "/accounts/me",
@@ -327,9 +319,7 @@ async def logout_account(
         401: {
             "description": "Not authenticated",
             "content": {
-                "application/json": {
-                    "example": {"detail": "Authentication required"}
-                }
+                "application/json": {"example": {"detail": "Authentication required"}}
             },
         },
         404: {
@@ -340,9 +330,7 @@ async def logout_account(
         },
         503: {
             "description": "Service timeout",
-            "content": {
-                "application/json": {"example": {"detail": "Service timeout"}}
-            },
+            "content": {"application/json": {"example": {"detail": "Service timeout"}}},
         },
     },
 )
@@ -419,24 +407,18 @@ async def get_current_account(
         400: {
             "description": "Invalid input (empty name or too long)",
             "content": {
-                "application/json": {
-                    "example": {"detail": "Name cannot be empty"}
-                }
+                "application/json": {"example": {"detail": "Name cannot be empty"}}
             },
         },
         401: {
             "description": "Not authenticated",
             "content": {
-                "application/json": {
-                    "example": {"detail": "Authentication required"}
-                }
+                "application/json": {"example": {"detail": "Authentication required"}}
             },
         },
         503: {
             "description": "Service timeout",
-            "content": {
-                "application/json": {"example": {"detail": "Service timeout"}}
-            },
+            "content": {"application/json": {"example": {"detail": "Service timeout"}}},
         },
     },
 )
@@ -530,16 +512,12 @@ async def update_account_name(
         401: {
             "description": "Not authenticated",
             "content": {
-                "application/json": {
-                    "example": {"detail": "Authentication required"}
-                }
+                "application/json": {"example": {"detail": "Authentication required"}}
             },
         },
         503: {
             "description": "Service timeout",
-            "content": {
-                "application/json": {"example": {"detail": "Service timeout"}}
-            },
+            "content": {"application/json": {"example": {"detail": "Service timeout"}}},
         },
     },
 )

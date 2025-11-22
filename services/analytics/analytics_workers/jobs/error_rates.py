@@ -1,12 +1,10 @@
-import datetime
 import json
-
-import sqlalchemy as sa
 
 import analytics_workers.config as config
 import analytics_workers.database as database
 import analytics_workers.redis_client as redis_client
 import analytics_workers.utils.logging as logging
+import sqlalchemy as sa
 
 logger = logging.get_logger("jobs.error_rates")
 
@@ -15,11 +13,10 @@ async def aggregate_error_rates() -> None:
     settings = config.get_settings()
     redis = redis_client.get_redis()
 
-    logger.info("Starting error rate aggregation job")
-
     try:
         async with database.get_logs_session() as session:
-            query = sa.text("""
+            query = sa.text(
+                """
                 SELECT
                     project_id,
                     date_trunc('minute', timestamp) +
@@ -30,7 +27,8 @@ async def aggregate_error_rates() -> None:
                 WHERE timestamp > NOW() - INTERVAL '24 hours'
                 GROUP BY project_id, bucket
                 ORDER BY project_id, bucket DESC
-            """)
+            """
+            )
 
             result = await session.execute(query)
             rows = result.fetchall()
@@ -45,11 +43,13 @@ async def aggregate_error_rates() -> None:
                 if project_id not in by_project:
                     by_project[project_id] = []
 
-                by_project[project_id].append({
-                    "timestamp": bucket.isoformat(),
-                    "error_count": error_count,
-                    "critical_count": critical_count,
-                })
+                by_project[project_id].append(
+                    {
+                        "timestamp": bucket.isoformat(),
+                        "error_count": error_count,
+                        "critical_count": critical_count,
+                    }
+                )
 
             for project_id, data in by_project.items():
                 cache_key = f"metrics:error_rate:{project_id}:5min"
@@ -60,14 +60,6 @@ async def aggregate_error_rates() -> None:
                     settings.ERROR_RATE_TTL,
                     cache_value,
                 )
-
-                logger.debug(
-                    f"Cached error rates for project {project_id}: {len(data)} buckets"
-                )
-
-            logger.info(
-                f"Error rate aggregation completed for {len(by_project)} projects"
-            )
 
     except Exception as e:
         logger.error(f"Error rate aggregation failed: {e}", exc_info=True)

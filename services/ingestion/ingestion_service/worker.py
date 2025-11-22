@@ -4,9 +4,6 @@ import logging
 import signal
 import sys
 
-from sqlalchemy import insert, text
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-
 import ingestion_service.config as config
 import ingestion_service.database as database
 import ingestion_service.models as models
@@ -14,6 +11,8 @@ import ingestion_service.services.partition_manager as partition_manager
 import ingestion_service.services.partition_scheduler as partition_scheduler
 import ingestion_service.services.queue_service as queue_service
 import ingestion_service.services.redis_client as redis_client
+from sqlalchemy import insert, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -77,9 +76,6 @@ class StorageWorker:
 
                 await session.commit()
                 self.processed_count += len(logs)
-                logger.info(
-                    f"Worker {self.worker_id}: Processed {len(logs)} logs (total: {self.processed_count})"
-                )
 
             except Exception as e:
                 await session.rollback()
@@ -122,7 +118,6 @@ class StorageWorker:
 
     async def run(self) -> None:
         self.running = True
-        logger.info(f"Worker {self.worker_id} started")
 
         while self.running:
             try:
@@ -150,15 +145,12 @@ class StorageWorker:
                         await asyncio.sleep(1)
 
             except Exception as e:
-                logger.error(f"Worker {self.worker_id}: Error in main loop: {e}", exc_info=True)
+                logger.error(
+                    f"Worker {self.worker_id}: Error in main loop: {e}", exc_info=True
+                )
                 await asyncio.sleep(5)
 
-        logger.info(
-            f"Worker {self.worker_id} stopped (processed: {self.processed_count}, failed: {self.failed_count})"
-        )
-
     async def stop(self) -> None:
-        logger.info(f"Worker {self.worker_id} stopping...")
         self.running = False
 
 
@@ -169,8 +161,6 @@ class WorkerManager:
         self.tasks: list[asyncio.Task] = []
 
     async def start(self) -> None:
-        logger.info(f"Starting {self.worker_count} storage workers...")
-
         for i in range(self.worker_count):
             worker = StorageWorker(worker_id=i)
             self.workers.append(worker)
@@ -178,24 +168,15 @@ class WorkerManager:
             task = asyncio.create_task(worker.run())
             self.tasks.append(task)
 
-        logger.info("All workers started")
-
     async def stop(self) -> None:
-        logger.info("Stopping all workers...")
-
         for worker in self.workers:
             await worker.stop()
 
         await asyncio.gather(*self.tasks, return_exceptions=True)
 
-        logger.info("All workers stopped")
-
 
 async def main():
-    logger.info("Initializing storage worker manager...")
-
     database.get_engine()
-    logger.info("Database engine initialized")
 
     try:
         async with database.get_session() as session:
@@ -203,7 +184,6 @@ async def main():
                 session,
                 months_ahead=config.settings.PARTITION_MONTHS_AHEAD,
             )
-        logger.info("Partition management complete")
     except Exception as e:
         logger.error(f"Failed to ensure partitions exist: {e}", exc_info=True)
         logger.warning("Worker will continue, but may fail if partitions are missing")
@@ -211,17 +191,14 @@ async def main():
     if config.settings.ENABLE_PARTITION_SCHEDULER:
         scheduler = partition_scheduler.get_partition_scheduler()
         scheduler.start()
-        logger.info("Partition scheduler started")
     else:
-        logger.info("Partition scheduler disabled by configuration")
+        logger.warning("Partition scheduler disabled by configuration")
 
     redis_client.get_redis_client()
-    logger.info("Redis client initialized")
 
     manager = WorkerManager(worker_count=config.settings.WORKER_COUNT)
 
     def signal_handler(sig, frame):
-        logger.info(f"Received signal {sig}, shutting down...")
         asyncio.create_task(shutdown(manager))
 
     signal.signal(signal.SIGINT, signal_handler)
@@ -239,19 +216,15 @@ async def shutdown(manager: WorkerManager):
     if config.settings.ENABLE_PARTITION_SCHEDULER:
         scheduler = partition_scheduler.get_partition_scheduler()
         scheduler.stop()
-        logger.info("Partition scheduler stopped")
 
     await redis_client.close_redis()
     await database.close_db()
-    logger.info("Shutdown complete")
     sys.exit(0)
 
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info("Interrupted by user")
     except Exception as e:
         logger.error(f"Fatal error: {e}", exc_info=True)
         sys.exit(1)

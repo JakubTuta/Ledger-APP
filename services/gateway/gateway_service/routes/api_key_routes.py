@@ -2,8 +2,8 @@ import asyncio
 import logging
 
 import fastapi
-import grpc
 import gateway_service.schemas as schemas
+import grpc
 from gateway_service import dependencies
 from gateway_service.proto import auth_pb2, auth_pb2_grpc
 from gateway_service.services import grpc_pool
@@ -109,11 +109,6 @@ async def create_api_key(
             timeout=10.0,
         )
 
-        logger.info(
-            f"API key created: key_id={response.key_id}, "
-            f"project_id={project_id}, prefix={response.key_prefix}"
-        )
-
         return schemas.CreateApiKeyResponse(
             key_id=response.key_id,
             full_key=response.full_key,
@@ -201,9 +196,7 @@ async def create_api_key(
         },
         503: {
             "description": "Service timeout",
-            "content": {
-                "application/json": {"example": {"detail": "Service timeout"}}
-            },
+            "content": {"application/json": {"example": {"detail": "Service timeout"}}},
         },
     },
 )
@@ -264,11 +257,6 @@ async def list_api_keys(
             )
             for key in response.api_keys
         ]
-
-        logger.info(
-            f"Listed {len(api_keys)} API keys for project_id={project_id}, "
-            f"account_id={account_id}"
-        )
 
         return schemas.ListApiKeysResponse(api_keys=api_keys, total=len(api_keys))
 
@@ -367,8 +355,6 @@ async def revoke_api_key(
         response = await asyncio.wait_for(stub.RevokeApiKey(grpc_request), timeout=5.0)
 
         if response.success:
-            logger.info(f"API key revoked: key_id={key_id}")
-
             return schemas.RevokeApiKeyResponse(
                 success=True, message=f"API key {key_id} has been revoked"
             )

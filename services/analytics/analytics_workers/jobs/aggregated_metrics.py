@@ -1,16 +1,13 @@
 import datetime
 
-import sqlalchemy as sa
-
 import analytics_workers.database as database
 import analytics_workers.utils.logging as logging
+import sqlalchemy as sa
 
 logger = logging.get_logger("jobs.aggregated_metrics")
 
 
 async def aggregate_hourly_metrics() -> None:
-    logger.info("Starting hourly metrics aggregation job")
-
     now = datetime.datetime.now(datetime.timezone.utc)
     current_hour_start = now.replace(minute=0, second=0, microsecond=0)
     previous_hour_start = current_hour_start - datetime.timedelta(hours=1)
@@ -19,11 +16,6 @@ async def aggregate_hourly_metrics() -> None:
     date_str = previous_hour_start.strftime("%Y%m%d")
     hour = previous_hour_start.hour
 
-    logger.info(
-        f"Aggregating metrics for {date_str} hour {hour} "
-        f"({previous_hour_start} to {previous_hour_end})"
-    )
-
     try:
         await _aggregate_endpoint_metrics(
             date_str, hour, previous_hour_start, previous_hour_end
@@ -31,8 +23,6 @@ async def aggregate_hourly_metrics() -> None:
         await _aggregate_exception_metrics(
             date_str, hour, previous_hour_start, previous_hour_end
         )
-
-        logger.info(f"Hourly metrics aggregation completed for {date_str}:{hour}")
 
     except Exception as e:
         logger.error(f"Hourly metrics aggregation failed: {e}", exc_info=True)
@@ -46,7 +36,8 @@ async def _aggregate_endpoint_metrics(
     end_time: datetime.datetime,
 ) -> None:
     async with database.get_logs_session() as session:
-        query = sa.text("""
+        query = sa.text(
+            """
             INSERT INTO aggregated_metrics (
                 project_id,
                 date,
@@ -103,7 +94,8 @@ async def _aggregate_endpoint_metrics(
                 p95_duration_ms = EXCLUDED.p95_duration_ms,
                 p99_duration_ms = EXCLUDED.p99_duration_ms,
                 updated_at = NOW()
-        """)
+        """
+        )
 
         result = await session.execute(
             query,
@@ -116,11 +108,6 @@ async def _aggregate_endpoint_metrics(
         )
         await session.commit()
 
-        logger.info(
-            f"Aggregated endpoint metrics for {date_str}:{hour} "
-            f"({result.rowcount} rows affected)"
-        )
-
 
 async def _aggregate_exception_metrics(
     date_str: str,
@@ -129,7 +116,8 @@ async def _aggregate_exception_metrics(
     end_time: datetime.datetime,
 ) -> None:
     async with database.get_logs_session() as session:
-        query = sa.text("""
+        query = sa.text(
+            """
             INSERT INTO aggregated_metrics (
                 project_id,
                 date,
@@ -161,7 +149,8 @@ async def _aggregate_exception_metrics(
                 log_count = EXCLUDED.log_count,
                 error_count = EXCLUDED.error_count,
                 updated_at = NOW()
-        """)
+        """
+        )
 
         result = await session.execute(
             query,
@@ -173,8 +162,3 @@ async def _aggregate_exception_metrics(
             },
         )
         await session.commit()
-
-        logger.info(
-            f"Aggregated exception metrics for {date_str}:{hour} "
-            f"({result.rowcount} rows affected)"
-        )

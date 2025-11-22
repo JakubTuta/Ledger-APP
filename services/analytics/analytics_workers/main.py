@@ -24,16 +24,10 @@ scheduler = async_scheduler.AsyncIOScheduler(
 
 
 async def startup() -> None:
-    logger.info("Analytics Workers starting...")
-
     try:
         await database.init_db()
-        logger.info("Database connections initialized")
 
         await redis_client.init_redis()
-        logger.info("Redis connection initialized")
-
-        logger.info("Startup completed successfully")
 
     except Exception as e:
         logger.error(f"Startup failed: {e}", exc_info=True)
@@ -48,15 +42,10 @@ async def shutdown(sig: signal.Signals | None = None) -> None:
 
     try:
         scheduler.shutdown(wait=True)
-        logger.info("Scheduler stopped")
 
         await database.close_db()
-        logger.info("Database connections closed")
 
         await redis_client.close_redis()
-        logger.info("Redis connection closed")
-
-        logger.info("Shutdown completed successfully")
 
     except Exception as e:
         logger.error(f"Error during shutdown: {e}", exc_info=True)
@@ -123,8 +112,6 @@ def setup_jobs() -> None:
         replace_existing=True,
     )
 
-    logger.info(f"Registered {len(scheduler.get_jobs())} scheduled jobs")
-
 
 async def main() -> None:
     await startup()
@@ -132,19 +119,12 @@ async def main() -> None:
     setup_jobs()
     scheduler.start()
 
-    job_list = scheduler.get_jobs()
-    logger.info(f"Scheduler started with {len(job_list)} jobs:")
-    for job in job_list:
-        logger.info(f"  - {job.name} (ID: {job.id}, Trigger: {job.trigger})")
-
     loop = asyncio.get_event_loop()
 
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(shutdown(s)))
 
     health_task = asyncio.create_task(health.health_check_loop())
-
-    logger.info("Analytics Workers is running. Press Ctrl+C to stop.")
 
     try:
         while True:
@@ -157,8 +137,6 @@ async def main() -> None:
 if __name__ == "__main__":
     try:
         asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info("Received keyboard interrupt")
     except Exception as e:
         logger.error(f"Unexpected error: {e}", exc_info=True)
         sys.exit(1)

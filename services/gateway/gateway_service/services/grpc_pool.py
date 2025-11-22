@@ -5,9 +5,7 @@ import typing
 
 import grpc
 from gateway_service import config
-from gateway_service.proto import auth_pb2_grpc
-from gateway_service.proto import ingestion_pb2_grpc
-from gateway_service.proto import query_pb2_grpc
+from gateway_service.proto import auth_pb2_grpc, ingestion_pb2_grpc, query_pb2_grpc
 
 logger = logging.getLogger(__name__)
 
@@ -46,9 +44,6 @@ class GRPCChannelPool:
             )
 
             self.channels.append(channel)
-            logger.info(
-                f"Created gRPC channel {i+1}/{self.pool_size} for {self.service_name}"
-            )
 
     def get_channel(self) -> grpc.aio.Channel:
         if not self.channels:
@@ -67,7 +62,6 @@ class GRPCChannelPool:
         for i, channel in enumerate(self.channels):
             try:
                 await channel.close()
-                logger.info(f"Closed channel {i+1} for {self.service_name}")
             except Exception as e:
                 logger.error(f"Error closing channel {i+1}: {e}")
 
@@ -93,11 +87,6 @@ class GRPCPoolManager:
             pool = GRPCChannelPool(service_name, address, pool_size)
             await pool.initialize()
             self.pools[service_name] = pool
-
-            logger.info(
-                f"Registered gRPC service: {service_name} "
-                f"at {address} with {pool_size} channels"
-            )
 
     def get_pool(self, service_name: str) -> GRPCChannelPool:
         if service_name not in self.pools:
@@ -169,8 +158,7 @@ class GRPCPoolManager:
             raise
 
     async def close_all(self):
-        for service_name, pool in self.pools.items():
-            logger.info(f"Closing pool for {service_name}")
+        for _, pool in self.pools.items():
             await pool.close_all()
 
         self.pools.clear()
