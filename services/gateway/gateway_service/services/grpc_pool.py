@@ -24,22 +24,13 @@ class GRPCChannelPool:
             channel = grpc.aio.insecure_channel(
                 self.address,
                 options=[
-                    # Keepalive prevents idle connections from closing
-                    # Send keepalive ping every 10 seconds
                     ("grpc.keepalive_time_ms", config.settings.GRPC_KEEPALIVE_TIME_MS),
-                    # Wait 5 seconds for keepalive response
-                    (
-                        "grpc.keepalive_timeout_ms",
-                        config.settings.GRPC_KEEPALIVE_TIMEOUT_MS,
-                    ),
-                    # Allow keepalive without active RPCs (critical for pools)
-                    ("grpc.keepalive_permit_without_calls", 1),
-                    # HTTP/2 settings for performance
-                    ("grpc.http2.max_pings_without_data", 0),
-                    ("grpc.http2.min_time_between_pings_ms", 10000),
-                    # Connection settings
-                    ("grpc.max_receive_message_length", 100 * 1024 * 1024),  # 100MB
-                    ("grpc.max_send_message_length", 100 * 1024 * 1024),  # 100MB
+                    ("grpc.keepalive_timeout_ms", config.settings.GRPC_KEEPALIVE_TIMEOUT_MS),
+                    ("grpc.keepalive_permit_without_calls", 0),
+                    ("grpc.http2.max_pings_without_data", 2),
+                    ("grpc.http2.min_time_between_pings_ms", config.settings.GRPC_KEEPALIVE_TIME_MS),
+                    ("grpc.max_receive_message_length", 100 * 1024 * 1024),
+                    ("grpc.max_send_message_length", 100 * 1024 * 1024),
                 ],
             )
 

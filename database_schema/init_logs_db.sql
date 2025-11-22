@@ -13,7 +13,7 @@ CREATE TABLE logs (
 
     -- Log classification
     level VARCHAR(20) NOT NULL,  -- debug, info, warning, error, critical
-    log_type VARCHAR(30) NOT NULL,  -- console, logger, exception, network, database, endpoint, custom
+    log_type VARCHAR(30) NOT NULL,  -- console, logger, exception, database, endpoint, custom
     importance VARCHAR(20) DEFAULT 'standard' NOT NULL,  -- critical, high, standard, low
 
     -- Source identification

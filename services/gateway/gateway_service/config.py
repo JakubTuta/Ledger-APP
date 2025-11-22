@@ -136,14 +136,14 @@ class Settings(pydantic_settings.BaseSettings):
         return f"{self.QUERY_SERVICE_HOST}:{self.QUERY_SERVICE_PORT}"
 
     GRPC_POOL_SIZE: int = pydantic.Field(
-        default=10,
+        default=2,
         ge=1,
-        le=50,
-        description="gRPC channel pool size per service",
+        le=10,
+        description="gRPC channel pool size per service (1-2 is usually sufficient due to HTTP/2 multiplexing)",
     )
 
     GRPC_KEEPALIVE_TIME_MS: int = pydantic.Field(
-        default=10000,
+        default=30000,
         description="gRPC keepalive ping interval (ms)",
     )
 
@@ -245,8 +245,8 @@ class Settings(pydantic_settings.BaseSettings):
     @pydantic.field_validator("GRPC_POOL_SIZE")
     @classmethod
     def validate_pool_size(cls, v: int) -> int:
-        if v > 50:
-            raise ValueError("Pool size > 50 may cause connection overhead")
+        if v > 10:
+            raise ValueError("Pool size > 10 may cause connection overhead")
         return v
 
     # ==================== Properties ====================
