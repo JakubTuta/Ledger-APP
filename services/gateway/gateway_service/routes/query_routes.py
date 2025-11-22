@@ -48,6 +48,11 @@ logger = logging.getLogger(__name__)
 async def get_log_by_id(
     log_id: int,
     request: fastapi.Request,
+    project_id: int = fastapi.Query(
+        ...,
+        description="The project ID to retrieve the log from",
+        gt=0,
+    ),
 ) -> schemas.LogEntryResponse:
     """
     Retrieve a complete log entry by its unique ID.
@@ -64,10 +69,13 @@ async def get_log_by_id(
 
     - **log_id** (integer, required): The unique identifier of the log entry
 
+    ## Query Parameters
+
+    - **project_id** (integer, required): The project ID to retrieve the log from
+
     ## Authorization
 
-    Requires API key authentication. The log must belong to the project
-    associated with the provided API key, otherwise a 404 error is returned.
+    Requires session token authentication via `Authorization: Bearer <token>` header.
 
     ## Response
 
@@ -111,10 +119,9 @@ async def get_log_by_id(
     }
     ```
 
-    Requires API key authentication via `Authorization: Bearer <api-key>` header.
+    Requires session token authentication via `Authorization: Bearer <token>` header.
     """
     grpc_pool = request.app.state.grpc_pool
-    project_id = request.state.project_id
 
     try:
         async with grpc_pool.get_query_stub() as stub:
@@ -218,6 +225,11 @@ async def get_log_by_id(
 )
 async def get_aggregated_metrics(
     request: fastapi.Request,
+    project_id: int = fastapi.Query(
+        ...,
+        description="The project ID to retrieve metrics for",
+        gt=0,
+    ),
     type: Literal["exception", "endpoint"] = fastapi.Query(
         ...,
         description="Metric type to retrieve (exception for error tracking, endpoint for API monitoring)",
@@ -257,6 +269,7 @@ async def get_aggregated_metrics(
     ## Query Parameters
 
     ### Required
+    - **project_id** (integer): The project ID to retrieve metrics for
     - **type** (string): Metric type to retrieve
       - `exception`: Exception/error logs (all errors regardless of status)
       - `endpoint`: API endpoint monitoring (HTTP requests with performance metrics)
@@ -330,10 +343,9 @@ async def get_aggregated_metrics(
     - **SLA monitoring**: Ensure response times meet targets
     - **Trend analysis**: Identify performance degradation
 
-    Requires API key authentication via `Authorization: Bearer <api-key>` header.
+    Requires session token authentication via `Authorization: Bearer <token>` header.
     """
     grpc_pool = request.app.state.grpc_pool
-    project_id = request.state.project_id
 
     if not period and not (periodFrom and periodTo):
         raise fastapi.HTTPException(
