@@ -96,7 +96,6 @@ class DashboardService:
             "time_range_from": time_range_from,
             "time_range_to": time_range_to,
             "type": panel_type,
-            "available_routes": [],
         }
 
         result = await session.execute(
@@ -164,7 +163,6 @@ class DashboardService:
                     "time_range_from": time_range_from,
                     "time_range_to": time_range_to,
                     "type": panel_type,
-                    "available_routes": panel.get("available_routes", []),
                 }
                 panel_found = True
                 break

@@ -137,20 +137,22 @@ class GetProjectsRequest(_message.Message):
     def __init__(self, account_id: _Optional[int] = ...) -> None: ...
 
 class ProjectInfo(_message.Message):
-    __slots__ = ("project_id", "name", "slug", "environment", "retention_days", "daily_quota")
+    __slots__ = ("project_id", "name", "slug", "environment", "retention_days", "daily_quota", "available_routes")
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     SLUG_FIELD_NUMBER: _ClassVar[int]
     ENVIRONMENT_FIELD_NUMBER: _ClassVar[int]
     RETENTION_DAYS_FIELD_NUMBER: _ClassVar[int]
     DAILY_QUOTA_FIELD_NUMBER: _ClassVar[int]
+    AVAILABLE_ROUTES_FIELD_NUMBER: _ClassVar[int]
     project_id: int
     name: str
     slug: str
     environment: str
     retention_days: int
     daily_quota: int
-    def __init__(self, project_id: _Optional[int] = ..., name: _Optional[str] = ..., slug: _Optional[str] = ..., environment: _Optional[str] = ..., retention_days: _Optional[int] = ..., daily_quota: _Optional[int] = ...) -> None: ...
+    available_routes: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, project_id: _Optional[int] = ..., name: _Optional[str] = ..., slug: _Optional[str] = ..., environment: _Optional[str] = ..., retention_days: _Optional[int] = ..., daily_quota: _Optional[int] = ..., available_routes: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class GetProjectsResponse(_message.Message):
     __slots__ = ("projects",)
@@ -165,20 +167,22 @@ class GetProjectByIdRequest(_message.Message):
     def __init__(self, project_id: _Optional[int] = ...) -> None: ...
 
 class GetProjectByIdResponse(_message.Message):
-    __slots__ = ("project_id", "name", "slug", "environment", "retention_days", "daily_quota")
+    __slots__ = ("project_id", "name", "slug", "environment", "retention_days", "daily_quota", "available_routes")
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     SLUG_FIELD_NUMBER: _ClassVar[int]
     ENVIRONMENT_FIELD_NUMBER: _ClassVar[int]
     RETENTION_DAYS_FIELD_NUMBER: _ClassVar[int]
     DAILY_QUOTA_FIELD_NUMBER: _ClassVar[int]
+    AVAILABLE_ROUTES_FIELD_NUMBER: _ClassVar[int]
     project_id: int
     name: str
     slug: str
     environment: str
     retention_days: int
     daily_quota: int
-    def __init__(self, project_id: _Optional[int] = ..., name: _Optional[str] = ..., slug: _Optional[str] = ..., environment: _Optional[str] = ..., retention_days: _Optional[int] = ..., daily_quota: _Optional[int] = ...) -> None: ...
+    available_routes: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, project_id: _Optional[int] = ..., name: _Optional[str] = ..., slug: _Optional[str] = ..., environment: _Optional[str] = ..., retention_days: _Optional[int] = ..., daily_quota: _Optional[int] = ..., available_routes: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class GetDailyUsageRequest(_message.Message):
     __slots__ = ("project_id", "date")
@@ -285,7 +289,7 @@ class ListApiKeysResponse(_message.Message):
     def __init__(self, api_keys: _Optional[_Iterable[_Union[ApiKeyInfo, _Mapping]]] = ...) -> None: ...
 
 class Panel(_message.Message):
-    __slots__ = ("id", "name", "index", "project_id", "time_range_from", "time_range_to", "type", "available_routes")
+    __slots__ = ("id", "name", "index", "project_id", "time_range_from", "time_range_to", "type")
     ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     INDEX_FIELD_NUMBER: _ClassVar[int]
@@ -293,7 +297,6 @@ class Panel(_message.Message):
     TIME_RANGE_FROM_FIELD_NUMBER: _ClassVar[int]
     TIME_RANGE_TO_FIELD_NUMBER: _ClassVar[int]
     TYPE_FIELD_NUMBER: _ClassVar[int]
-    AVAILABLE_ROUTES_FIELD_NUMBER: _ClassVar[int]
     id: str
     name: str
     index: int
@@ -301,8 +304,7 @@ class Panel(_message.Message):
     time_range_from: str
     time_range_to: str
     type: str
-    available_routes: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., time_range_from: _Optional[str] = ..., time_range_to: _Optional[str] = ..., type: _Optional[str] = ..., available_routes: _Optional[_Iterable[str]] = ...) -> None: ...
+    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., time_range_from: _Optional[str] = ..., time_range_to: _Optional[str] = ..., type: _Optional[str] = ...) -> None: ...
 
 class GetDashboardPanelsRequest(_message.Message):
     __slots__ = ("user_id",)

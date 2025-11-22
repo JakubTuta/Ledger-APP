@@ -1,5 +1,3 @@
-import json
-
 import sqlalchemy as sa
 
 import analytics_workers.database as database
@@ -10,21 +8,20 @@ logger = logging.get_logger("jobs.available_routes")
 
 async def update_available_routes() -> None:
     """
-    Update available_routes for all dashboard panels.
+    Update available_routes for all projects.
 
     This job queries unique endpoint routes from the logs database for each project,
-    then updates the user_dashboards panels in the auth database to include the
-    available routes for each panel's associated project.
+    then updates the projects table in the auth database with the available routes.
     """
     logger.info("Starting available routes update job")
 
     try:
         project_routes = await _get_project_routes()
         if not project_routes:
-            logger.info("No endpoint routes found, skipping panel updates")
+            logger.info("No endpoint routes found, skipping project updates")
             return
 
-        await _update_panel_routes(project_routes)
+        await _update_project_routes(project_routes)
 
         logger.info(
             f"Available routes update completed for {len(project_routes)} projects"
@@ -84,62 +81,38 @@ async def _get_project_routes() -> dict[int, list[str]]:
         return project_routes
 
 
-async def _update_panel_routes(project_routes: dict[int, list[str]]) -> None:
+async def _update_project_routes(project_routes: dict[int, list[str]]) -> None:
     """
-    Update available_routes in all dashboard panels for matching projects.
+    Update available_routes column in projects table for matching projects.
 
     Args:
         project_routes: Dictionary mapping project_id to list of route strings
     """
     async with database.get_auth_session() as session:
-        select_query = sa.text("""
-            SELECT id, panels FROM user_dashboards
-        """)
-
-        result = await session.execute(select_query)
-        dashboards = result.fetchall()
-
         updated_count = 0
-        for dashboard_id, panels in dashboards:
-            if not panels:
-                continue
 
-            updated = False
-            updated_panels = []
-
-            for panel in panels:
-                project_id_str = panel.get("project_id", "")
-                try:
-                    project_id = int(project_id_str)
-                except (ValueError, TypeError):
-                    updated_panels.append(panel)
-                    continue
-
-                routes = project_routes.get(project_id, [])
-                current_routes = panel.get("available_routes", [])
-
-                if set(routes) != set(current_routes):
-                    panel["available_routes"] = routes
-                    updated = True
-
-                updated_panels.append(panel)
-
-            if updated:
-                update_query = sa.text("""
-                    UPDATE user_dashboards
-                    SET panels = :panels, updated_at = NOW()
-                    WHERE id = :dashboard_id
-                """)
-
-                await session.execute(
-                    update_query,
-                    {
-                        "panels": json.dumps(updated_panels),
-                        "dashboard_id": dashboard_id,
-                    },
+        for project_id, routes in project_routes.items():
+            update_query = sa.text("""
+                UPDATE projects
+                SET available_routes = :routes, updated_at = NOW()
+                WHERE id = :project_id
+                AND (
+                    available_routes IS NULL
+                    OR available_routes != :routes
                 )
+            """)
+
+            result = await session.execute(
+                update_query,
+                {
+                    "routes": routes,
+                    "project_id": project_id,
+                },
+            )
+
+            if result.rowcount > 0:
                 updated_count += 1
 
         await session.commit()
 
-        logger.info(f"Updated {updated_count} dashboards with new available routes")
+        logger.info(f"Updated {updated_count} projects with new available routes")

@@ -62,6 +62,10 @@ class ProjectResponse(pydantic.BaseModel):
         ..., description="Log retention period in days"
     )
     daily_quota: int = pydantic.Field(..., description="Daily log ingestion quota")
+    available_routes: list[str] = pydantic.Field(
+        default_factory=list,
+        description="List of unique API endpoint routes (e.g., 'GET /api/v1/users') discovered from endpoint logs. Populated by analytics workers.",
+    )
 
     model_config = pydantic.ConfigDict(
         json_schema_extra={
@@ -73,6 +77,11 @@ class ProjectResponse(pydantic.BaseModel):
                     "environment": "production",
                     "retention_days": 30,
                     "daily_quota": 1000000,
+                    "available_routes": [
+                        "GET /api/v1/users",
+                        "POST /api/v1/orders",
+                        "GET /api/v1/products/:id",
+                    ],
                 }
             ]
         }
@@ -99,6 +108,7 @@ class ProjectListResponse(pydantic.BaseModel):
                             "environment": "production",
                             "retention_days": 30,
                             "daily_quota": 1000000,
+                            "available_routes": ["GET /api/v1/users"],
                         }
                     ],
                     "total": 1,

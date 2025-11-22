@@ -226,6 +226,7 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                         environment=p.environment,
                         retention_days=p.retention_days,
                         daily_quota=p.daily_quota,
+                        available_routes=p.available_routes or [],
                     )
                     for p in projects
                 ]
@@ -262,6 +263,7 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     environment=project.environment,
                     retention_days=project.retention_days,
                     daily_quota=project.daily_quota,
+                    available_routes=project.available_routes or [],
                 )
 
         except Exception as e:
@@ -451,7 +453,6 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                         time_range_from=panel["time_range_from"],
                         time_range_to=panel["time_range_to"],
                         type=panel["type"],
-                        available_routes=panel.get("available_routes", []),
                     )
                     for panel in panels
                 ]
@@ -490,7 +491,6 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     time_range_from=panel["time_range_from"],
                     time_range_to=panel["time_range_to"],
                     type=panel["type"],
-                    available_routes=panel.get("available_routes", []),
                 )
 
                 return auth_pb2.CreateDashboardPanelResponse(panel=panel_message)
@@ -533,7 +533,6 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     time_range_from=panel["time_range_from"],
                     time_range_to=panel["time_range_to"],
                     type=panel["type"],
-                    available_routes=panel.get("available_routes", []),
                 )
 
                 return auth_pb2.UpdateDashboardPanelResponse(panel=panel_message)

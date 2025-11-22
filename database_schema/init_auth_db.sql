@@ -32,6 +32,7 @@ CREATE TABLE projects (
     environment VARCHAR(20) DEFAULT 'production',
     retention_days SMALLINT DEFAULT 30,
     daily_quota BIGINT DEFAULT 1000000,
+    available_routes TEXT[] DEFAULT '{}',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );

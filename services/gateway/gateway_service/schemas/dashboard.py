@@ -60,10 +60,6 @@ class PanelResponse(pydantic.BaseModel):
     time_range_from: str = pydantic.Field(..., description="Time range start")
     time_range_to: str = pydantic.Field(..., description="Time range end")
     type: str = pydantic.Field(..., description="Panel type")
-    available_routes: list[str] = pydantic.Field(
-        default_factory=list,
-        description="List of unique API endpoint routes (e.g., 'GET /api/v1/users') available for this panel's project. Populated by analytics workers from endpoint logs.",
-    )
 
     model_config = pydantic.ConfigDict(
         json_schema_extra={
@@ -76,11 +72,6 @@ class PanelResponse(pydantic.BaseModel):
                     "time_range_from": "2024-01-15T00:00:00Z",
                     "time_range_to": "2024-01-16T00:00:00Z",
                     "type": "errors",
-                    "available_routes": [
-                        "GET /api/v1/users",
-                        "POST /api/v1/orders",
-                        "GET /api/v1/products/:id",
-                    ],
                 }
             ]
         }
@@ -106,10 +97,6 @@ class PanelListResponse(pydantic.BaseModel):
                             "time_range_from": "2024-01-15T00:00:00Z",
                             "time_range_to": "2024-01-16T00:00:00Z",
                             "type": "errors",
-                            "available_routes": [
-                                "GET /api/v1/users",
-                                "POST /api/v1/orders",
-                            ],
                         }
                     ],
                     "total": 1,

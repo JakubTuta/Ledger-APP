@@ -12,7 +12,8 @@ from sqlalchemy import (
     Integer,
     SmallInteger,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 
@@ -108,6 +109,10 @@ class Project(database.Base):
     )
     daily_quota: Mapped[int] = mapped_column(
         BigInteger, default=1_000_000, nullable=False
+    )
+
+    available_routes: Mapped[list[str]] = mapped_column(
+        ARRAY(String), default=list, nullable=False, server_default="{}"
     )
 
     created_at: Mapped[datetime.datetime] = mapped_column(

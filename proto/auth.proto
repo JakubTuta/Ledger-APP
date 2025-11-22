@@ -120,6 +120,7 @@ message ProjectInfo {
   string environment = 4;
   int32 retention_days = 5;
   int64 daily_quota = 6;
+  repeated string available_routes = 7;
 }
 
 message GetProjectsResponse {
@@ -137,6 +138,7 @@ message GetProjectByIdResponse {
   string environment = 4;
   int32 retention_days = 5;
   int64 daily_quota = 6;
+  repeated string available_routes = 7;
 }
 
 // ==================== Usage Tracking Messages ====================
@@ -216,7 +218,6 @@ message Panel {
   string time_range_from = 5;
   string time_range_to = 6;
   string type = 7;
-  repeated string available_routes = 8;
 }
 
 message GetDashboardPanelsRequest {

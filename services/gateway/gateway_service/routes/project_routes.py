@@ -196,6 +196,7 @@ async def list_projects(
                 environment=p.environment,
                 retention_days=p.retention_days,
                 daily_quota=p.daily_quota,
+                available_routes=list(p.available_routes),
             )
             for p in response.projects
         ]
@@ -282,6 +283,7 @@ async def get_project_by_slug(
                     environment=p.environment,
                     retention_days=p.retention_days,
                     daily_quota=p.daily_quota,
+                    available_routes=list(p.available_routes),
                 )
 
         raise fastapi.HTTPException(
