@@ -133,7 +133,7 @@ This is much faster than 1,000 individual requests. The Ingestion Service handle
 
 - `timestamp` - When it happened (ISO 8601 format)
 - `level` - debug, info, warning, error, critical
-- `log_type` - console, logger, exception, custom
+- `log_type` - console, logger, exception, database, endpoint, custom
 - `importance` - low, standard, high
 
 **Optional but useful:**

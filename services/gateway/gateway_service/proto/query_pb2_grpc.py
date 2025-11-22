@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-import gateway_service.proto.query_pb2 as query__pb2
+from . import query_pb2 as query__pb2
 
 GRPC_GENERATED_VERSION = '1.75.1'
 GRPC_VERSION = grpc.__version__

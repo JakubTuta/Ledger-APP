@@ -113,6 +113,16 @@ def setup_jobs() -> None:
         replace_existing=True,
     )
 
+    scheduler.add_job(
+        jobs.update_available_routes,
+        trigger=interval_trigger.IntervalTrigger(
+            minutes=settings.AVAILABLE_ROUTES_INTERVAL_MINUTES
+        ),
+        id="update_available_routes",
+        name="Update Available Routes",
+        replace_existing=True,
+    )
+
     logger.info(f"Registered {len(scheduler.get_jobs())} scheduled jobs")
 
 

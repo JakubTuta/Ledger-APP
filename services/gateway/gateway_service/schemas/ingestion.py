@@ -27,7 +27,7 @@ class LogEntry(pydantic.BaseModel):
     )
 
     log_type: typing.Literal[
-        "console", "logger", "exception", "network", "database", "endpoint", "custom"
+        "console", "logger", "exception", "database", "endpoint", "custom"
     ] = pydantic.Field(
         default="logger",
         description=(
@@ -35,7 +35,6 @@ class LogEntry(pydantic.BaseModel):
             "- `console`: stdout/stderr output\n"
             "- `logger`: structured logging framework output\n"
             "- `exception`: caught exceptions with stack traces\n"
-            "- `network`: HTTP/API requests and responses\n"
             "- `database`: database queries and operations\n"
             "- `endpoint`: API endpoint monitoring metrics (requires attributes.endpoint)\n"
             "- `custom`: application-specific logs"
@@ -103,8 +102,25 @@ class LogEntry(pydantic.BaseModel):
         None,
         description=(
             "Custom key-value pairs for additional context. Stored as JSONB. Maximum 100KB when serialized.\n\n"
-            "**Special requirements:**\n"
-            "- When log_type is 'endpoint', must include an 'endpoint' object with: method, path, status_code, duration_ms"
+            "**Special requirements for endpoint monitoring:**\n\n"
+            "When `log_type` is `endpoint`, the `attributes` field must include an `endpoint` object with the following structure:\n\n"
+            "```json\n"
+            "{\n"
+            '  "endpoint": {\n'
+            '    "method": "GET",           // Required: HTTP method (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS)\n'
+            '    "path": "/api/v1/users",   // Required: Endpoint path (use template format, e.g., /api/v1/users/:id)\n'
+            '    "status_code": 200,        // Required: HTTP response status code (100-599)\n'
+            '    "duration_ms": 45.2        // Required: Request duration in milliseconds\n'
+            "  }\n"
+            "}\n"
+            "```\n\n"
+            "**Path templating:** Use parameterized paths (e.g., `/users/:id` or `/users/{id}`) instead of actual IDs "
+            "to enable proper grouping in analytics. Actual values can be stored in additional attributes.\n\n"
+            "**Additional endpoint attributes (optional):**\n"
+            "- `user_agent`: Client user agent string\n"
+            "- `ip_address`: Client IP address\n"
+            "- `request_id`: Unique request identifier for tracing\n"
+            "- `user_id`: Authenticated user identifier"
         ),
         examples=[
             {
@@ -113,7 +129,17 @@ class LogEntry(pydantic.BaseModel):
                 "amount": 99.99,
                 "currency": "USD",
                 "retry_count": 3,
-            }
+            },
+            {
+                "endpoint": {
+                    "method": "POST",
+                    "path": "/api/v1/orders",
+                    "status_code": 201,
+                    "duration_ms": 127.5,
+                },
+                "user_id": "usr_456",
+                "request_id": "req_abc123",
+            },
         ],
     )
 

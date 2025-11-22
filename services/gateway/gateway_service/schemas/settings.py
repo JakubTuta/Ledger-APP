@@ -148,7 +148,7 @@ class Constraints(pydantic.BaseModel):
                         "error",
                         "critical",
                     ],
-                    "supported_log_types": ["console", "logger", "exception", "custom"],
+                    "supported_log_types": ["console", "logger", "exception", "database", "endpoint", "custom"],
                     "supported_importance_levels": ["low", "standard", "high"],
                 }
             ]

@@ -216,6 +216,7 @@ message Panel {
   string time_range_from = 5;
   string time_range_to = 6;
   string type = 7;
+  repeated string available_routes = 8;
 }
 
 message GetDashboardPanelsRequest {

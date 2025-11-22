@@ -181,6 +181,13 @@ class Settings(pydantic_settings.BaseSettings):
         description="Aggregated metrics job interval (minutes)",
     )
 
+    AVAILABLE_ROUTES_INTERVAL_MINUTES: int = pydantic.Field(
+        default=60,
+        ge=5,
+        le=1440,
+        description="Available routes update job interval (minutes)",
+    )
+
     ERROR_RATE_TTL: int = pydantic.Field(
         default=600,
         ge=300,

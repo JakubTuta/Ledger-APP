@@ -52,6 +52,7 @@ async def get_dashboard_panels(
                 time_range_from=panel.time_range_from,
                 time_range_to=panel.time_range_to,
                 type=panel.type,
+                available_routes=list(panel.available_routes),
             )
             for panel in response.panels
         ]
@@ -140,6 +141,7 @@ async def create_dashboard_panel(
             time_range_from=response.panel.time_range_from,
             time_range_to=response.panel.time_range_to,
             type=response.panel.type,
+            available_routes=list(response.panel.available_routes),
         )
 
     except asyncio.TimeoutError:
@@ -226,6 +228,7 @@ async def update_dashboard_panel(
             time_range_from=response.panel.time_range_from,
             time_range_to=response.panel.time_range_to,
             type=response.panel.type,
+            available_routes=list(response.panel.available_routes),
         )
 
     except asyncio.TimeoutError:

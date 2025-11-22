@@ -451,6 +451,7 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                         time_range_from=panel["time_range_from"],
                         time_range_to=panel["time_range_to"],
                         type=panel["type"],
+                        available_routes=panel.get("available_routes", []),
                     )
                     for panel in panels
                 ]
@@ -489,6 +490,7 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     time_range_from=panel["time_range_from"],
                     time_range_to=panel["time_range_to"],
                     type=panel["type"],
+                    available_routes=panel.get("available_routes", []),
                 )
 
                 return auth_pb2.CreateDashboardPanelResponse(panel=panel_message)
@@ -531,6 +533,7 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     time_range_from=panel["time_range_from"],
                     time_range_to=panel["time_range_to"],
                     type=panel["type"],
+                    available_routes=panel.get("available_routes", []),
                 )
 
                 return auth_pb2.UpdateDashboardPanelResponse(panel=panel_message)

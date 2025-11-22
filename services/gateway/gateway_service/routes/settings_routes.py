@@ -175,7 +175,7 @@ async def get_settings(request: fastapi.Request) -> schemas.SettingsResponse:
                 max_platform_version_length=50,
                 max_error_type_length=255,
                 supported_log_levels=["debug", "info", "warning", "error", "critical"],
-                supported_log_types=["console", "logger", "exception", "custom"],
+                supported_log_types=["console", "logger", "exception", "database", "endpoint", "custom"],
                 supported_importance_levels=["low", "standard", "high"],
             ),
             features=schemas.Features(

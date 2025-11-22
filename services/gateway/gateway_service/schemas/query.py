@@ -15,7 +15,15 @@ class LogEntryResponse(pydantic.BaseModel):
         description="Log level (debug, info, warning, error, critical)"
     )
     log_type: str = pydantic.Field(
-        description="Log type (console, logger, exception, network, database, endpoint, custom)"
+        description=(
+            "Log type:\n"
+            "- `console`: stdout/stderr output\n"
+            "- `logger`: structured logging framework output\n"
+            "- `exception`: caught exceptions with stack traces\n"
+            "- `database`: database queries and operations\n"
+            "- `endpoint`: API endpoint monitoring metrics\n"
+            "- `custom`: application-specific logs"
+        )
     )
     importance: str = pydantic.Field(
         description="Importance level (critical, high, standard, low)"
