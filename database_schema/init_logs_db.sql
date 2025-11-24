@@ -198,11 +198,15 @@ CREATE TABLE aggregated_metrics (
     hour SMALLINT NOT NULL,  -- 0-23
 
     -- Metric type
-    metric_type VARCHAR(20) NOT NULL,  -- exception, endpoint
+    metric_type VARCHAR(20) NOT NULL,  -- exception, endpoint, log_volume
 
-    -- Endpoint identification (NULL for exceptions)
+    -- Endpoint identification (NULL for exceptions and log_volume)
     endpoint_method VARCHAR(10),  -- GET, POST, PUT, DELETE, etc.
     endpoint_path VARCHAR(500),  -- /api/users/{id}
+
+    -- Log volume identification (NULL for endpoint and exception)
+    log_level VARCHAR(20),  -- debug, info, warning, error, critical
+    log_type VARCHAR(30),  -- console, logger, exception, network, database, endpoint, custom
 
     -- Counts
     log_count INTEGER DEFAULT 0 NOT NULL,
@@ -233,15 +237,29 @@ WHERE metric_type = 'endpoint';
 
 -- Unique constraint for UPSERT operations
 CREATE UNIQUE INDEX uq_aggregated_metrics
-ON aggregated_metrics(project_id, date, hour, metric_type,
-    COALESCE(endpoint_method, ''), COALESCE(endpoint_path, ''));
+ON aggregated_metrics(
+    project_id,
+    date,
+    hour,
+    metric_type,
+    COALESCE(endpoint_method, ''),
+    COALESCE(endpoint_path, ''),
+    COALESCE(log_level, ''),
+    COALESCE(log_type, '')
+);
 
 -- Constraints
 ALTER TABLE aggregated_metrics ADD CONSTRAINT check_metric_type
-CHECK (metric_type IN ('exception', 'endpoint'));
+CHECK (metric_type IN ('exception', 'endpoint', 'log_volume'));
 
 ALTER TABLE aggregated_metrics ADD CONSTRAINT check_hour_range
 CHECK (hour >= 0 AND hour <= 23);
+
+ALTER TABLE aggregated_metrics ADD CONSTRAINT check_log_level
+CHECK (log_level IS NULL OR log_level IN ('debug', 'info', 'warning', 'error', 'critical'));
+
+ALTER TABLE aggregated_metrics ADD CONSTRAINT check_log_type
+CHECK (log_type IS NULL OR log_type IN ('console', 'logger', 'exception', 'network', 'database', 'endpoint', 'custom'));
 
 -- ============================================
 -- 4. INGESTION METRICS (Performance Monitoring)

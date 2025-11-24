@@ -146,6 +146,8 @@ class AggregatedMetricData(pydantic.BaseModel):
     hour: int | None = None
     endpoint_method: str | None = None
     endpoint_path: str | None = None
+    log_level: str | None = None
+    log_type: str | None = None
     log_count: int
     error_count: int
     avg_duration_ms: float | None = None

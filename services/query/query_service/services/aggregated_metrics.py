@@ -10,7 +10,7 @@ import query_service.schemas as schemas
 
 async def get_aggregated_metrics(
     project_id: int,
-    metric_type: Literal["exception", "endpoint"],
+    metric_type: Literal["exception", "endpoint", "log_volume"],
     period: str | None = None,
     period_from: datetime.date | None = None,
     period_to: datetime.date | None = None,
@@ -44,6 +44,8 @@ async def get_aggregated_metrics(
                     hour=m.hour,
                     endpoint_method=m.endpoint_method,
                     endpoint_path=m.endpoint_path,
+                    log_level=m.log_level,
+                    log_type=m.log_type,
                     log_count=m.log_count,
                     error_count=m.error_count,
                     avg_duration_ms=m.avg_duration_ms,
@@ -61,6 +63,8 @@ async def get_aggregated_metrics(
                         date,
                         endpoint_method,
                         endpoint_path,
+                        NULL as log_level,
+                        NULL as log_type,
                         SUM(log_count) as log_count,
                         SUM(error_count) as error_count,
                         AVG(avg_duration_ms) as avg_duration_ms,
@@ -77,12 +81,38 @@ async def get_aggregated_metrics(
                     GROUP BY date, endpoint_method, endpoint_path
                     ORDER BY date, endpoint_path, endpoint_method
                 """)
+            elif metric_type == "log_volume":
+                query = sa.text("""
+                    SELECT
+                        date,
+                        NULL as endpoint_method,
+                        NULL as endpoint_path,
+                        log_level,
+                        log_type,
+                        SUM(log_count) as log_count,
+                        SUM(error_count) as error_count,
+                        NULL as avg_duration_ms,
+                        NULL as min_duration_ms,
+                        NULL as max_duration_ms,
+                        NULL as p95_duration_ms,
+                        NULL as p99_duration_ms
+                    FROM aggregated_metrics
+                    WHERE
+                        project_id = :project_id
+                        AND metric_type = :metric_type
+                        AND date >= :start_date
+                        AND date <= :end_date
+                    GROUP BY date, log_level, log_type
+                    ORDER BY date, log_level, log_type
+                """)
             else:
                 query = sa.text("""
                     SELECT
                         date,
                         NULL as endpoint_method,
                         NULL as endpoint_path,
+                        NULL as log_level,
+                        NULL as log_type,
                         SUM(log_count) as log_count,
                         SUM(error_count) as error_count,
                         NULL as avg_duration_ms,
@@ -118,13 +148,15 @@ async def get_aggregated_metrics(
                     hour=None,
                     endpoint_method=row[1],
                     endpoint_path=row[2],
-                    log_count=row[3],
-                    error_count=row[4],
-                    avg_duration_ms=row[5],
-                    min_duration_ms=row[6],
-                    max_duration_ms=row[7],
-                    p95_duration_ms=row[8],
-                    p99_duration_ms=row[9],
+                    log_level=row[3],
+                    log_type=row[4],
+                    log_count=row[5],
+                    error_count=row[6],
+                    avg_duration_ms=row[7],
+                    min_duration_ms=row[8],
+                    max_duration_ms=row[9],
+                    p95_duration_ms=row[10],
+                    p99_duration_ms=row[11],
                 )
                 for row in rows
             ]

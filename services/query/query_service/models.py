@@ -219,6 +219,13 @@ class AggregatedMetric(Base):
         sqlalchemy.VARCHAR(500), nullable=True
     )
 
+    log_level: orm.Mapped[str | None] = orm.mapped_column(
+        sqlalchemy.VARCHAR(20), nullable=True
+    )
+    log_type: orm.Mapped[str | None] = orm.mapped_column(
+        sqlalchemy.VARCHAR(30), nullable=True
+    )
+
     log_count: orm.Mapped[int] = orm.mapped_column(
         sqlalchemy.Integer, nullable=False, default=0
     )
@@ -272,21 +279,20 @@ class AggregatedMetric(Base):
             "endpoint_path",
             postgresql_where=sqlalchemy.text("metric_type = 'endpoint'"),
         ),
-        sqlalchemy.UniqueConstraint(
-            "project_id",
-            "date",
-            "hour",
-            "metric_type",
-            "endpoint_method",
-            "endpoint_path",
-            name="uq_aggregated_metrics",
-        ),
         sqlalchemy.CheckConstraint(
-            "metric_type IN ('exception', 'endpoint')",
+            "metric_type IN ('exception', 'endpoint', 'log_volume')",
             name="check_metric_type",
         ),
         sqlalchemy.CheckConstraint(
             "hour >= 0 AND hour <= 23", name="check_hour_range"
+        ),
+        sqlalchemy.CheckConstraint(
+            "log_level IS NULL OR log_level IN ('debug', 'info', 'warning', 'error', 'critical')",
+            name="check_log_level",
+        ),
+        sqlalchemy.CheckConstraint(
+            "log_type IS NULL OR log_type IN ('console', 'logger', 'exception', 'network', 'database', 'endpoint', 'custom')",
+            name="check_log_type",
         ),
     )
 

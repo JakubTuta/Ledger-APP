@@ -279,7 +279,7 @@ class GetAggregatedMetricsRequest(_message.Message):
     def __init__(self, project_id: _Optional[int] = ..., metric_type: _Optional[str] = ..., period: _Optional[str] = ..., period_from: _Optional[str] = ..., period_to: _Optional[str] = ...) -> None: ...
 
 class AggregatedMetricData(_message.Message):
-    __slots__ = ("date", "hour", "endpoint_method", "endpoint_path", "log_count", "error_count", "avg_duration_ms", "min_duration_ms", "max_duration_ms", "p95_duration_ms", "p99_duration_ms")
+    __slots__ = ("date", "hour", "endpoint_method", "endpoint_path", "log_count", "error_count", "avg_duration_ms", "min_duration_ms", "max_duration_ms", "p95_duration_ms", "p99_duration_ms", "log_level", "log_type")
     DATE_FIELD_NUMBER: _ClassVar[int]
     HOUR_FIELD_NUMBER: _ClassVar[int]
     ENDPOINT_METHOD_FIELD_NUMBER: _ClassVar[int]
@@ -291,6 +291,8 @@ class AggregatedMetricData(_message.Message):
     MAX_DURATION_MS_FIELD_NUMBER: _ClassVar[int]
     P95_DURATION_MS_FIELD_NUMBER: _ClassVar[int]
     P99_DURATION_MS_FIELD_NUMBER: _ClassVar[int]
+    LOG_LEVEL_FIELD_NUMBER: _ClassVar[int]
+    LOG_TYPE_FIELD_NUMBER: _ClassVar[int]
     date: str
     hour: int
     endpoint_method: str
@@ -302,7 +304,9 @@ class AggregatedMetricData(_message.Message):
     max_duration_ms: int
     p95_duration_ms: int
     p99_duration_ms: int
-    def __init__(self, date: _Optional[str] = ..., hour: _Optional[int] = ..., endpoint_method: _Optional[str] = ..., endpoint_path: _Optional[str] = ..., log_count: _Optional[int] = ..., error_count: _Optional[int] = ..., avg_duration_ms: _Optional[float] = ..., min_duration_ms: _Optional[int] = ..., max_duration_ms: _Optional[int] = ..., p95_duration_ms: _Optional[int] = ..., p99_duration_ms: _Optional[int] = ...) -> None: ...
+    log_level: str
+    log_type: str
+    def __init__(self, date: _Optional[str] = ..., hour: _Optional[int] = ..., endpoint_method: _Optional[str] = ..., endpoint_path: _Optional[str] = ..., log_count: _Optional[int] = ..., error_count: _Optional[int] = ..., avg_duration_ms: _Optional[float] = ..., min_duration_ms: _Optional[int] = ..., max_duration_ms: _Optional[int] = ..., p95_duration_ms: _Optional[int] = ..., p99_duration_ms: _Optional[int] = ..., log_level: _Optional[str] = ..., log_type: _Optional[str] = ...) -> None: ...
 
 class GetAggregatedMetricsResponse(_message.Message):
     __slots__ = ("project_id", "metric_type", "granularity", "start_date", "end_date", "data")

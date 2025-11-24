@@ -371,6 +371,8 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
                     hour=item.hour if item.hour is not None else 0,
                     endpoint_method=item.endpoint_method or "",
                     endpoint_path=item.endpoint_path or "",
+                    log_level=item.log_level or "",
+                    log_type=item.log_type or "",
                     log_count=item.log_count,
                     error_count=item.error_count,
                     avg_duration_ms=item.avg_duration_ms or 0.0,

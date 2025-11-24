@@ -86,10 +86,10 @@ Raw log queries (going to the database) typically take under 200ms. Cached metri
 
 ### Analytics Workers - The Night Shift
 
-**What they do:** While you sleep, these workers are calculating things like "how many errors happened in the last 5 minutes?" or "what are the top 10 most common errors this week?" They write results to Redis cache so when you load your dashboard, everything's already computed.
+**What they do:** While you sleep, these workers are calculating things like "how many errors happened in the last hour?" or "what are the top 10 most common errors this week?" They write results to Redis cache and PostgreSQL for fast dashboard queries.
 
 **Why pre-compute?**
-Running "count all errors in the last 24 hours" is slow if you're doing it live every time someone opens a dashboard. By calculating it every 5 minutes and caching the result, your dashboard loads instantly.
+Running "count all errors in the last 24 hours" is slow if you're doing it live every time someone opens a dashboard. By pre-aggregating data hourly and caching results, your dashboard loads instantly. Aggregated metrics include exception counts, endpoint performance statistics, and log volume by type/level.
 
 Think of it like a newspaper: instead of researching every story when someone buys a paper, we do the research ahead of time and print it. Much faster.
 

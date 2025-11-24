@@ -183,11 +183,11 @@ Helps you find logs when you need them. Whether you want "all errors from the la
 - Log volume by level
 - Top errors by occurrence
 - Daily usage statistics
-- Aggregated hourly/daily metrics for exceptions and endpoints
+- Aggregated hourly/daily metrics for exceptions, endpoints, and log volume
 
 The first four are computed by Analytics Workers and cached in Redis. Queries are instant (under 5ms) because we already did the work.
 
-The aggregated metrics are pre-computed hourly and stored in PostgreSQL for efficient querying. They provide automatic granularity switching: hourly data for single-day queries, daily summaries for longer periods.
+The aggregated metrics are pre-computed hourly and stored in PostgreSQL for efficient querying. They provide automatic granularity switching: hourly data for single-day queries, daily summaries for longer periods. The log volume metrics track logs by level (debug, info, warning, error, critical) and type (console, logger, exception, network, database, endpoint, custom) for capacity planning and cost optimization.
 
 **Raw Logs (On-Demand):**
 

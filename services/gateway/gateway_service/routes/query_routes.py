@@ -184,7 +184,7 @@ async def get_log_by_id(
                         "invalid_type": {
                             "summary": "Invalid metric type",
                             "value": {
-                                "detail": "type must be either 'exception' or 'endpoint'"
+                                "detail": "type must be 'exception', 'endpoint', or 'log_volume'"
                             },
                         },
                         "missing_period": {
@@ -230,9 +230,9 @@ async def get_aggregated_metrics(
         description="The project ID to retrieve metrics for",
         gt=0,
     ),
-    type: Literal["exception", "endpoint"] = fastapi.Query(
+    type: Literal["exception", "endpoint", "log_volume"] = fastapi.Query(
         ...,
-        description="Metric type to retrieve (exception for error tracking, endpoint for API monitoring)",
+        description="Metric type to retrieve (exception for error tracking, endpoint for API monitoring, log_volume for log volume metrics)",
     ),
     period: Optional[
         Literal[
@@ -273,6 +273,7 @@ async def get_aggregated_metrics(
     - **type** (string): Metric type to retrieve
       - `exception`: Exception/error logs (all errors regardless of status)
       - `endpoint`: API endpoint monitoring (HTTP requests with performance metrics)
+      - `log_volume`: General log volume metrics (grouped by log level and type)
 
     - **Period selection** (one required):
       - **period** (string): Predefined time period
@@ -303,6 +304,13 @@ async def get_aggregated_metrics(
     - `p95_duration_ms`: 95th percentile response time
     - `p99_duration_ms`: 99th percentile response time
 
+    ### For Log Volume Metrics
+    - `log_count`: Total number of logs
+    - `error_count`: Number of logs with error/critical level
+    - `log_level`: Log severity level (debug, info, warning, error, critical)
+    - `log_type`: Type of log (console, logger, exception, network, database, endpoint, custom)
+    - Duration fields: `null` (not applicable)
+
     ## Validation Rules
 
     1. **Period validation**:
@@ -316,7 +324,7 @@ async def get_aggregated_metrics(
        - Hours/minutes/seconds are ignored (always treated as full days)
 
     3. **Type validation**:
-       - Must be exactly "exception" or "endpoint" (case-sensitive)
+       - Must be exactly "exception", "endpoint", or "log_volume" (case-sensitive)
 
     ## Examples
 
@@ -335,13 +343,19 @@ async def get_aggregated_metrics(
     GET /api/v1/metrics/aggregated?type=endpoint&periodFrom=2025-11-01&periodTo=2025-11-21
     ```
 
+    ### Log volume by level and type (today, hourly breakdown)
+    ```
+    GET /api/v1/metrics/aggregated?type=log_volume&period=today
+    ```
+
     ## Use Cases
 
     - **Error tracking dashboards**: Monitor exception trends over time
     - **API performance monitoring**: Track endpoint latency and error rates
-    - **Capacity planning**: Analyze request volume patterns
+    - **Log volume analysis**: Track log patterns by level and type
+    - **Capacity planning**: Analyze request and log volume patterns
     - **SLA monitoring**: Ensure response times meet targets
-    - **Trend analysis**: Identify performance degradation
+    - **Trend analysis**: Identify performance degradation or unusual log patterns
 
     Requires session token authentication via `Authorization: Bearer <token>` header.
     """
@@ -416,6 +430,8 @@ async def get_aggregated_metrics(
                 hour=item.hour if item.hour > 0 else None,
                 endpoint_method=item.endpoint_method if item.endpoint_method else None,
                 endpoint_path=item.endpoint_path if item.endpoint_path else None,
+                log_level=item.log_level if item.log_level else None,
+                log_type=item.log_type if item.log_type else None,
                 log_count=item.log_count,
                 error_count=item.error_count,
                 avg_duration_ms=(

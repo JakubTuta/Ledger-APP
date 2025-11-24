@@ -79,6 +79,12 @@ class AggregatedMetricDataResponse(pydantic.BaseModel):
     endpoint_path: typing.Optional[str] = pydantic.Field(
         default=None, description="Endpoint path"
     )
+    log_level: typing.Optional[str] = pydantic.Field(
+        default=None, description="Log level (debug, info, warning, error, critical)"
+    )
+    log_type: typing.Optional[str] = pydantic.Field(
+        default=None, description="Log type (console, logger, exception, etc.)"
+    )
     log_count: int = pydantic.Field(description="Total number of logs")
     error_count: int = pydantic.Field(description="Number of errors")
     avg_duration_ms: typing.Optional[float] = pydantic.Field(
@@ -100,7 +106,7 @@ class AggregatedMetricDataResponse(pydantic.BaseModel):
 
 class AggregatedMetricsResponse(pydantic.BaseModel):
     project_id: int = pydantic.Field(description="Project ID")
-    metric_type: str = pydantic.Field(description="Metric type (exception, endpoint)")
+    metric_type: str = pydantic.Field(description="Metric type (exception, endpoint, log_volume)")
     granularity: typing.Literal["hourly", "daily"] = pydantic.Field(
         description="Data granularity"
     )
