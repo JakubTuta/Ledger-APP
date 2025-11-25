@@ -34,33 +34,53 @@ class PartitionScheduler:
             logger.warning("Partition scheduler is already running")
             return
 
+        create_cron = self._parse_cron_expression(
+            config.settings.PARTITION_CREATE_CRON
+        )
+        check_cron = self._parse_cron_expression(config.settings.PARTITION_CHECK_CRON)
+
         self.scheduler.add_job(
             self.create_future_partitions,
-            trigger=CronTrigger(
-                day=1,
-                hour=0,
-                minute=0,
-            ),
+            trigger=CronTrigger(**create_cron),
             id="create_future_partitions",
             name="Create future log partitions",
             replace_existing=True,
-            misfire_grace_time=3600,
+            misfire_grace_time=config.settings.PARTITION_MISFIRE_GRACE_TIME,
         )
 
         self.scheduler.add_job(
             self.create_future_partitions,
-            trigger=CronTrigger(
-                hour=0,
-                minute=30,
-            ),
+            trigger=CronTrigger(**check_cron),
             id="daily_partition_check",
             name="Daily partition check",
             replace_existing=True,
-            misfire_grace_time=1800,
+            misfire_grace_time=config.settings.PARTITION_MISFIRE_GRACE_TIME // 2,
         )
+
+        logger.info("Scheduled partition management jobs:")
+        logger.info(
+            f"  - Create partitions: {config.settings.PARTITION_CREATE_CRON}"
+        )
+        logger.info(f"  - Daily check: {config.settings.PARTITION_CHECK_CRON}")
 
         self.scheduler.start()
         self.running = True
+
+    @staticmethod
+    def _parse_cron_expression(cron_expr: str) -> dict:
+        parts = cron_expr.split()
+        if len(parts) != 5:
+            raise ValueError(
+                f"Invalid cron expression: {cron_expr}. Expected 5 parts (minute hour day month day_of_week)"
+            )
+
+        return {
+            "minute": parts[0],
+            "hour": parts[1],
+            "day": parts[2],
+            "month": parts[3],
+            "day_of_week": parts[4],
+        }
 
     def stop(self) -> None:
         if not self.running:

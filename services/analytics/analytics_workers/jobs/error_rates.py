@@ -57,7 +57,7 @@ async def aggregate_error_rates() -> None:
 
                 await redis.setex(
                     cache_key,
-                    settings.ERROR_RATE_TTL,
+                    settings.ANALYTICS_ERROR_RATE_TTL,
                     cache_value,
                 )
 

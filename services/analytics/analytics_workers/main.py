@@ -9,7 +9,7 @@ import analytics_workers.jobs as jobs
 import analytics_workers.redis_client as redis_client
 import analytics_workers.utils.logging as logging_utils
 import apscheduler.schedulers.asyncio as async_scheduler
-import apscheduler.triggers.interval as interval_trigger
+import apscheduler.triggers.cron as cron_trigger
 
 logger = logging_utils.setup_logging()
 settings = config.get_settings()
@@ -18,7 +18,7 @@ scheduler = async_scheduler.AsyncIOScheduler(
     job_defaults={
         "coalesce": True,
         "max_instances": 1,
-        "misfire_grace_time": settings.JOB_MISFIRE_GRACE_TIME,
+        "misfire_grace_time": settings.ANALYTICS_JOB_MISFIRE_GRACE_TIME,
     }
 )
 
@@ -52,11 +52,18 @@ async def shutdown(sig: signal.Signals | None = None) -> None:
 
 
 def setup_jobs() -> None:
+    error_rate_cron = _parse_cron_expression(settings.ANALYTICS_ERROR_RATE_CRON)
+    log_volume_cron = _parse_cron_expression(settings.ANALYTICS_LOG_VOLUME_CRON)
+    top_errors_cron = _parse_cron_expression(settings.ANALYTICS_TOP_ERRORS_CRON)
+    usage_stats_cron = _parse_cron_expression(settings.ANALYTICS_USAGE_STATS_CRON)
+    hourly_metrics_cron = _parse_cron_expression(settings.ANALYTICS_HOURLY_METRICS_CRON)
+    available_routes_cron = _parse_cron_expression(
+        settings.ANALYTICS_AVAILABLE_ROUTES_CRON
+    )
+
     scheduler.add_job(
         jobs.aggregate_error_rates,
-        trigger=interval_trigger.IntervalTrigger(
-            minutes=settings.ERROR_RATE_INTERVAL_MINUTES
-        ),
+        trigger=cron_trigger.CronTrigger(**error_rate_cron),
         id="aggregate_error_rates",
         name="Aggregate Error Rates",
         replace_existing=True,
@@ -64,9 +71,7 @@ def setup_jobs() -> None:
 
     scheduler.add_job(
         jobs.aggregate_log_volumes,
-        trigger=interval_trigger.IntervalTrigger(
-            minutes=settings.LOG_VOLUME_INTERVAL_MINUTES
-        ),
+        trigger=cron_trigger.CronTrigger(**log_volume_cron),
         id="aggregate_log_volumes",
         name="Aggregate Log Volumes",
         replace_existing=True,
@@ -74,9 +79,7 @@ def setup_jobs() -> None:
 
     scheduler.add_job(
         jobs.compute_top_errors,
-        trigger=interval_trigger.IntervalTrigger(
-            minutes=settings.TOP_ERRORS_INTERVAL_MINUTES
-        ),
+        trigger=cron_trigger.CronTrigger(**top_errors_cron),
         id="compute_top_errors",
         name="Compute Top Errors",
         replace_existing=True,
@@ -84,9 +87,7 @@ def setup_jobs() -> None:
 
     scheduler.add_job(
         jobs.generate_usage_stats,
-        trigger=interval_trigger.IntervalTrigger(
-            minutes=settings.USAGE_STATS_INTERVAL_MINUTES
-        ),
+        trigger=cron_trigger.CronTrigger(**usage_stats_cron),
         id="generate_usage_stats",
         name="Generate Usage Stats",
         replace_existing=True,
@@ -94,9 +95,7 @@ def setup_jobs() -> None:
 
     scheduler.add_job(
         jobs.aggregate_hourly_metrics,
-        trigger=interval_trigger.IntervalTrigger(
-            minutes=settings.AGGREGATED_METRICS_INTERVAL_MINUTES
-        ),
+        trigger=cron_trigger.CronTrigger(**hourly_metrics_cron),
         id="aggregate_hourly_metrics",
         name="Aggregate Hourly Metrics",
         replace_existing=True,
@@ -104,13 +103,47 @@ def setup_jobs() -> None:
 
     scheduler.add_job(
         jobs.update_available_routes,
-        trigger=interval_trigger.IntervalTrigger(
-            minutes=settings.AVAILABLE_ROUTES_INTERVAL_MINUTES
-        ),
+        trigger=cron_trigger.CronTrigger(**available_routes_cron),
         id="update_available_routes",
         name="Update Available Routes",
         replace_existing=True,
     )
+
+    logger.info("Scheduled jobs with cron expressions:")
+    logger.info(
+        f"  - Aggregate Error Rates: {settings.ANALYTICS_ERROR_RATE_CRON}"
+    )
+    logger.info(
+        f"  - Aggregate Log Volumes: {settings.ANALYTICS_LOG_VOLUME_CRON}"
+    )
+    logger.info(
+        f"  - Compute Top Errors: {settings.ANALYTICS_TOP_ERRORS_CRON}"
+    )
+    logger.info(
+        f"  - Generate Usage Stats: {settings.ANALYTICS_USAGE_STATS_CRON}"
+    )
+    logger.info(
+        f"  - Aggregate Hourly Metrics: {settings.ANALYTICS_HOURLY_METRICS_CRON}"
+    )
+    logger.info(
+        f"  - Update Available Routes: {settings.ANALYTICS_AVAILABLE_ROUTES_CRON}"
+    )
+
+
+def _parse_cron_expression(cron_expr: str) -> dict:
+    parts = cron_expr.split()
+    if len(parts) != 5:
+        raise ValueError(
+            f"Invalid cron expression: {cron_expr}. Expected 5 parts (minute hour day month day_of_week)"
+        )
+
+    return {
+        "minute": parts[0],
+        "hour": parts[1],
+        "day": parts[2],
+        "month": parts[3],
+        "day_of_week": parts[4],
+    }
 
 
 async def main() -> None:

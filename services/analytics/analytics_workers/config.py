@@ -146,81 +146,76 @@ class Settings(pydantic_settings.BaseSettings):
             return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
-    ERROR_RATE_INTERVAL_MINUTES: int = pydantic.Field(
-        default=5,
-        ge=1,
-        le=60,
-        description="Error rate aggregation job interval (minutes)",
+    ANALYTICS_ERROR_RATE_CRON: str = pydantic.Field(
+        default="*/5 * * * *",
+        description="Error rate aggregation cron schedule (minute hour day month day_of_week)",
     )
 
-    LOG_VOLUME_INTERVAL_MINUTES: int = pydantic.Field(
-        default=5,
-        ge=1,
-        le=60,
-        description="Log volume aggregation job interval (minutes)",
+    ANALYTICS_LOG_VOLUME_CRON: str = pydantic.Field(
+        default="*/5 * * * *",
+        description="Log volume aggregation cron schedule",
     )
 
-    TOP_ERRORS_INTERVAL_MINUTES: int = pydantic.Field(
-        default=15,
-        ge=5,
-        le=120,
-        description="Top errors computation job interval (minutes)",
+    ANALYTICS_TOP_ERRORS_CRON: str = pydantic.Field(
+        default="*/15 * * * *",
+        description="Top errors computation cron schedule",
     )
 
-    USAGE_STATS_INTERVAL_MINUTES: int = pydantic.Field(
-        default=1,
-        ge=1,
-        le=60,
-        description="Usage stats generation job interval (minutes)",
+    ANALYTICS_USAGE_STATS_CRON: str = pydantic.Field(
+        default="*/5 * * * *",
+        description="Usage stats generation cron schedule",
     )
 
-    AGGREGATED_METRICS_INTERVAL_MINUTES: int = pydantic.Field(
-        default=60,
-        ge=1,
-        le=120,
-        description="Aggregated metrics job interval (minutes)",
+    ANALYTICS_HOURLY_METRICS_CRON: str = pydantic.Field(
+        default="0 * * * *",
+        description="Hourly metrics aggregation cron schedule",
     )
 
-    AVAILABLE_ROUTES_INTERVAL_MINUTES: int = pydantic.Field(
-        default=60,
-        ge=5,
-        le=1440,
-        description="Available routes update job interval (minutes)",
+    ANALYTICS_AVAILABLE_ROUTES_CRON: str = pydantic.Field(
+        default="0 * * * *",
+        description="Available routes update cron schedule",
     )
 
-    ERROR_RATE_TTL: int = pydantic.Field(
+    ANALYTICS_ERROR_RATE_TTL: int = pydantic.Field(
         default=600,
         ge=300,
         le=3600,
         description="Error rate cache TTL (seconds)",
     )
 
-    LOG_VOLUME_TTL: int = pydantic.Field(
+    ANALYTICS_LOG_VOLUME_TTL: int = pydantic.Field(
         default=600,
         ge=300,
         le=3600,
         description="Log volume cache TTL (seconds)",
     )
 
-    TOP_ERRORS_TTL: int = pydantic.Field(
+    ANALYTICS_TOP_ERRORS_TTL: int = pydantic.Field(
         default=900,
         ge=300,
         le=3600,
         description="Top errors cache TTL (seconds)",
     )
 
-    USAGE_STATS_TTL: int = pydantic.Field(
+    ANALYTICS_USAGE_STATS_TTL: int = pydantic.Field(
         default=3600,
         ge=600,
         le=86400,
         description="Usage stats cache TTL (seconds)",
     )
 
-    JOB_MISFIRE_GRACE_TIME: int = pydantic.Field(
+    ANALYTICS_JOB_MISFIRE_GRACE_TIME: int = pydantic.Field(
         default=60,
         ge=10,
         le=300,
         description="Job misfire grace time (seconds)",
+    )
+
+    ANALYTICS_QUERY_TIMEOUT: int = pydantic.Field(
+        default=60,
+        ge=10,
+        le=300,
+        description="Analytics query timeout (seconds)",
     )
 
     LOG_LEVEL: typing.Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = (

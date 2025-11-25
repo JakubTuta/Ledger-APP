@@ -28,7 +28,7 @@ services:
           memory: 512M
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${AUTH_DB_USER}"]
-      interval: 10s
+      interval: 60s
       timeout: 5s
       retries: 5
     networks:
@@ -65,7 +65,7 @@ services:
           memory: 2G
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${LOGS_DB_USER}"]
-      interval: 10s
+      interval: 60s
       timeout: 5s
       retries: 5
     networks:
@@ -83,7 +83,7 @@ services:
       - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
-      interval: 10s
+      interval: 60s
       timeout: 5s
       retries: 5
     networks:
@@ -128,7 +128,7 @@ services:
           "-c",
           "import grpc; channel = grpc.insecure_channel('localhost:50051'); channel.close()",
         ]
-      interval: 30s
+      interval: 60s
       timeout: 5s
       retries: 3
 
@@ -165,7 +165,7 @@ services:
       --log-level info
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
+      interval: 60s
       timeout: 5s
       retries: 3
 
@@ -200,7 +200,7 @@ services:
           "-c",
           "import grpc; channel = grpc.insecure_channel('localhost:50052'); channel.close()",
         ]
-      interval: 30s
+      interval: 60s
       timeout: 5s
       retries: 3
 
@@ -297,7 +297,7 @@ services:
           "-c",
           "import grpc; channel = grpc.insecure_channel('localhost:${QUERY_GRPC_PORT:-50053}'); channel.close()",
         ]
-      interval: 30s
+      interval: 60s
       timeout: 5s
       retries: 3
 

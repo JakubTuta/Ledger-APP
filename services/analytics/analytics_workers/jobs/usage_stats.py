@@ -93,7 +93,7 @@ async def generate_usage_stats() -> None:
 
                     await redis.setex(
                         cache_key,
-                        settings.USAGE_STATS_TTL,
+                        settings.ANALYTICS_USAGE_STATS_TTL,
                         cache_value,
                     )
 

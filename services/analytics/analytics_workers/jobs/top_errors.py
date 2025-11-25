@@ -69,7 +69,7 @@ async def compute_top_errors() -> None:
 
                 await redis.setex(
                     cache_key,
-                    settings.TOP_ERRORS_TTL,
+                    settings.ANALYTICS_TOP_ERRORS_TTL,
                     cache_value,
                 )
 

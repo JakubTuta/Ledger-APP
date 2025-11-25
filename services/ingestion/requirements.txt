@@ -6,6 +6,7 @@ protobuf==6.33.0
 # Database
 sqlalchemy[asyncio]==2.0.44
 asyncpg==0.30.0
+alembic==1.17.2
 
 # Redis Client
 redis[hiredis]==6.4.0

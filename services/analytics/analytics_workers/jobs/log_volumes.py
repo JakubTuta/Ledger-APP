@@ -66,7 +66,7 @@ async def aggregate_log_volumes() -> None:
 
                 await redis.setex(
                     cache_key,
-                    settings.LOG_VOLUME_TTL,
+                    settings.ANALYTICS_LOG_VOLUME_TTL,
                     cache_value,
                 )
 

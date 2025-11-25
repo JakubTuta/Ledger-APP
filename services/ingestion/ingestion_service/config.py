@@ -164,6 +164,23 @@ class Settings(pydantic_settings.BaseSettings):
         description="Enable automatic partition creation scheduler",
     )
 
+    PARTITION_CREATE_CRON: str = pydantic.Field(
+        default="0 0 1 * *",
+        description="Monthly partition creation cron (1st of month at 00:00)",
+    )
+
+    PARTITION_CHECK_CRON: str = pydantic.Field(
+        default="30 0 * * *",
+        description="Daily partition check cron (every day at 00:30)",
+    )
+
+    PARTITION_MISFIRE_GRACE_TIME: int = pydantic.Field(
+        default=3600,
+        ge=60,
+        le=7200,
+        description="Partition job misfire grace time (seconds)",
+    )
+
     MAX_LOG_MESSAGE_LENGTH: int = pydantic.Field(
         default=10_000,
         ge=1_000,
