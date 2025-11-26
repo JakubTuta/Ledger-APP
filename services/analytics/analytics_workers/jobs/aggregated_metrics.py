@@ -45,6 +45,7 @@ async def _aggregate_endpoint_metrics(
     start_time: datetime.datetime,
     end_time: datetime.datetime,
 ) -> None:
+    logger.info(f"Aggregating endpoint metrics for {date_str} hour {hour}")
     async with database.get_logs_session() as session:
         query = sa.text(
             """
@@ -79,14 +80,14 @@ async def _aggregate_endpoint_metrics(
                     WHERE (attributes->'endpoint'->>'status_code')::INTEGER >= 400
                 ) AS error_count,
                 AVG((attributes->'endpoint'->>'duration_ms')::FLOAT) AS avg_duration_ms,
-                MIN((attributes->'endpoint'->>'duration_ms')::INTEGER) AS min_duration_ms,
-                MAX((attributes->'endpoint'->>'duration_ms')::INTEGER) AS max_duration_ms,
-                PERCENTILE_CONT(0.95) WITHIN GROUP (
-                    ORDER BY (attributes->'endpoint'->>'duration_ms')::INTEGER
-                ) AS p95_duration_ms,
-                PERCENTILE_CONT(0.99) WITHIN GROUP (
-                    ORDER BY (attributes->'endpoint'->>'duration_ms')::INTEGER
-                ) AS p99_duration_ms
+                ROUND(MIN((attributes->'endpoint'->>'duration_ms')::FLOAT))::INTEGER AS min_duration_ms,
+                ROUND(MAX((attributes->'endpoint'->>'duration_ms')::FLOAT))::INTEGER AS max_duration_ms,
+                ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (
+                    ORDER BY (attributes->'endpoint'->>'duration_ms')::FLOAT
+                ))::INTEGER AS p95_duration_ms,
+                ROUND(PERCENTILE_CONT(0.99) WITHIN GROUP (
+                    ORDER BY (attributes->'endpoint'->>'duration_ms')::FLOAT
+                ))::INTEGER AS p99_duration_ms
             FROM logs
             WHERE
                 log_type = 'endpoint'
@@ -131,6 +132,11 @@ async def _aggregate_endpoint_metrics(
         )
         await session.commit()
 
+        logger.info(
+            f"Aggregated endpoint metrics for {date_str} hour {hour}: "
+            f"{result.rowcount} rows affected"
+        )
+
 
 async def _aggregate_exception_metrics(
     date_str: str,
@@ -138,6 +144,7 @@ async def _aggregate_exception_metrics(
     start_time: datetime.datetime,
     end_time: datetime.datetime,
 ) -> None:
+    logger.info(f"Aggregating exception metrics for {date_str} hour {hour}")
     async with database.get_logs_session() as session:
         query = sa.text(
             """
@@ -199,6 +206,11 @@ async def _aggregate_exception_metrics(
         )
         await session.commit()
 
+        logger.info(
+            f"Aggregated exception metrics for {date_str} hour {hour}: "
+            f"{result.rowcount} rows affected"
+        )
+
 
 async def _aggregate_log_volume_metrics(
     date_str: str,
@@ -206,6 +218,7 @@ async def _aggregate_log_volume_metrics(
     start_time: datetime.datetime,
     end_time: datetime.datetime,
 ) -> None:
+    logger.info(f"Aggregating log volume metrics for {date_str} hour {hour}")
     async with database.get_logs_session() as session:
         query = sa.text(
             """

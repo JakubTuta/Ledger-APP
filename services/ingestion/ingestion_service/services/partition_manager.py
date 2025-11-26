@@ -142,26 +142,14 @@ async def ensure_logs_partitions(
     return await ensure_partitions_range(session, "logs", today, months_ahead)
 
 
-async def ensure_metrics_partitions(
-    session: AsyncSession,
-    months_ahead: int = 3,
-) -> int:
-    today = datetime.date.today()
-    return await ensure_partitions_range(
-        session, "ingestion_metrics", today, months_ahead
-    )
-
-
 async def ensure_all_partitions(
     session: AsyncSession,
     months_ahead: int = 3,
 ) -> dict[str, int]:
     logs_created = await ensure_logs_partitions(session, months_ahead)
-    metrics_created = await ensure_metrics_partitions(session, months_ahead)
 
     return {
         "logs": logs_created,
-        "ingestion_metrics": metrics_created,
     }
 
 

@@ -156,30 +156,3 @@ class ErrorGroup(database.Base):
         )
 
 
-class IngestionMetrics(database.Base):
-    __tablename__ = "ingestion_metrics"
-
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    timestamp: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        primary_key=True,
-        default=datetime.datetime.now(datetime.timezone.utc),
-        nullable=False,
-    )
-
-    logs_received: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
-    logs_processed: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
-    logs_failed: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
-
-    latency_p50: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
-    latency_p95: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
-    latency_p99: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
-
-    queue_size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-
-    worker_count: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
-
-    __table_args__ = ({"postgresql_partition_by": "RANGE (timestamp)"},)
-
-    def __repr__(self) -> str:
-        return f"<IngestionMetrics(timestamp={self.timestamp}, logs_received={self.logs_received})>"
