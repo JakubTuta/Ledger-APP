@@ -257,6 +257,10 @@ async def get_aggregated_metrics(
         description="End date in ISO 8601 format (YYYY-MM-DD). Must be used with periodFrom.",
         pattern=r"^\d{4}-\d{2}-\d{2}$",
     ),
+    endpointPath: Optional[str] = fastapi.Query(
+        None,
+        description="Filter by specific endpoint path (e.g., /api/users). Only applicable when type=endpoint.",
+    ),
 ) -> schemas.AggregatedMetricsResponse:
     """
     Retrieve aggregated metrics for a project.
@@ -420,6 +424,7 @@ async def get_aggregated_metrics(
                         period_from_date.isoformat() if period_from_date else ""
                     ),
                     period_to=period_to_date.isoformat() if period_to_date else "",
+                    endpoint_path=endpointPath if endpointPath else "",
                 ),
                 timeout=10.0,
             )

@@ -167,6 +167,7 @@ message GetAggregatedMetricsRequest {
     optional string period = 3;
     optional string period_from = 4;
     optional string period_to = 5;
+    optional string endpoint_path = 6;
 }
 
 message AggregatedMetricData {

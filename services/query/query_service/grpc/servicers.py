@@ -354,6 +354,7 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
                 period=request.period if request.period else None,
                 period_from=period_from,
                 period_to=period_to,
+                endpoint_path=request.endpoint_path if request.endpoint_path else None,
             )
 
             start_date, end_date = aggregated_metrics_service._parse_period(

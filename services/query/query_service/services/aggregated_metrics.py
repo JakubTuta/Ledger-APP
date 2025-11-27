@@ -14,6 +14,7 @@ async def get_aggregated_metrics(
     period: str | None = None,
     period_from: datetime.date | None = None,
     period_to: datetime.date | None = None,
+    endpoint_path: str | None = None,
 ) -> list[schemas.AggregatedMetricData]:
     start_date, end_date = _parse_period(period, period_from, period_to)
 
@@ -32,8 +33,12 @@ async def get_aggregated_metrics(
                     models.AggregatedMetric.metric_type == metric_type,
                     models.AggregatedMetric.date == start_date_str,
                 )
-                .order_by(models.AggregatedMetric.hour)
             )
+
+            if endpoint_path is not None:
+                query = query.where(models.AggregatedMetric.endpoint_path == endpoint_path)
+
+            query = query.order_by(models.AggregatedMetric.hour)
 
             result = await session.execute(query)
             metrics = result.scalars().all()
@@ -58,7 +63,26 @@ async def get_aggregated_metrics(
             ]
         else:
             if metric_type == "endpoint":
-                query = sa.text("""
+                where_clauses = [
+                    "project_id = :project_id",
+                    "metric_type = :metric_type",
+                    "date >= :start_date",
+                    "date <= :end_date",
+                ]
+                params = {
+                    "project_id": project_id,
+                    "metric_type": metric_type,
+                    "start_date": start_date_str,
+                    "end_date": end_date_str,
+                }
+
+                if endpoint_path is not None:
+                    where_clauses.append("endpoint_path = :endpoint_path")
+                    params["endpoint_path"] = endpoint_path
+
+                where_clause = " AND ".join(where_clauses)
+
+                query = sa.text(f"""
                     SELECT
                         date,
                         endpoint_method,
@@ -73,11 +97,7 @@ async def get_aggregated_metrics(
                         AVG(p95_duration_ms) as p95_duration_ms,
                         AVG(p99_duration_ms) as p99_duration_ms
                     FROM aggregated_metrics
-                    WHERE
-                        project_id = :project_id
-                        AND metric_type = :metric_type
-                        AND date >= :start_date
-                        AND date <= :end_date
+                    WHERE {where_clause}
                     GROUP BY date, endpoint_method, endpoint_path
                     ORDER BY date, endpoint_path, endpoint_method
                 """)
@@ -105,6 +125,12 @@ async def get_aggregated_metrics(
                     GROUP BY date, log_level, log_type
                     ORDER BY date, log_level, log_type
                 """)
+                params = {
+                    "project_id": project_id,
+                    "metric_type": metric_type,
+                    "start_date": start_date_str,
+                    "end_date": end_date_str,
+                }
             else:
                 query = sa.text("""
                     SELECT
@@ -129,16 +155,14 @@ async def get_aggregated_metrics(
                     GROUP BY date
                     ORDER BY date
                 """)
-
-            result = await session.execute(
-                query,
-                {
+                params = {
                     "project_id": project_id,
                     "metric_type": metric_type,
                     "start_date": start_date_str,
                     "end_date": end_date_str,
-                },
-            )
+                }
+
+            result = await session.execute(query, params)
 
             rows = result.fetchall()
 

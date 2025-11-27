@@ -30,26 +30,20 @@ async def _get_project_routes() -> dict[int, list[str]]:
     Query unique endpoint routes per project from logs database.
 
     Returns:
-        Dictionary mapping project_id to list of route strings (e.g., "GET /api/v1/users")
+        Dictionary mapping project_id to list of route strings (e.g., "/api/v1/users")
     """
     async with database.get_logs_session() as session:
         query = sa.text(
             """
             SELECT
                 project_id,
-                CONCAT(
-                    (attributes->'endpoint'->>'method'),
-                    ' ',
-                    (attributes->'endpoint'->>'path')
-                ) AS route
+                (attributes->'endpoint'->>'path') AS route
             FROM logs
             WHERE
                 log_type = 'endpoint'
-                AND attributes->'endpoint'->>'method' IS NOT NULL
                 AND attributes->'endpoint'->>'path' IS NOT NULL
             GROUP BY
                 project_id,
-                attributes->'endpoint'->>'method',
                 attributes->'endpoint'->>'path'
             ORDER BY
                 project_id,
