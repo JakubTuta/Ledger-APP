@@ -45,7 +45,6 @@ async def _aggregate_endpoint_metrics(
     start_time: datetime.datetime,
     end_time: datetime.datetime,
 ) -> None:
-    logger.info(f"Aggregating endpoint metrics for {date_str} hour {hour}")
     async with database.get_logs_session() as session:
         query = sa.text(
             """
@@ -144,7 +143,6 @@ async def _aggregate_exception_metrics(
     start_time: datetime.datetime,
     end_time: datetime.datetime,
 ) -> None:
-    logger.info(f"Aggregating exception metrics for {date_str} hour {hour}")
     async with database.get_logs_session() as session:
         query = sa.text(
             """
@@ -218,7 +216,6 @@ async def _aggregate_log_volume_metrics(
     start_time: datetime.datetime,
     end_time: datetime.datetime,
 ) -> None:
-    logger.info(f"Aggregating log volume metrics for {date_str} hour {hour}")
     async with database.get_logs_session() as session:
         query = sa.text(
             """

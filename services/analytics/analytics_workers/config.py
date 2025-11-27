@@ -147,22 +147,22 @@ class Settings(pydantic_settings.BaseSettings):
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
     ANALYTICS_ERROR_RATE_CRON: str = pydantic.Field(
-        default="*/5 * * * *",
+        default="*/10 * * * *",
         description="Error rate aggregation cron schedule (minute hour day month day_of_week)",
     )
 
     ANALYTICS_LOG_VOLUME_CRON: str = pydantic.Field(
-        default="*/5 * * * *",
+        default="*/10 * * * *",
         description="Log volume aggregation cron schedule",
     )
 
     ANALYTICS_TOP_ERRORS_CRON: str = pydantic.Field(
-        default="*/15 * * * *",
+        default="*/30 * * * *",
         description="Top errors computation cron schedule",
     )
 
     ANALYTICS_USAGE_STATS_CRON: str = pydantic.Field(
-        default="*/5 * * * *",
+        default="*/10 * * * *",
         description="Usage stats generation cron schedule",
     )
 
@@ -172,7 +172,7 @@ class Settings(pydantic_settings.BaseSettings):
     )
 
     ANALYTICS_AVAILABLE_ROUTES_CRON: str = pydantic.Field(
-        default="0 * * * *",
+        default="0 */2 * * *",
         description="Available routes update cron schedule",
     )
 

@@ -42,21 +42,18 @@ class TestDatabase:
 
     async def create_tables(self):
         async with self.engine.begin() as conn:
+
             def create_all_and_partitions(conn_sync):
                 database.Base.metadata.create_all(conn_sync)
 
                 try:
                     conn_sync.execute(
-                        sqlalchemy.text("""
+                        sqlalchemy.text(
+                            """
                             CREATE TABLE IF NOT EXISTS logs_test_partition PARTITION OF logs
                             FOR VALUES FROM ('2020-01-01') TO ('2030-12-31');
-                        """)
-                    )
-                    conn_sync.execute(
-                        sqlalchemy.text("""
-                            CREATE TABLE IF NOT EXISTS ingestion_metrics_test_partition PARTITION OF ingestion_metrics
-                            FOR VALUES FROM ('2020-01-01') TO ('2030-12-31');
-                        """)
+                        """
+                        )
                     )
                 except Exception as e:
                     print(f"Note: Partitions may already exist: {e}")
@@ -74,10 +71,14 @@ class TestDatabase:
         if not self.engine:
             return
         async with self.engine.begin() as conn:
-            table_names = [t.name for t in reversed(database.Base.metadata.sorted_tables)]
+            table_names = [
+                t.name for t in reversed(database.Base.metadata.sorted_tables)
+            ]
             if table_names:
                 await conn.execute(
-                    sqlalchemy.text(f"TRUNCATE TABLE {', '.join(table_names)} RESTART IDENTITY CASCADE")
+                    sqlalchemy.text(
+                        f"TRUNCATE TABLE {', '.join(table_names)} RESTART IDENTITY CASCADE"
+                    )
                 )
 
     async def close(self):
@@ -140,6 +141,7 @@ async def clear_test_database():
 
 
 if __name__ == "__main__":
+
     async def test():
         print("Creating tables...")
         await setup_test_database()
