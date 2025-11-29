@@ -233,6 +233,27 @@ class Settings(pydantic_settings.BaseSettings):
         description="HTTP request timeout (seconds)",
     )
 
+    # ==================== Notifications ====================
+
+    NOTIFICATIONS_ENABLED: bool = pydantic.Field(
+        default=True,
+        description="Enable real-time error notifications via Server-Sent Events (SSE)",
+    )
+
+    NOTIFICATIONS_MAX_CONNECTIONS_PER_USER: int = pydantic.Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="Maximum concurrent SSE connections per user",
+    )
+
+    NOTIFICATIONS_HEARTBEAT_INTERVAL: int = pydantic.Field(
+        default=30,
+        ge=10,
+        le=120,
+        description="SSE heartbeat interval in seconds to keep connection alive",
+    )
+
     # ==================== Validators ====================
 
     @pydantic.field_validator("GATEWAY_WORKERS")

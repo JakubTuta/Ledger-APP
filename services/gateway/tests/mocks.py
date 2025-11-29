@@ -83,7 +83,35 @@ class MockRedisClient:
             "hour_limit": limit_per_hour,
         }
 
+    def pubsub(self):
+        return MockRedisPubSub()
+
+    async def publish(self, channel: str, message: str) -> int:
+        return 0
+
     async def close(self) -> None:
+        pass
+
+
+class MockRedisPubSub:
+    def __init__(self):
+        self.channels = []
+        self.messages = []
+
+    async def subscribe(self, *channels):
+        self.channels.extend(channels)
+
+    async def unsubscribe(self, *channels):
+        for channel in channels:
+            if channel in self.channels:
+                self.channels.remove(channel)
+
+    async def listen(self):
+        yield {"type": "subscribe", "channel": self.channels[0] if self.channels else None}
+        for message in self.messages:
+            yield message
+
+    async def close(self):
         pass
 
 
@@ -116,6 +144,9 @@ class MockGRPCPool:
     def __init__(self):
         self.stubs = {}
         self.call_count = 0
+
+    def get_channel(self, service_name: str):
+        return None
 
     def get_stub(self, service_name: str, stub_class):
         if service_name not in self.stubs:

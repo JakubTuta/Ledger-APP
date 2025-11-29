@@ -11,6 +11,7 @@ from gateway_service.routes import (
     auth_routes,
     dashboard_routes,
     ingestion_routes,
+    notifications,
     project_routes,
     query_routes,
     settings_routes,
@@ -91,6 +92,7 @@ Production-ready API for ingesting, storing, and querying millions of logs per s
 * **Rate limiting** - Automatic rate limiting per API key (per-minute and per-hour)
 * **Circuit breaker** - Graceful degradation with fallback mechanisms
 * **Real-time analytics** - Pre-computed metrics and dashboards
+* **Real-time notifications** - Server-Sent Events (SSE) for instant error alerts
 * **Flexible querying** - Filter logs by level, type, time range, and more
 
 ### Authentication
@@ -168,6 +170,10 @@ def custom_openapi():
         {
             "name": "Dashboard",
             "description": "Dashboard panel management for custom views",
+        },
+        {
+            "name": "Notifications",
+            "description": "Real-time error notifications via Server-Sent Events (SSE)",
         },
         {
             "name": "Settings",
@@ -295,6 +301,7 @@ include_router(api_key_routes.router, prefix="/api/v1")
 include_router(dashboard_routes.router, prefix="/api/v1")
 include_router(ingestion_routes.router, prefix="/api/v1")
 include_router(query_routes.router, prefix="/api/v1")
+include_router(notifications.router, prefix="/api/v1")
 include_router(settings_routes.router, prefix="/api/v1")
 
 

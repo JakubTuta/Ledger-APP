@@ -169,6 +169,201 @@ Imagine your app suddenly gets featured and traffic 10x's. Your logging goes cra
 
 ---
 
+## Notifications - The Instant Alert System
+
+### What It Does
+
+Sends real-time notifications to your browser when errors or critical issues happen. No polling, no delays - you get alerts the moment something goes wrong.
+
+### How It Works
+
+When you send a log with level `error` or `critical` (or log_type `exception`), here's what happens:
+
+1. **Ingestion Service validates and queues the log** (normal flow)
+2. **Immediately publishes a notification** to Redis Pub/Sub
+3. **Gateway Service streams it** to any connected browsers
+4. **Your dashboard shows an alert** - typically within 30 milliseconds
+
+You don't have to refresh the page or poll for updates. Errors appear instantly.
+
+### Server-Sent Events (SSE)
+
+We use SSE because it's perfect for this use case:
+
+**Why SSE?**
+- Built into browsers (no extra libraries needed)
+- Automatic reconnection if connection drops
+- Works over regular HTTP/HTTPS
+- Simpler and lighter than WebSockets for one-way notifications
+
+**How to connect:**
+
+```javascript
+const eventSource = new EventSource('/api/v1/notifications/stream', {
+  headers: {
+    'X-API-Key': 'your-api-key-here'
+  }
+});
+
+eventSource.addEventListener('error_notification', (event) => {
+  const error = JSON.parse(event.data);
+
+  // Show toast notification
+  showToast({
+    title: error.error_type,
+    message: error.message,
+    level: error.level,
+    timestamp: error.timestamp
+  });
+});
+
+eventSource.addEventListener('connected', (event) => {
+  console.log('Notifications connected:', JSON.parse(event.data));
+});
+```
+
+### Event Types
+
+**`connected`** - Confirms connection is established
+```json
+{
+  "timestamp": "2025-01-15T10:00:00Z",
+  "projects": [1, 2, 3]
+}
+```
+
+**`error_notification`** - New error occurred
+```json
+{
+  "project_id": 1,
+  "level": "error",
+  "message": "Database connection timeout",
+  "error_type": "DatabaseError",
+  "timestamp": "2025-01-15T10:05:23Z",
+  "error_fingerprint": "abc123"
+}
+```
+
+**`heartbeat`** - Keepalive ping (every 30 seconds)
+```json
+{
+  "timestamp": "2025-01-15T10:05:00Z"
+}
+```
+
+### Multi-Project Support
+
+If you're authenticated with a session token (not an API key), you automatically get notifications for all projects you own. The Gateway:
+
+1. Authenticates you
+2. Fetches your projects from Auth Service
+3. Subscribes to notifications for all of them
+4. Streams errors from any project you have access to
+
+### What Gets Notified
+
+**Included:**
+- `level: "error"` logs
+- `level: "critical"` logs
+- `log_type: "exception"` logs (regardless of level)
+
+**Excluded:**
+- `level: "info"`, `"debug"`, `"warning"` logs (unless they're exceptions)
+- Regular application logs
+
+This keeps notifications meaningful - only things that need attention trigger alerts.
+
+### Configuration
+
+Default settings work for most use cases:
+
+- **Max connections per user:** 5 (prevents resource exhaustion)
+- **Heartbeat interval:** 30 seconds (keeps connection alive)
+- **Enabled by default:** Yes (set `NOTIFICATIONS_ENABLED=false` to disable)
+
+### Performance
+
+**Latency:** Typically under 30 milliseconds from log ingestion to browser notification
+
+**Breakdown:**
+- Ingestion validation: ~5ms
+- Redis Pub/Sub publish: <1ms
+- Pub/Sub fanout: ~5ms
+- Gateway filtering: <1ms
+- SSE transmission: ~10ms (network latency)
+
+**Scalability:**
+- Multiple Gateway instances can all stream notifications
+- Redis Pub/Sub handles fanout to all subscribers automatically
+- No single point of failure
+
+### Important: Fire-and-Forget
+
+Notifications are **not persisted**. If you're not connected when an error occurs, you won't receive that notification.
+
+**Why?**
+- Real-time alerts are for instant awareness, not reliable delivery
+- Keeps system simple and fast
+- Reduces Redis memory usage
+
+**How to handle this:**
+- On dashboard load, fetch recent errors via REST API
+- Use notifications for live updates while browsing
+- Critical errors are still stored in the database for later review
+
+### Browser Compatibility
+
+SSE works in all modern browsers:
+- Chrome/Edge (Chromium): ✅
+- Firefox: ✅
+- Safari: ✅
+- Opera: ✅
+
+Internet Explorer: ❌ (use a polyfill or skip notifications)
+
+### React Hook Example
+
+```typescript
+import { useEffect } from 'react';
+import { toast } from 'react-toastify';
+
+export function useErrorNotifications() {
+  useEffect(() => {
+    const es = new EventSource('/api/v1/notifications/stream');
+
+    es.addEventListener('error_notification', (event) => {
+      const error = JSON.parse(event.data);
+
+      toast.error(
+        <div>
+          <strong>{error.error_type}</strong>
+          <p>{error.message}</p>
+        </div>
+      );
+    });
+
+    return () => es.close();
+  }, []);
+}
+```
+
+### Health Check
+
+Check if notifications are working:
+
+```bash
+curl https://api.ledger.com/api/v1/notifications/health
+
+{
+  "status": "healthy",
+  "enabled": true,
+  "heartbeat_interval": 30,
+  "max_connections_per_user": 5
+}
+```
+
+---
+
 ## Query Service - The Search Expert
 
 ### What It Does

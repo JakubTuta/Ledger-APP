@@ -9,11 +9,20 @@ import ingestion_service.proto.ingestion_pb2_grpc as ingestion_pb2_grpc
 import ingestion_service.schemas as schemas
 import ingestion_service.services.enricher as enricher
 import ingestion_service.services.queue_service as queue_service
+import ingestion_service.notifications as notifications
+import ingestion_service.config as config
 
 logger = logging.getLogger(__name__)
 
 
 class IngestionServicer(ingestion_pb2_grpc.IngestionServiceServicer):
+    def __init__(self, redis_client=None):
+        self.notification_publisher = None
+        if redis_client and config.settings.NOTIFICATIONS_ENABLED:
+            self.notification_publisher = notifications.NotificationPublisher(
+                redis_client,
+                enabled=config.settings.NOTIFICATIONS_ENABLED
+            )
     async def IngestLog(
         self, request: ingestion_pb2.IngestLogRequest, context: grpc.aio.ServicerContext
     ) -> ingestion_pb2.IngestLogResponse:
@@ -23,6 +32,29 @@ class IngestionServicer(ingestion_pb2_grpc.IngestionServiceServicer):
             enriched_log = enricher.enrich_log_entry(log_entry, request.project_id)
 
             await queue_service.enqueue_log(enriched_log)
+
+            if self.notification_publisher and self.notification_publisher.should_notify(
+                enriched_log.level,
+                enriched_log.log_type,
+                config.settings.NOTIFICATIONS_PUBLISH_ERRORS,
+                config.settings.NOTIFICATIONS_PUBLISH_CRITICAL
+            ):
+                notification = notifications.ErrorNotification(
+                    project_id=enriched_log.project_id,
+                    level=enriched_log.level,
+                    log_type=enriched_log.log_type,
+                    message=enriched_log.message[:500] if enriched_log.message else "",
+                    error_type=enriched_log.error_type,
+                    timestamp=enriched_log.timestamp,
+                    error_fingerprint=enriched_log.error_fingerprint,
+                    attributes=enriched_log.attributes or {},
+                    sdk_version=enriched_log.sdk_version,
+                    platform=enriched_log.platform
+                )
+                await self.notification_publisher.publish_error_notification(
+                    enriched_log.project_id,
+                    notification
+                )
 
             return ingestion_pb2.IngestLogResponse(
                 success=True,
@@ -87,6 +119,31 @@ class IngestionServicer(ingestion_pb2_grpc.IngestionServiceServicer):
 
             if enriched_logs:
                 await queue_service.enqueue_logs_batch(enriched_logs)
+
+                if self.notification_publisher:
+                    for enriched_log in enriched_logs:
+                        if self.notification_publisher.should_notify(
+                            enriched_log.level,
+                            enriched_log.log_type,
+                            config.settings.NOTIFICATIONS_PUBLISH_ERRORS,
+                            config.settings.NOTIFICATIONS_PUBLISH_CRITICAL
+                        ):
+                            notification = notifications.ErrorNotification(
+                                project_id=enriched_log.project_id,
+                                level=enriched_log.level,
+                                log_type=enriched_log.log_type,
+                                message=enriched_log.message[:500] if enriched_log.message else "",
+                                error_type=enriched_log.error_type,
+                                timestamp=enriched_log.timestamp,
+                                error_fingerprint=enriched_log.error_fingerprint,
+                                attributes=enriched_log.attributes or {},
+                                sdk_version=enriched_log.sdk_version,
+                                platform=enriched_log.platform
+                            )
+                            await self.notification_publisher.publish_error_notification(
+                                enriched_log.project_id,
+                                notification
+                            )
 
             error_str = "; ".join(error_messages) if error_messages else None
 

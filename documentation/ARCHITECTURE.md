@@ -14,19 +14,24 @@ Here's how everything connects:
 Your Application (using our SDK or sending HTTP requests)
             │
             ├──► Gateway Service (port 8000)
-            │    └─ The front door - handles auth, rate limits, routing
+            │    ├─ The front door - handles auth, rate limits, routing
+            │    └─ Real-time notifications via SSE (Server-Sent Events)
             │
             ├──► Auth Service
             │    └─ Manages who you are and what you can access
             │
             ├──► Ingestion Service
-            │    └─ Receives your logs super fast, queues them for storage
+            │    ├─ Receives your logs super fast, queues them for storage
+            │    └─ Publishes error notifications to Redis Pub/Sub
             │
             ├──► Query Service
             │    └─ Helps you find and retrieve your logs quickly
             │
-            └──► Analytics Workers
-                 └─ Crunches numbers in the background for dashboards
+            ├──► Analytics Workers
+            │    └─ Crunches numbers in the background for dashboards
+            │
+            └──► Redis Pub/Sub
+                 └─ Real-time event bus for instant error notifications
 ```
 
 **The important part:** Only the Gateway is accessible from the outside world. Everything else runs internally for security. You talk to the Gateway, and it handles the rest.
@@ -93,6 +98,30 @@ Running "count all errors in the last 24 hours" is slow if you're doing it live 
 
 Think of it like a newspaper: instead of researching every story when someone buys a paper, we do the research ahead of time and print it. Much faster.
 
+### Real-Time Notifications - The Alert System
+
+**What they do:** Send instant error alerts to your browser the moment something goes wrong. No polling, no refresh - errors appear immediately.
+
+**Here's how notifications flow:**
+
+1. Error log arrives at Ingestion Service
+2. Ingestion validates and queues it (normal flow)
+3. Immediately publishes notification to Redis Pub/Sub channel `notifications:errors:{project_id}`
+4. All Gateway instances subscribed to that channel receive it
+5. Gateway streams it to connected browsers via Server-Sent Events (SSE)
+6. Your dashboard shows an alert - typically within 30 milliseconds
+
+**Why SSE instead of WebSockets?**
+- Built into browsers (EventSource API)
+- Automatic reconnection if connection drops
+- Simpler for one-way server→client communication
+- Works over regular HTTP/HTTPS (easier behind load balancers)
+
+**Why Redis Pub/Sub?**
+Redis acts as an event bus. When Ingestion publishes a notification, Redis broadcasts it to all subscribed Gateway instances. This means you can scale horizontally - run 10 Gateway instances, and they'll all receive and stream notifications to their connected clients.
+
+**The trade-off:** Notifications are fire-and-forget. If you're not connected when an error occurs, you won't see that notification. That's by design - they're for instant awareness, not reliable delivery. Critical errors are still stored in the database for later review.
+
 ## How a Log Gets Stored
 
 Let's follow one log from your application to the database:
@@ -109,13 +138,17 @@ Let's follow one log from your application to the database:
 
 **Step 6:** Ingestion Service validates the log structure and adds metadata like a timestamp and error fingerprint
 
-**Step 7:** Log gets pushed to Redis queue (this takes microseconds)
+**Step 7:** If log is error/critical, publish notification to Redis Pub/Sub (microseconds, non-blocking)
 
-**Step 8:** Gateway responds "202 Accepted" (your app can continue immediately)
+**Step 8:** Log gets pushed to Redis queue (this takes microseconds)
 
-**Step 9:** Background worker pulls log from queue and writes to PostgreSQL with hundreds of other logs in one batch
+**Step 9:** Gateway responds "202 Accepted" (your app can continue immediately)
 
-**Total time to respond to your app:** Usually under 10ms. Your application doesn't wait for database writes.
+**Step 10:** Connected browsers receive notification via SSE within 30ms
+
+**Step 11:** Background worker pulls log from queue and writes to PostgreSQL with hundreds of other logs in one batch
+
+**Total time to respond to your app:** Usually under 10ms. Your application doesn't wait for database writes or notification delivery.
 
 ## How You Get Logs Back
 

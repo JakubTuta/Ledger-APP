@@ -33,7 +33,7 @@ async def serve():
         ]
     )
     ingestion_pb2_grpc.add_IngestionServiceServicer_to_server(
-        servicers.IngestionServicer(), server
+        servicers.IngestionServicer(redis_client=redis), server
     )
 
     listen_addr = (

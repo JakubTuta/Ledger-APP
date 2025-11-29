@@ -244,6 +244,21 @@ class Settings(pydantic_settings.BaseSettings):
         description="HTTP request timeout (seconds)",
     )
 
+    NOTIFICATIONS_ENABLED: bool = pydantic.Field(
+        default=True,
+        description="Enable real-time error notifications via Redis Pub/Sub",
+    )
+
+    NOTIFICATIONS_PUBLISH_ERRORS: bool = pydantic.Field(
+        default=True,
+        description="Publish notifications for error-level logs",
+    )
+
+    NOTIFICATIONS_PUBLISH_CRITICAL: bool = pydantic.Field(
+        default=True,
+        description="Publish notifications for critical-level logs",
+    )
+
     @property
     def is_production(self) -> bool:
         return self.ENV.lower() == "production"
