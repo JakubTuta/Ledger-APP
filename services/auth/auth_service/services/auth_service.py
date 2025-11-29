@@ -168,6 +168,77 @@ class AuthService:
             return False
         return True
 
+    async def get_notification_preferences(
+        self,
+        session: AsyncSession,
+        account_id: int,
+    ) -> dict:
+        """Get notification preferences for account."""
+
+        result = await session.execute(
+            select(models.Account).where(models.Account.id == account_id)
+        )
+        account = result.scalar_one_or_none()
+
+        if not account:
+            raise ValueError("Account not found")
+
+        return account.notification_preferences
+
+    async def update_notification_preferences(
+        self,
+        session: AsyncSession,
+        account_id: int,
+        preferences: dict,
+    ) -> dict:
+        """Update notification preferences for account."""
+
+        result = await session.execute(
+            select(models.Account).where(models.Account.id == account_id)
+        )
+        account = result.scalar_one_or_none()
+
+        if not account:
+            raise ValueError("Account not found")
+
+        self._validate_notification_preferences(preferences)
+
+        account.notification_preferences = preferences
+        await session.commit()
+        await session.refresh(account)
+
+        return account.notification_preferences
+
+    def _validate_notification_preferences(self, preferences: dict) -> None:
+        """Validate notification preferences structure."""
+        if not isinstance(preferences, dict):
+            raise ValueError("Preferences must be a dictionary")
+
+        if "enabled" not in preferences:
+            raise ValueError("Preferences must include 'enabled' field")
+
+        if not isinstance(preferences["enabled"], bool):
+            raise ValueError("'enabled' field must be a boolean")
+
+        if "projects" not in preferences:
+            raise ValueError("Preferences must include 'projects' field")
+
+        if not isinstance(preferences["projects"], dict):
+            raise ValueError("'projects' field must be a dictionary")
+
+        for project_id, settings in preferences["projects"].items():
+            if not isinstance(settings, dict):
+                raise ValueError(f"Settings for project {project_id} must be a dictionary")
+
+            if "enabled" in settings and not isinstance(settings["enabled"], bool):
+                raise ValueError(f"'enabled' field for project {project_id} must be a boolean")
+
+            if "levels" in settings and not isinstance(settings["levels"], list):
+                raise ValueError(f"'levels' field for project {project_id} must be a list")
+
+            if "types" in settings and not isinstance(settings["types"], list):
+                raise ValueError(f"'types' field for project {project_id} must be a list")
+
     # ==================== Projects ====================
 
     async def create_project(

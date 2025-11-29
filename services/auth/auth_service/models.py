@@ -40,6 +40,13 @@ class Account(database.Base):
     plan: Mapped[str] = mapped_column(VARCHAR(20), default="free", nullable=False)
     status: Mapped[str] = mapped_column(VARCHAR(20), default="active", nullable=False)
 
+    notification_preferences: Mapped[dict] = mapped_column(
+        JSONB,
+        default=dict,
+        nullable=False,
+        server_default='{"enabled": true, "projects": {}}',
+    )
+
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         default=datetime.datetime.now(datetime.timezone.utc),
@@ -61,6 +68,11 @@ class Account(database.Base):
     __table_args__ = (
         Index("idx_accounts_email", "email"),
         Index("idx_accounts_status", "status", postgresql_where=(status == "active")),
+        Index(
+            "idx_accounts_notification_prefs",
+            "notification_preferences",
+            postgresql_using="gin",
+        ),
         CheckConstraint(
             "plan IN ('free', 'pro', 'enterprise')",
             name="check_account_plan",

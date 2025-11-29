@@ -102,6 +102,59 @@ class ChangePasswordResponse(_message.Message):
     success: bool
     def __init__(self, success: bool = ...) -> None: ...
 
+class GetNotificationPreferencesRequest(_message.Message):
+    __slots__ = ("account_id",)
+    ACCOUNT_ID_FIELD_NUMBER: _ClassVar[int]
+    account_id: int
+    def __init__(self, account_id: _Optional[int] = ...) -> None: ...
+
+class NotificationPreferences(_message.Message):
+    __slots__ = ("enabled", "projects")
+    class ProjectsEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: int
+        value: ProjectNotificationSettings
+        def __init__(self, key: _Optional[int] = ..., value: _Optional[_Union[ProjectNotificationSettings, _Mapping]] = ...) -> None: ...
+    ENABLED_FIELD_NUMBER: _ClassVar[int]
+    PROJECTS_FIELD_NUMBER: _ClassVar[int]
+    enabled: bool
+    projects: _containers.MessageMap[int, ProjectNotificationSettings]
+    def __init__(self, enabled: bool = ..., projects: _Optional[_Mapping[int, ProjectNotificationSettings]] = ...) -> None: ...
+
+class ProjectNotificationSettings(_message.Message):
+    __slots__ = ("enabled", "levels", "types")
+    ENABLED_FIELD_NUMBER: _ClassVar[int]
+    LEVELS_FIELD_NUMBER: _ClassVar[int]
+    TYPES_FIELD_NUMBER: _ClassVar[int]
+    enabled: bool
+    levels: _containers.RepeatedScalarFieldContainer[str]
+    types: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, enabled: bool = ..., levels: _Optional[_Iterable[str]] = ..., types: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class GetNotificationPreferencesResponse(_message.Message):
+    __slots__ = ("preferences",)
+    PREFERENCES_FIELD_NUMBER: _ClassVar[int]
+    preferences: NotificationPreferences
+    def __init__(self, preferences: _Optional[_Union[NotificationPreferences, _Mapping]] = ...) -> None: ...
+
+class UpdateNotificationPreferencesRequest(_message.Message):
+    __slots__ = ("account_id", "preferences")
+    ACCOUNT_ID_FIELD_NUMBER: _ClassVar[int]
+    PREFERENCES_FIELD_NUMBER: _ClassVar[int]
+    account_id: int
+    preferences: NotificationPreferences
+    def __init__(self, account_id: _Optional[int] = ..., preferences: _Optional[_Union[NotificationPreferences, _Mapping]] = ...) -> None: ...
+
+class UpdateNotificationPreferencesResponse(_message.Message):
+    __slots__ = ("success", "preferences")
+    SUCCESS_FIELD_NUMBER: _ClassVar[int]
+    PREFERENCES_FIELD_NUMBER: _ClassVar[int]
+    success: bool
+    preferences: NotificationPreferences
+    def __init__(self, success: bool = ..., preferences: _Optional[_Union[NotificationPreferences, _Mapping]] = ...) -> None: ...
+
 class CreateProjectRequest(_message.Message):
     __slots__ = ("account_id", "name", "slug", "environment")
     ACCOUNT_ID_FIELD_NUMBER: _ClassVar[int]

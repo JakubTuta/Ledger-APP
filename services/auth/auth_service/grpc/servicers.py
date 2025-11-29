@@ -168,6 +168,102 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
             context.set_details(f"Internal error: {str(e)}")
             return auth_pb2.ChangePasswordResponse(success=False)
 
+    async def GetNotificationPreferences(
+        self,
+        request: auth_pb2.GetNotificationPreferencesRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.GetNotificationPreferencesResponse:
+        """Get notification preferences for account."""
+        try:
+            async with database.get_session() as session:
+                preferences = await self.auth_service.get_notification_preferences(
+                    session=session,
+                    account_id=request.account_id,
+                )
+
+                proto_preferences = self._convert_to_proto_preferences(preferences)
+
+                return auth_pb2.GetNotificationPreferencesResponse(
+                    preferences=proto_preferences
+                )
+
+        except ValueError as e:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(str(e))
+            return auth_pb2.GetNotificationPreferencesResponse()
+
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.GetNotificationPreferencesResponse()
+
+    async def UpdateNotificationPreferences(
+        self,
+        request: auth_pb2.UpdateNotificationPreferencesRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.UpdateNotificationPreferencesResponse:
+        """Update notification preferences for account."""
+        try:
+            async with database.get_session() as session:
+                preferences_dict = self._convert_from_proto_preferences(
+                    request.preferences
+                )
+
+                updated_preferences = await self.auth_service.update_notification_preferences(
+                    session=session,
+                    account_id=request.account_id,
+                    preferences=preferences_dict,
+                )
+
+                proto_preferences = self._convert_to_proto_preferences(
+                    updated_preferences
+                )
+
+                return auth_pb2.UpdateNotificationPreferencesResponse(
+                    success=True, preferences=proto_preferences
+                )
+
+        except ValueError as e:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(str(e))
+            return auth_pb2.UpdateNotificationPreferencesResponse(success=False)
+
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.UpdateNotificationPreferencesResponse(success=False)
+
+    def _convert_to_proto_preferences(
+        self, preferences: dict
+    ) -> auth_pb2.NotificationPreferences:
+        """Convert dict preferences to protobuf NotificationPreferences."""
+        projects_map = {}
+        for project_id_str, settings in preferences.get("projects", {}).items():
+            project_id = int(project_id_str)
+            projects_map[project_id] = auth_pb2.ProjectNotificationSettings(
+                enabled=settings.get("enabled", True),
+                levels=settings.get("levels", []),
+                types=settings.get("types", []),
+            )
+
+        return auth_pb2.NotificationPreferences(
+            enabled=preferences.get("enabled", True), projects=projects_map
+        )
+
+    def _convert_from_proto_preferences(
+        self, proto_preferences: auth_pb2.NotificationPreferences
+    ) -> dict:
+        """Convert protobuf NotificationPreferences to dict."""
+        projects = {}
+        for project_id, settings in proto_preferences.projects.items():
+            projects[str(project_id)] = {
+                "enabled": settings.enabled,
+                "levels": list(settings.levels),
+                "types": list(settings.types),
+            }
+
+        return {"enabled": proto_preferences.enabled, "projects": projects}
+
     # ==================== Project Operations ====================
 
     async def CreateProject(

@@ -15,10 +15,38 @@ router = fastapi.APIRouter(tags=["Notifications"])
 logger = logging.getLogger(__name__)
 
 
+from pydantic import BaseModel, Field
+
+
+class ProjectNotificationSettings(BaseModel):
+    enabled: bool = Field(default=True, description="Enable notifications for this project")
+    levels: list[str] = Field(
+        default_factory=list,
+        description="Filter by log levels (e.g., ['error', 'critical']). Empty means all levels.",
+    )
+    types: list[str] = Field(
+        default_factory=list,
+        description="Filter by log types (e.g., ['exception']). Empty means all types.",
+    )
+
+
+class NotificationPreferences(BaseModel):
+    enabled: bool = Field(default=True, description="Enable notifications globally")
+    projects: dict[int, ProjectNotificationSettings] = Field(
+        default_factory=dict, description="Per-project notification settings"
+    )
+
+
+class NotificationPreferencesResponse(BaseModel):
+    enabled: bool
+    projects: dict[int, ProjectNotificationSettings]
+
+
 class NotificationStream:
-    def __init__(self, redis_url: str, project_ids: Set[int]):
+    def __init__(self, redis_url: str, project_ids: Set[int], preferences: dict):
         self.redis_url = redis_url
         self.project_ids = project_ids
+        self.preferences = preferences
         self.redis_client = None
         self.pubsub = None
 
@@ -39,13 +67,47 @@ class NotificationStream:
             await self.redis_client.close()
         logger.info("Unsubscribed from notification channels")
 
+    def should_send_notification(self, notification_data: dict) -> bool:
+        if not self.preferences.get("enabled", True):
+            return False
+
+        project_id = notification_data.get("project_id")
+        if not project_id:
+            return True
+
+        project_prefs = self.preferences.get("projects", {}).get(str(project_id))
+        if not project_prefs:
+            return True
+
+        if not project_prefs.get("enabled", True):
+            return False
+
+        level_filter = project_prefs.get("levels", [])
+        if level_filter:
+            notification_level = notification_data.get("level", "").lower()
+            if notification_level not in [l.lower() for l in level_filter]:
+                return False
+
+        type_filter = project_prefs.get("types", [])
+        if type_filter:
+            notification_type = notification_data.get("log_type", "")
+            if notification_type not in type_filter:
+                return False
+
+        return True
+
     async def listen(self) -> AsyncGenerator[dict, None]:
         try:
             async for message in self.pubsub.listen():
                 if message["type"] == "message":
                     try:
                         data = json.loads(message["data"])
-                        yield {"event": "error_notification", "data": json.dumps(data)}
+
+                        if self.should_send_notification(data):
+                            yield {
+                                "event": "error_notification",
+                                "data": json.dumps(data),
+                            }
                     except json.JSONDecodeError:
                         logger.error(
                             f"Failed to decode notification message: {message['data']}"
@@ -79,6 +141,230 @@ async def get_user_projects(grpc_pool, account_id: int) -> Set[int]:
     except Exception as e:
         logger.error(f"Error fetching user projects: {e}", exc_info=True)
         return set()
+
+
+async def get_notification_preferences(grpc_pool, account_id: int) -> dict:
+    try:
+        channel = grpc_pool.get_channel("auth")
+        stub = auth_pb2_grpc.AuthServiceStub(channel)
+
+        request = auth_pb2.GetNotificationPreferencesRequest(account_id=account_id)
+        response = await stub.GetNotificationPreferences(request, timeout=5.0)
+
+        preferences = {
+            "enabled": response.preferences.enabled,
+            "projects": {},
+        }
+
+        for project_id, settings in response.preferences.projects.items():
+            preferences["projects"][str(project_id)] = {
+                "enabled": settings.enabled,
+                "levels": list(settings.levels),
+                "types": list(settings.types),
+            }
+
+        logger.info(f"Retrieved notification preferences for account {account_id}")
+        return preferences
+
+    except grpc.RpcError as e:
+        logger.error(
+            f"gRPC error fetching notification preferences: {e.code()}", exc_info=True
+        )
+        return {"enabled": True, "projects": {}}
+    except Exception as e:
+        logger.error(f"Error fetching notification preferences: {e}", exc_info=True)
+        return {"enabled": True, "projects": {}}
+
+
+@router.get(
+    "/notifications/preferences",
+    response_model=NotificationPreferencesResponse,
+    summary="Get notification preferences",
+    description="""
+Get your notification preferences including global settings and per-project filters.
+
+**Authentication:** Required (API Key or Session Token)
+
+**Response includes:**
+- Global notification enabled/disabled status
+- Per-project settings with level and type filters
+
+**Example Response:**
+```json
+{
+  "enabled": true,
+  "projects": {
+    "1": {
+      "enabled": true,
+      "levels": ["error", "critical"],
+      "types": ["exception"]
+    },
+    "2": {
+      "enabled": false,
+      "levels": [],
+      "types": []
+    }
+  }
+}
+```
+    """,
+    responses={
+        200: {
+            "description": "Notification preferences retrieved successfully",
+        },
+        401: {
+            "description": "Authentication required",
+            "content": {
+                "application/json": {"example": {"detail": "Authentication required"}}
+            },
+        },
+    },
+)
+async def get_preferences(request: fastapi.Request):
+    account_id = getattr(request.state, "account_id", None)
+
+    if not account_id:
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
+
+    grpc_pool = request.app.state.grpc_pool
+    preferences = await get_notification_preferences(grpc_pool, account_id)
+
+    projects_typed = {}
+    for project_id_str, settings in preferences.get("projects", {}).items():
+        projects_typed[int(project_id_str)] = ProjectNotificationSettings(**settings)
+
+    return NotificationPreferencesResponse(
+        enabled=preferences.get("enabled", True), projects=projects_typed
+    )
+
+
+@router.put(
+    "/notifications/preferences",
+    response_model=NotificationPreferencesResponse,
+    summary="Update notification preferences",
+    description="""
+Update your notification preferences including global settings and per-project filters.
+
+**Authentication:** Required (API Key or Session Token)
+
+**Request Body:**
+```json
+{
+  "enabled": true,
+  "projects": {
+    "1": {
+      "enabled": true,
+      "levels": ["error", "critical"],
+      "types": ["exception"]
+    },
+    "2": {
+      "enabled": false,
+      "levels": [],
+      "types": []
+    }
+  }
+}
+```
+
+**Filtering Rules:**
+- If `enabled` is false, no notifications will be sent
+- If a project has `enabled` false, no notifications for that project
+- If `levels` is specified, only matching levels will be sent
+- If `types` is specified, only matching types will be sent
+- Empty lists mean no filtering (all notifications)
+
+**Available Levels:** error, critical, warning, info, debug
+**Available Types:** exception, console, endpoint, database, etc.
+    """,
+    responses={
+        200: {
+            "description": "Preferences updated successfully",
+        },
+        400: {
+            "description": "Invalid preferences format",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Preferences must be a valid dictionary"}
+                }
+            },
+        },
+        401: {
+            "description": "Authentication required",
+            "content": {
+                "application/json": {"example": {"detail": "Authentication required"}}
+            },
+        },
+    },
+)
+async def update_preferences(
+    request: fastapi.Request, preferences: NotificationPreferences
+):
+    account_id = getattr(request.state, "account_id", None)
+
+    if not account_id:
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
+
+    grpc_pool = request.app.state.grpc_pool
+
+    try:
+        channel = grpc_pool.get_channel("auth")
+        stub = auth_pb2_grpc.AuthServiceStub(channel)
+
+        projects_map = {}
+        for project_id, settings in preferences.projects.items():
+            projects_map[project_id] = auth_pb2.ProjectNotificationSettings(
+                enabled=settings.enabled,
+                levels=settings.levels,
+                types=settings.types,
+            )
+
+        proto_preferences = auth_pb2.NotificationPreferences(
+            enabled=preferences.enabled, projects=projects_map
+        )
+
+        update_request = auth_pb2.UpdateNotificationPreferencesRequest(
+            account_id=account_id, preferences=proto_preferences
+        )
+        response = await stub.UpdateNotificationPreferences(
+            update_request, timeout=5.0
+        )
+
+        if not response.success:
+            raise fastapi.HTTPException(
+                status_code=fastapi.status.HTTP_400_BAD_REQUEST,
+                detail="Failed to update preferences",
+            )
+
+        updated_preferences = {}
+        for project_id, settings in response.preferences.projects.items():
+            updated_preferences[int(project_id)] = ProjectNotificationSettings(
+                enabled=settings.enabled,
+                levels=list(settings.levels),
+                types=list(settings.types),
+            )
+
+        return NotificationPreferencesResponse(
+            enabled=response.preferences.enabled, projects=updated_preferences
+        )
+
+    except grpc.RpcError as e:
+        logger.error(f"gRPC error updating preferences: {e.code()}", exc_info=True)
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update preferences: {e.details()}",
+        )
+    except Exception as e:
+        logger.error(f"Error updating preferences: {e}", exc_info=True)
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update preferences",
+        )
 
 
 @router.get(
@@ -165,17 +451,20 @@ async def stream_error_notifications(request: fastapi.Request):
             detail="Authentication required",
         )
 
+    grpc_pool = request.app.state.grpc_pool
+
     if project_id:
         project_ids = {project_id}
     else:
-        grpc_pool = request.app.state.grpc_pool
         project_ids = await get_user_projects(grpc_pool, account_id)
 
         if not project_ids:
             logger.warning(f"No projects found for account {account_id}")
             project_ids = set()
 
-    stream = NotificationStream(config.settings.REDIS_URL, project_ids)
+    preferences = await get_notification_preferences(grpc_pool, account_id)
+
+    stream = NotificationStream(config.settings.REDIS_URL, project_ids, preferences)
     await stream.subscribe()
 
     async def event_generator():

@@ -9,6 +9,7 @@ CREATE TABLE accounts (
     name VARCHAR(255) NOT NULL,
     plan VARCHAR(20) DEFAULT 'free',
     status VARCHAR(20) DEFAULT 'active',
+    notification_preferences JSONB NOT NULL DEFAULT '{"enabled": true, "projects": {}}'::jsonb,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -16,9 +17,12 @@ CREATE TABLE accounts (
 CREATE UNIQUE INDEX CONCURRENTLY idx_accounts_email 
 ON accounts(email);
 
-CREATE INDEX CONCURRENTLY idx_accounts_status 
-ON accounts(status) 
+CREATE INDEX CONCURRENTLY idx_accounts_status
+ON accounts(status)
 WHERE status = 'active';
+
+CREATE INDEX CONCURRENTLY idx_accounts_notification_prefs
+ON accounts USING GIN(notification_preferences);
 
 -- ============================================
 -- 2. PROJECTS (multi-tenancy)
