@@ -13,6 +13,58 @@ router = fastapi.APIRouter(tags=["Query"])
 logger = logging.getLogger(__name__)
 
 
+def _calculate_granularity_for_period(
+    period: str,
+) -> Literal["hourly", "daily", "weekly", "monthly"]:
+    """
+    Calculate the appropriate granularity for predefined periods.
+
+    Rules:
+    - today: hourly
+    - last7days: daily
+    - last30days: daily
+    - currentWeek: daily
+    - currentMonth: daily
+    - currentYear: monthly
+    """
+    granularity_map: dict[str, Literal["hourly", "daily", "weekly", "monthly"]] = {
+        "today": "hourly",
+        "last7days": "daily",
+        "last30days": "daily",
+        "currentWeek": "daily",
+        "currentMonth": "daily",
+        "currentYear": "monthly",
+    }
+    result = granularity_map.get(period)
+    if result is None:
+        return "daily"
+    return result
+
+
+def _calculate_granularity_for_date_range(
+    start_date: datetime.date, end_date: datetime.date
+) -> Literal["hourly", "daily", "weekly", "monthly"]:
+    """
+    Calculate the appropriate granularity based on date range duration.
+
+    Rules:
+    - 0 to 1 day: hourly
+    - 1 day to 1 month (30 days): daily
+    - 1 month to 6 months (180 days): weekly
+    - Above 6 months: monthly
+    """
+    delta = (end_date - start_date).days
+
+    if delta <= 1:
+        return "hourly"
+    elif delta <= 30:
+        return "daily"
+    elif delta <= 180:
+        return "weekly"
+    else:
+        return "monthly"
+
+
 @router.get(
     "/logs/{log_id}",
     status_code=200,
@@ -265,10 +317,22 @@ async def get_aggregated_metrics(
     """
     Retrieve aggregated metrics for a project.
 
-    This endpoint returns pre-aggregated hourly metrics computed by analytics workers.
-    The data granularity is automatically determined based on the time range:
-    - **Single day** (e.g., "today"): Returns hourly breakdown (0-23 hours)
-    - **Multiple days**: Returns daily aggregated totals
+    This endpoint returns pre-aggregated metrics computed by analytics workers.
+    The data granularity is **automatically determined** based on the time range for optimal visualization:
+
+    ### Granularity for Predefined Periods
+    - **today**: Hourly breakdown (24 data points, 0-23 hours)
+    - **last7days**: Daily breakdown (7 data points)
+    - **last30days**: Daily breakdown (30 data points)
+    - **currentWeek**: Daily breakdown (up to 7 data points)
+    - **currentMonth**: Daily breakdown (up to 31 data points)
+    - **currentYear**: Monthly breakdown (up to 12 data points)
+
+    ### Granularity for Custom Date Ranges (periodFrom/periodTo)
+    - **0-1 day**: Hourly breakdown (up to 24 hours)
+    - **1 day - 30 days**: Daily breakdown
+    - **30 days - 180 days**: Weekly breakdown
+    - **Above 180 days**: Monthly breakdown
 
     ## Query Parameters
 
@@ -290,7 +354,21 @@ async def get_aggregated_metrics(
       - **OR**
       - **periodFrom** + **periodTo** (string): Custom date range in ISO 8601 format (YYYY-MM-DD)
 
+    ## Response Structure
+
+    The response includes a `granularity` field indicating the time bucket size:
+    - `"hourly"`: Data grouped by hour (includes `hour` field: 0-23)
+    - `"daily"`: Data grouped by day (includes `date` field only)
+    - `"weekly"`: Data grouped by week (includes `date` field for week start)
+    - `"monthly"`: Data grouped by month (includes `date` field for month start)
+
     ## Response Fields
+
+    ### Common Fields (All Metric Types)
+    - `date`: Date in ISO 8601 format (YYYY-MM-DD)
+    - `hour`: Hour of day (0-23) - only present for hourly granularity
+    - `log_count`: Total number of logs in this time bucket
+    - `error_count`: Number of error-level logs in this time bucket
 
     ### For Exception Metrics
     - `log_count`: Total number of exception logs
@@ -332,34 +410,57 @@ async def get_aggregated_metrics(
 
     ## Examples
 
-    ### Today's hourly exception breakdown
+    ### Today's hourly exception breakdown (24 hourly buckets)
     ```
-    GET /api/v1/metrics/aggregated?type=exception&period=today
-    ```
-
-    ### Last 30 days of endpoint performance (daily aggregation)
-    ```
-    GET /api/v1/metrics/aggregated?type=endpoint&period=last30days
+    GET /api/v1/metrics/aggregated?project_id=1&type=exception&period=today
+    Response granularity: "hourly"
     ```
 
-    ### Custom date range
+    ### Last 30 days of endpoint performance (30 daily buckets)
     ```
-    GET /api/v1/metrics/aggregated?type=endpoint&periodFrom=2025-11-01&periodTo=2025-11-21
+    GET /api/v1/metrics/aggregated?project_id=1&type=endpoint&period=last30days
+    Response granularity: "daily"
+    ```
+
+    ### Current year endpoint metrics (monthly aggregation, up to 12 buckets)
+    ```
+    GET /api/v1/metrics/aggregated?project_id=1&type=endpoint&period=currentYear
+    Response granularity: "monthly"
+    ```
+
+    ### Custom date range - 2 weeks (daily aggregation, 14 buckets)
+    ```
+    GET /api/v1/metrics/aggregated?project_id=1&type=endpoint&periodFrom=2025-11-01&periodTo=2025-11-14
+    Response granularity: "daily"
+    ```
+
+    ### Custom date range - 3 months (weekly aggregation, ~12-13 buckets)
+    ```
+    GET /api/v1/metrics/aggregated?project_id=1&type=endpoint&periodFrom=2025-08-01&periodTo=2025-11-01
+    Response granularity: "weekly"
+    ```
+
+    ### Custom date range - 1 year (monthly aggregation, 12 buckets)
+    ```
+    GET /api/v1/metrics/aggregated?project_id=1&type=endpoint&periodFrom=2024-11-01&periodTo=2025-11-01
+    Response granularity: "monthly"
     ```
 
     ### Log volume by level and type (today, hourly breakdown)
     ```
-    GET /api/v1/metrics/aggregated?type=log_volume&period=today
+    GET /api/v1/metrics/aggregated?project_id=1&type=log_volume&period=today
+    Response granularity: "hourly"
     ```
 
     ## Use Cases
 
-    - **Error tracking dashboards**: Monitor exception trends over time
-    - **API performance monitoring**: Track endpoint latency and error rates
-    - **Log volume analysis**: Track log patterns by level and type
-    - **Capacity planning**: Analyze request and log volume patterns
-    - **SLA monitoring**: Ensure response times meet targets
-    - **Trend analysis**: Identify performance degradation or unusual log patterns
+    - **Error tracking dashboards**: Monitor exception trends with appropriate granularity
+    - **API performance monitoring**: Track endpoint latency and error rates at scale
+    - **Log volume analysis**: Track log patterns by level and type over time
+    - **Capacity planning**: Analyze request and log volume patterns with weekly/monthly trends
+    - **SLA monitoring**: Ensure response times meet targets with hourly precision
+    - **Trend analysis**: Identify performance degradation with multi-granularity analysis
+    - **Executive reporting**: Monthly/yearly summaries for high-level insights
 
     Requires session token authentication via `Authorization: Bearer <token>` header.
     """
@@ -413,6 +514,16 @@ async def get_aggregated_metrics(
             status_code=400, detail="periodFrom must be before or equal to periodTo"
         )
 
+    granularity: Literal["hourly", "daily", "weekly", "monthly"]
+    if period:
+        granularity = _calculate_granularity_for_period(period)
+    elif period_from_date and period_to_date:
+        granularity = _calculate_granularity_for_date_range(
+            period_from_date, period_to_date
+        )
+    else:
+        granularity = "daily"
+
     try:
         async with grpc_pool.get_query_stub() as stub:
             response = await stub.GetAggregatedMetrics(
@@ -425,6 +536,7 @@ async def get_aggregated_metrics(
                     ),
                     period_to=period_to_date.isoformat() if period_to_date else "",
                     endpoint_path=endpointPath if endpointPath else "",
+                    granularity=granularity,
                 ),
                 timeout=10.0,
             )

@@ -75,15 +75,30 @@ class DashboardService:
         name: str,
         index: int,
         project_id: str,
-        time_range_from: str,
-        time_range_to: str,
         panel_type: str,
+        period: str | None = None,
+        period_from: str | None = None,
+        period_to: str | None = None,
+        endpoint: str | None = None,
     ) -> dict:
         """Create a new dashboard panel."""
 
         if not self._validate_panel_type(panel_type):
             raise ValueError(
                 f"Invalid panel type '{panel_type}'. Must be one of: logs, errors, metrics"
+            )
+
+        has_period = period is not None
+        has_dates = period_from is not None and period_to is not None
+
+        if not has_period and not has_dates:
+            raise ValueError(
+                "Either 'period' or both 'periodFrom' and 'periodTo' must be provided"
+            )
+
+        if has_period and has_dates:
+            raise ValueError(
+                "Cannot use both 'period' and 'periodFrom'/'periodTo'"
             )
 
         panel_id = self._generate_panel_id()
@@ -93,9 +108,11 @@ class DashboardService:
             "name": name,
             "index": index,
             "project_id": project_id,
-            "time_range_from": time_range_from,
-            "time_range_to": time_range_to,
+            "period": period,
+            "periodFrom": period_from,
+            "periodTo": period_to,
             "type": panel_type,
+            "endpoint": endpoint,
         }
 
         result = await session.execute(
@@ -131,15 +148,30 @@ class DashboardService:
         name: str,
         index: int,
         project_id: str,
-        time_range_from: str,
-        time_range_to: str,
         panel_type: str,
+        period: str | None = None,
+        period_from: str | None = None,
+        period_to: str | None = None,
+        endpoint: str | None = None,
     ) -> dict:
         """Update an existing dashboard panel."""
 
         if not self._validate_panel_type(panel_type):
             raise ValueError(
                 f"Invalid panel type '{panel_type}'. Must be one of: logs, errors, metrics"
+            )
+
+        has_period = period is not None
+        has_dates = period_from is not None and period_to is not None
+
+        if not has_period and not has_dates:
+            raise ValueError(
+                "Either 'period' or both 'periodFrom' and 'periodTo' must be provided"
+            )
+
+        if has_period and has_dates:
+            raise ValueError(
+                "Cannot use both 'period' and 'periodFrom'/'periodTo'"
             )
 
         result = await session.execute(
@@ -160,9 +192,11 @@ class DashboardService:
                     "name": name,
                     "index": index,
                     "project_id": project_id,
-                    "time_range_from": time_range_from,
-                    "time_range_to": time_range_to,
+                    "period": period,
+                    "periodFrom": period_from,
+                    "periodTo": period_to,
                     "type": panel_type,
+                    "endpoint": endpoint,
                 }
                 panel_found = True
                 break

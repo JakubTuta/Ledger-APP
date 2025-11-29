@@ -348,6 +348,8 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
             if request.period_to:
                 period_to = datetime.date.fromisoformat(request.period_to)
 
+            granularity = request.granularity if request.granularity else "daily"
+
             result = await aggregated_metrics_service.get_aggregated_metrics(
                 project_id=request.project_id,
                 metric_type=request.metric_type,
@@ -355,6 +357,7 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
                 period_from=period_from,
                 period_to=period_to,
                 endpoint_path=request.endpoint_path if request.endpoint_path else None,
+                granularity=granularity,
             )
 
             start_date, end_date = aggregated_metrics_service._parse_period(
@@ -362,9 +365,6 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
                 period_from=period_from,
                 period_to=period_to,
             )
-
-            is_single_day = start_date == end_date
-            granularity = "hourly" if is_single_day else "daily"
 
             data_entries = [
                 query_pb2.AggregatedMetricData(

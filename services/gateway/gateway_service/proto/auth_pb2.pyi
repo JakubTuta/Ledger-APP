@@ -289,22 +289,26 @@ class ListApiKeysResponse(_message.Message):
     def __init__(self, api_keys: _Optional[_Iterable[_Union[ApiKeyInfo, _Mapping]]] = ...) -> None: ...
 
 class Panel(_message.Message):
-    __slots__ = ("id", "name", "index", "project_id", "time_range_from", "time_range_to", "type")
+    __slots__ = ("id", "name", "index", "project_id", "period", "periodFrom", "periodTo", "type", "endpoint")
     ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     INDEX_FIELD_NUMBER: _ClassVar[int]
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
-    TIME_RANGE_FROM_FIELD_NUMBER: _ClassVar[int]
-    TIME_RANGE_TO_FIELD_NUMBER: _ClassVar[int]
+    PERIOD_FIELD_NUMBER: _ClassVar[int]
+    PERIODFROM_FIELD_NUMBER: _ClassVar[int]
+    PERIODTO_FIELD_NUMBER: _ClassVar[int]
     TYPE_FIELD_NUMBER: _ClassVar[int]
+    ENDPOINT_FIELD_NUMBER: _ClassVar[int]
     id: str
     name: str
     index: int
     project_id: str
-    time_range_from: str
-    time_range_to: str
+    period: str
+    periodFrom: str
+    periodTo: str
     type: str
-    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., time_range_from: _Optional[str] = ..., time_range_to: _Optional[str] = ..., type: _Optional[str] = ...) -> None: ...
+    endpoint: str
+    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., period: _Optional[str] = ..., periodFrom: _Optional[str] = ..., periodTo: _Optional[str] = ..., type: _Optional[str] = ..., endpoint: _Optional[str] = ...) -> None: ...
 
 class GetDashboardPanelsRequest(_message.Message):
     __slots__ = ("user_id",)
@@ -319,22 +323,26 @@ class GetDashboardPanelsResponse(_message.Message):
     def __init__(self, panels: _Optional[_Iterable[_Union[Panel, _Mapping]]] = ...) -> None: ...
 
 class CreateDashboardPanelRequest(_message.Message):
-    __slots__ = ("user_id", "name", "index", "project_id", "time_range_from", "time_range_to", "type")
+    __slots__ = ("user_id", "name", "index", "project_id", "period", "periodFrom", "periodTo", "type", "endpoint")
     USER_ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     INDEX_FIELD_NUMBER: _ClassVar[int]
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
-    TIME_RANGE_FROM_FIELD_NUMBER: _ClassVar[int]
-    TIME_RANGE_TO_FIELD_NUMBER: _ClassVar[int]
+    PERIOD_FIELD_NUMBER: _ClassVar[int]
+    PERIODFROM_FIELD_NUMBER: _ClassVar[int]
+    PERIODTO_FIELD_NUMBER: _ClassVar[int]
     TYPE_FIELD_NUMBER: _ClassVar[int]
+    ENDPOINT_FIELD_NUMBER: _ClassVar[int]
     user_id: int
     name: str
     index: int
     project_id: str
-    time_range_from: str
-    time_range_to: str
+    period: str
+    periodFrom: str
+    periodTo: str
     type: str
-    def __init__(self, user_id: _Optional[int] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., time_range_from: _Optional[str] = ..., time_range_to: _Optional[str] = ..., type: _Optional[str] = ...) -> None: ...
+    endpoint: str
+    def __init__(self, user_id: _Optional[int] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., period: _Optional[str] = ..., periodFrom: _Optional[str] = ..., periodTo: _Optional[str] = ..., type: _Optional[str] = ..., endpoint: _Optional[str] = ...) -> None: ...
 
 class CreateDashboardPanelResponse(_message.Message):
     __slots__ = ("panel",)
@@ -343,24 +351,28 @@ class CreateDashboardPanelResponse(_message.Message):
     def __init__(self, panel: _Optional[_Union[Panel, _Mapping]] = ...) -> None: ...
 
 class UpdateDashboardPanelRequest(_message.Message):
-    __slots__ = ("user_id", "panel_id", "name", "index", "project_id", "time_range_from", "time_range_to", "type")
+    __slots__ = ("user_id", "panel_id", "name", "index", "project_id", "period", "periodFrom", "periodTo", "type", "endpoint")
     USER_ID_FIELD_NUMBER: _ClassVar[int]
     PANEL_ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     INDEX_FIELD_NUMBER: _ClassVar[int]
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
-    TIME_RANGE_FROM_FIELD_NUMBER: _ClassVar[int]
-    TIME_RANGE_TO_FIELD_NUMBER: _ClassVar[int]
+    PERIOD_FIELD_NUMBER: _ClassVar[int]
+    PERIODFROM_FIELD_NUMBER: _ClassVar[int]
+    PERIODTO_FIELD_NUMBER: _ClassVar[int]
     TYPE_FIELD_NUMBER: _ClassVar[int]
+    ENDPOINT_FIELD_NUMBER: _ClassVar[int]
     user_id: int
     panel_id: str
     name: str
     index: int
     project_id: str
-    time_range_from: str
-    time_range_to: str
+    period: str
+    periodFrom: str
+    periodTo: str
     type: str
-    def __init__(self, user_id: _Optional[int] = ..., panel_id: _Optional[str] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., time_range_from: _Optional[str] = ..., time_range_to: _Optional[str] = ..., type: _Optional[str] = ...) -> None: ...
+    endpoint: str
+    def __init__(self, user_id: _Optional[int] = ..., panel_id: _Optional[str] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., period: _Optional[str] = ..., periodFrom: _Optional[str] = ..., periodTo: _Optional[str] = ..., type: _Optional[str] = ..., endpoint: _Optional[str] = ...) -> None: ...
 
 class UpdateDashboardPanelResponse(_message.Message):
     __slots__ = ("panel",)

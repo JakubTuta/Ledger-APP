@@ -265,20 +265,22 @@ class GetUsageStatsResponse(_message.Message):
     def __init__(self, project_id: _Optional[int] = ..., usage: _Optional[_Iterable[_Union[UsageStatsData, _Mapping]]] = ...) -> None: ...
 
 class GetAggregatedMetricsRequest(_message.Message):
-    __slots__ = ("project_id", "metric_type", "period", "period_from", "period_to", "endpoint_path")
+    __slots__ = ("project_id", "metric_type", "period", "period_from", "period_to", "endpoint_path", "granularity")
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
     METRIC_TYPE_FIELD_NUMBER: _ClassVar[int]
     PERIOD_FIELD_NUMBER: _ClassVar[int]
     PERIOD_FROM_FIELD_NUMBER: _ClassVar[int]
     PERIOD_TO_FIELD_NUMBER: _ClassVar[int]
     ENDPOINT_PATH_FIELD_NUMBER: _ClassVar[int]
+    GRANULARITY_FIELD_NUMBER: _ClassVar[int]
     project_id: int
     metric_type: str
     period: str
     period_from: str
     period_to: str
     endpoint_path: str
-    def __init__(self, project_id: _Optional[int] = ..., metric_type: _Optional[str] = ..., period: _Optional[str] = ..., period_from: _Optional[str] = ..., period_to: _Optional[str] = ..., endpoint_path: _Optional[str] = ...) -> None: ...
+    granularity: str
+    def __init__(self, project_id: _Optional[int] = ..., metric_type: _Optional[str] = ..., period: _Optional[str] = ..., period_from: _Optional[str] = ..., period_to: _Optional[str] = ..., endpoint_path: _Optional[str] = ..., granularity: _Optional[str] = ...) -> None: ...
 
 class AggregatedMetricData(_message.Message):
     __slots__ = ("date", "hour", "endpoint_method", "endpoint_path", "log_count", "error_count", "avg_duration_ms", "min_duration_ms", "max_duration_ms", "p95_duration_ms", "p99_duration_ms", "log_level", "log_type")

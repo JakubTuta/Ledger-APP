@@ -8,6 +8,48 @@ import query_service.models as models
 import query_service.schemas as schemas
 
 
+def _generate_time_buckets(
+    start_date: datetime.date,
+    end_date: datetime.date,
+    granularity: Literal["hourly", "daily", "weekly", "monthly"],
+) -> list[tuple[str, int | None]]:
+    """
+    Generate all expected time buckets for a date range and granularity.
+
+    Returns list of tuples: (date_str, hour) where hour is None except for hourly granularity.
+    Date format: YYYYMMDD
+    """
+    buckets = []
+
+    if granularity == "hourly":
+        date_str = start_date.strftime("%Y%m%d")
+        for hour in range(24):
+            buckets.append((date_str, hour))
+
+    elif granularity == "daily":
+        current = start_date
+        while current <= end_date:
+            buckets.append((current.strftime("%Y%m%d"), None))
+            current += datetime.timedelta(days=1)
+
+    elif granularity == "weekly":
+        current = start_date
+        while current <= end_date:
+            buckets.append((current.strftime("%Y%m%d"), None))
+            current += datetime.timedelta(weeks=1)
+
+    elif granularity == "monthly":
+        current = start_date
+        while current <= end_date:
+            buckets.append((current.strftime("%Y%m%d"), None))
+            if current.month == 12:
+                current = current.replace(year=current.year + 1, month=1)
+            else:
+                current = current.replace(month=current.month + 1)
+
+    return buckets
+
+
 async def get_aggregated_metrics(
     project_id: int,
     metric_type: Literal["exception", "endpoint", "log_volume"],
@@ -15,11 +57,9 @@ async def get_aggregated_metrics(
     period_from: datetime.date | None = None,
     period_to: datetime.date | None = None,
     endpoint_path: str | None = None,
+    granularity: Literal["hourly", "daily", "weekly", "monthly"] = "daily",
 ) -> list[schemas.AggregatedMetricData]:
     start_date, end_date = _parse_period(period, period_from, period_to)
-
-    is_single_day = start_date == end_date
-    granularity = "hourly" if is_single_day else "daily"
 
     async with database.get_logs_session() as session:
         start_date_str = start_date.strftime("%Y%m%d")
@@ -43,24 +83,53 @@ async def get_aggregated_metrics(
             result = await session.execute(query)
             metrics = result.scalars().all()
 
-            return [
-                schemas.AggregatedMetricData(
-                    date=m.date,
-                    hour=m.hour,
-                    endpoint_method=m.endpoint_method,
-                    endpoint_path=m.endpoint_path,
-                    log_level=m.log_level,
-                    log_type=m.log_type,
-                    log_count=m.log_count,
-                    error_count=m.error_count,
-                    avg_duration_ms=m.avg_duration_ms,
-                    min_duration_ms=m.min_duration_ms,
-                    max_duration_ms=m.max_duration_ms,
-                    p95_duration_ms=m.p95_duration_ms,
-                    p99_duration_ms=m.p99_duration_ms,
-                )
-                for m in metrics
-            ]
+            metrics_map = {
+                (m.date, m.hour): m for m in metrics
+            }
+
+            all_buckets = _generate_time_buckets(start_date, end_date, granularity)
+
+            filled_data = []
+            for date_str, hour in all_buckets:
+                if (date_str, hour) in metrics_map:
+                    m = metrics_map[(date_str, hour)]
+                    filled_data.append(
+                        schemas.AggregatedMetricData(
+                            date=m.date,
+                            hour=m.hour,
+                            endpoint_method=m.endpoint_method,
+                            endpoint_path=m.endpoint_path,
+                            log_level=m.log_level,
+                            log_type=m.log_type,
+                            log_count=m.log_count,
+                            error_count=m.error_count,
+                            avg_duration_ms=m.avg_duration_ms,
+                            min_duration_ms=m.min_duration_ms,
+                            max_duration_ms=m.max_duration_ms,
+                            p95_duration_ms=m.p95_duration_ms,
+                            p99_duration_ms=m.p99_duration_ms,
+                        )
+                    )
+                else:
+                    filled_data.append(
+                        schemas.AggregatedMetricData(
+                            date=date_str,
+                            hour=hour,
+                            endpoint_method=None,
+                            endpoint_path=endpoint_path if endpoint_path else None,
+                            log_level=None,
+                            log_type=None,
+                            log_count=0,
+                            error_count=0,
+                            avg_duration_ms=None,
+                            min_duration_ms=None,
+                            max_duration_ms=None,
+                            p95_duration_ms=None,
+                            p99_duration_ms=None,
+                        )
+                    )
+
+            return filled_data
         else:
             if metric_type == "endpoint":
                 where_clauses = [
@@ -163,27 +232,53 @@ async def get_aggregated_metrics(
                 }
 
             result = await session.execute(query, params)
-
             rows = result.fetchall()
 
-            return [
-                schemas.AggregatedMetricData(
-                    date=row[0],
-                    hour=None,
-                    endpoint_method=row[1],
-                    endpoint_path=row[2],
-                    log_level=row[3],
-                    log_type=row[4],
-                    log_count=row[5],
-                    error_count=row[6],
-                    avg_duration_ms=row[7],
-                    min_duration_ms=row[8],
-                    max_duration_ms=row[9],
-                    p95_duration_ms=row[10],
-                    p99_duration_ms=row[11],
-                )
-                for row in rows
-            ]
+            data_map = {row[0]: row for row in rows}
+
+            all_buckets = _generate_time_buckets(start_date, end_date, granularity)
+
+            filled_data = []
+            for date_str, _ in all_buckets:
+                if date_str in data_map:
+                    row = data_map[date_str]
+                    filled_data.append(
+                        schemas.AggregatedMetricData(
+                            date=row[0],
+                            hour=None,
+                            endpoint_method=row[1],
+                            endpoint_path=row[2],
+                            log_level=row[3],
+                            log_type=row[4],
+                            log_count=row[5],
+                            error_count=row[6],
+                            avg_duration_ms=row[7],
+                            min_duration_ms=row[8],
+                            max_duration_ms=row[9],
+                            p95_duration_ms=row[10],
+                            p99_duration_ms=row[11],
+                        )
+                    )
+                else:
+                    filled_data.append(
+                        schemas.AggregatedMetricData(
+                            date=date_str,
+                            hour=None,
+                            endpoint_method=None,
+                            endpoint_path=endpoint_path if endpoint_path else None,
+                            log_level=None,
+                            log_type=None,
+                            log_count=0,
+                            error_count=0,
+                            avg_duration_ms=None,
+                            min_duration_ms=None,
+                            max_duration_ms=None,
+                            p95_duration_ms=None,
+                            p99_duration_ms=None,
+                        )
+                    )
+
+            return filled_data
 
 
 def _parse_period(

@@ -450,9 +450,11 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                         name=panel["name"],
                         index=panel["index"],
                         project_id=panel["project_id"],
-                        time_range_from=panel["time_range_from"],
-                        time_range_to=panel["time_range_to"],
+                        period=panel.get("period"),
+                        periodFrom=panel.get("periodFrom"),
+                        periodTo=panel.get("periodTo"),
                         type=panel["type"],
+                        endpoint=panel.get("endpoint", ""),
                     )
                     for panel in panels
                 ]
@@ -478,9 +480,11 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     name=request.name,
                     index=request.index,
                     project_id=request.project_id,
-                    time_range_from=request.time_range_from,
-                    time_range_to=request.time_range_to,
                     panel_type=request.type,
+                    period=request.period if request.HasField("period") else None,
+                    period_from=request.periodFrom if request.HasField("periodFrom") else None,
+                    period_to=request.periodTo if request.HasField("periodTo") else None,
+                    endpoint=request.endpoint if request.endpoint else None,
                 )
 
                 panel_message = auth_pb2.Panel(
@@ -488,9 +492,11 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     name=panel["name"],
                     index=panel["index"],
                     project_id=panel["project_id"],
-                    time_range_from=panel["time_range_from"],
-                    time_range_to=panel["time_range_to"],
+                    period=panel.get("period"),
+                    periodFrom=panel.get("periodFrom"),
+                    periodTo=panel.get("periodTo"),
                     type=panel["type"],
+                    endpoint=panel.get("endpoint", ""),
                 )
 
                 return auth_pb2.CreateDashboardPanelResponse(panel=panel_message)
@@ -520,9 +526,11 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     name=request.name,
                     index=request.index,
                     project_id=request.project_id,
-                    time_range_from=request.time_range_from,
-                    time_range_to=request.time_range_to,
                     panel_type=request.type,
+                    period=request.period if request.HasField("period") else None,
+                    period_from=request.periodFrom if request.HasField("periodFrom") else None,
+                    period_to=request.periodTo if request.HasField("periodTo") else None,
+                    endpoint=request.endpoint if request.endpoint else None,
                 )
 
                 panel_message = auth_pb2.Panel(
@@ -530,9 +538,11 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     name=panel["name"],
                     index=panel["index"],
                     project_id=panel["project_id"],
-                    time_range_from=panel["time_range_from"],
-                    time_range_to=panel["time_range_to"],
+                    period=panel.get("period"),
+                    periodFrom=panel.get("periodFrom"),
+                    periodTo=panel.get("periodTo"),
                     type=panel["type"],
+                    endpoint=panel.get("endpoint", ""),
                 )
 
                 return auth_pb2.UpdateDashboardPanelResponse(panel=panel_message)

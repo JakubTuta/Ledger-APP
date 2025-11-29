@@ -17,14 +17,20 @@ class PanelRequest(pydantic.BaseModel):
     project_id: str = pydantic.Field(
         ..., min_length=1, description="Project ID to display data from", examples=["456"]
     )
-    time_range_from: str = pydantic.Field(
-        ...,
-        description="Start of time range (ISO 8601 format)",
+    period: str | None = pydantic.Field(
+        None,
+        pattern=r"^(today|last7days|last30days|currentWeek|currentMonth|currentYear)$",
+        description="Relative time period (mutually exclusive with periodFrom/periodTo)",
+        examples=["today"],
+    )
+    periodFrom: str | None = pydantic.Field(
+        None,
+        description="Start of time range in ISO 8601 format (must be used with periodTo)",
         examples=["2024-01-15T00:00:00Z"],
     )
-    time_range_to: str = pydantic.Field(
-        ...,
-        description="End of time range (ISO 8601 format)",
+    periodTo: str | None = pydantic.Field(
+        None,
+        description="End of time range in ISO 8601 format (must be used with periodFrom)",
         examples=["2024-01-16T00:00:00Z"],
     )
     type: str = pydantic.Field(
@@ -33,17 +39,61 @@ class PanelRequest(pydantic.BaseModel):
         description="Panel type: logs (log viewer), errors (error tracking), or metrics (charts/graphs)",
         examples=["errors"],
     )
+    endpoint: str | None = pydantic.Field(
+        None,
+        description="Endpoint route (required for metrics type panels)",
+        examples=["/api/v1/ingest/single"],
+    )
+
+    @pydantic.model_validator(mode="after")
+    def validate_time_range(self):
+        has_period = self.period is not None
+        has_dates = self.periodFrom is not None and self.periodTo is not None
+
+        if not has_period and not has_dates:
+            raise ValueError(
+                "Either 'period' or both 'periodFrom' and 'periodTo' must be provided"
+            )
+
+        if has_period and has_dates:
+            raise ValueError(
+                "Cannot use both 'period' and 'periodFrom'/'periodTo' parameters"
+            )
+
+        if (self.periodFrom is None) != (self.periodTo is None):
+            raise ValueError(
+                "Both 'periodFrom' and 'periodTo' must be provided together"
+            )
+
+        return self
 
     model_config = pydantic.ConfigDict(
         json_schema_extra={
             "examples": [
                 {
-                    "name": "Error Rate - Last 24h",
+                    "name": "Error Rate - Today",
                     "index": 0,
                     "project_id": "456",
-                    "time_range_from": "2024-01-15T00:00:00Z",
-                    "time_range_to": "2024-01-16T00:00:00Z",
+                    "period": "today",
                     "type": "errors",
+                    "endpoint": None,
+                },
+                {
+                    "name": "Endpoint Performance - Last 7 Days",
+                    "index": 1,
+                    "project_id": "456",
+                    "period": "last7days",
+                    "type": "metrics",
+                    "endpoint": "/api/v1/ingest/single",
+                },
+                {
+                    "name": "Custom Date Range Panel",
+                    "index": 2,
+                    "project_id": "456",
+                    "periodFrom": "2024-01-15T00:00:00Z",
+                    "periodTo": "2024-01-16T00:00:00Z",
+                    "type": "logs",
+                    "endpoint": None,
                 }
             ]
         }
@@ -57,21 +107,47 @@ class PanelResponse(pydantic.BaseModel):
     name: str = pydantic.Field(..., description="Panel display name")
     index: int = pydantic.Field(..., description="Panel position index")
     project_id: str = pydantic.Field(..., description="Associated project ID")
-    time_range_from: str = pydantic.Field(..., description="Time range start")
-    time_range_to: str = pydantic.Field(..., description="Time range end")
+    period: str | None = pydantic.Field(None, description="Relative time period")
+    periodFrom: str | None = pydantic.Field(None, description="Time range start (ISO 8601)")
+    periodTo: str | None = pydantic.Field(None, description="Time range end (ISO 8601)")
     type: str = pydantic.Field(..., description="Panel type")
+    endpoint: str | None = pydantic.Field(None, description="Endpoint route (for metrics panels)")
 
     model_config = pydantic.ConfigDict(
         json_schema_extra={
             "examples": [
                 {
                     "id": "panel_abc123",
-                    "name": "Error Rate - Last 24h",
+                    "name": "Error Rate - Today",
                     "index": 0,
                     "project_id": "456",
-                    "time_range_from": "2024-01-15T00:00:00Z",
-                    "time_range_to": "2024-01-16T00:00:00Z",
+                    "period": "today",
+                    "periodFrom": None,
+                    "periodTo": None,
                     "type": "errors",
+                    "endpoint": None,
+                },
+                {
+                    "id": "panel_def456",
+                    "name": "Endpoint Performance - Last 7 Days",
+                    "index": 1,
+                    "project_id": "456",
+                    "period": "last7days",
+                    "periodFrom": None,
+                    "periodTo": None,
+                    "type": "metrics",
+                    "endpoint": "/api/v1/ingest/single",
+                },
+                {
+                    "id": "panel_ghi789",
+                    "name": "Custom Date Range",
+                    "index": 2,
+                    "project_id": "456",
+                    "period": None,
+                    "periodFrom": "2024-01-15T00:00:00Z",
+                    "periodTo": "2024-01-16T00:00:00Z",
+                    "type": "logs",
+                    "endpoint": None,
                 }
             ]
         }
@@ -97,9 +173,20 @@ class PanelListResponse(pydantic.BaseModel):
                             "time_range_from": "2024-01-15T00:00:00Z",
                             "time_range_to": "2024-01-16T00:00:00Z",
                             "type": "errors",
+                            "endpoint": None,
+                        },
+                        {
+                            "id": "panel_def456",
+                            "name": "Endpoint Performance",
+                            "index": 1,
+                            "project_id": "456",
+                            "time_range_from": "2024-01-15T00:00:00Z",
+                            "time_range_to": "2024-01-16T00:00:00Z",
+                            "type": "metrics",
+                            "endpoint": "/api/v1/ingest/single",
                         }
                     ],
-                    "total": 1,
+                    "total": 2,
                 }
             ]
         }
@@ -122,14 +209,20 @@ class UpdatePanelRequest(pydantic.BaseModel):
     project_id: str = pydantic.Field(
         ..., min_length=1, description="Project ID", examples=["456"]
     )
-    time_range_from: str = pydantic.Field(
-        ...,
-        description="Start of time range (ISO 8601)",
+    period: str | None = pydantic.Field(
+        None,
+        pattern=r"^(today|last7days|last30days|currentWeek|currentMonth|currentYear)$",
+        description="Relative time period (mutually exclusive with periodFrom/periodTo)",
+        examples=["today"],
+    )
+    periodFrom: str | None = pydantic.Field(
+        None,
+        description="Start of time range in ISO 8601 format (must be used with periodTo)",
         examples=["2024-01-15T00:00:00Z"],
     )
-    time_range_to: str = pydantic.Field(
-        ...,
-        description="End of time range (ISO 8601)",
+    periodTo: str | None = pydantic.Field(
+        None,
+        description="End of time range in ISO 8601 format (must be used with periodFrom)",
         examples=["2024-01-16T00:00:00Z"],
     )
     type: str = pydantic.Field(
@@ -138,17 +231,61 @@ class UpdatePanelRequest(pydantic.BaseModel):
         description="Panel type (logs, errors, metrics)",
         examples=["errors"],
     )
+    endpoint: str | None = pydantic.Field(
+        None,
+        description="Endpoint route (required for metrics type panels)",
+        examples=["/api/v1/ingest/single"],
+    )
+
+    @pydantic.model_validator(mode="after")
+    def validate_time_range(self):
+        has_period = self.period is not None
+        has_dates = self.periodFrom is not None and self.periodTo is not None
+
+        if not has_period and not has_dates:
+            raise ValueError(
+                "Either 'period' or both 'periodFrom' and 'periodTo' must be provided"
+            )
+
+        if has_period and has_dates:
+            raise ValueError(
+                "Cannot use both 'period' and 'periodFrom'/'periodTo' parameters"
+            )
+
+        if (self.periodFrom is None) != (self.periodTo is None):
+            raise ValueError(
+                "Both 'periodFrom' and 'periodTo' must be provided together"
+            )
+
+        return self
 
     model_config = pydantic.ConfigDict(
         json_schema_extra={
             "examples": [
                 {
-                    "name": "Updated Error Rate - Last 48h",
+                    "name": "Updated to Today",
                     "index": 0,
                     "project_id": "456",
-                    "time_range_from": "2024-01-13T00:00:00Z",
-                    "time_range_to": "2024-01-15T00:00:00Z",
+                    "period": "today",
                     "type": "errors",
+                    "endpoint": None,
+                },
+                {
+                    "name": "Updated to Last 30 Days",
+                    "index": 1,
+                    "project_id": "456",
+                    "period": "last30days",
+                    "type": "metrics",
+                    "endpoint": "/api/v1/ingest/batch",
+                },
+                {
+                    "name": "Updated to Custom Dates",
+                    "index": 2,
+                    "project_id": "456",
+                    "time_range_from": "2024-01-08T00:00:00Z",
+                    "time_range_to": "2024-01-15T00:00:00Z",
+                    "type": "logs",
+                    "endpoint": None,
                 }
             ]
         }

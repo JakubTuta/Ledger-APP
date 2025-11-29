@@ -215,9 +215,11 @@ message Panel {
   string name = 2;
   int32 index = 3;
   string project_id = 4;
-  string time_range_from = 5;
-  string time_range_to = 6;
-  string type = 7;
+  optional string period = 5;
+  optional string periodFrom = 6;
+  optional string periodTo = 7;
+  string type = 8;
+  string endpoint = 9;
 }
 
 message GetDashboardPanelsRequest {
@@ -233,9 +235,11 @@ message CreateDashboardPanelRequest {
   string name = 2;
   int32 index = 3;
   string project_id = 4;
-  string time_range_from = 5;
-  string time_range_to = 6;
-  string type = 7;
+  optional string period = 5;
+  optional string periodFrom = 6;
+  optional string periodTo = 7;
+  string type = 8;
+  string endpoint = 9;
 }
 
 message CreateDashboardPanelResponse {
@@ -248,9 +252,11 @@ message UpdateDashboardPanelRequest {
   string name = 3;
   int32 index = 4;
   string project_id = 5;
-  string time_range_from = 6;
-  string time_range_to = 7;
-  string type = 8;
+  optional string period = 6;
+  optional string periodFrom = 7;
+  optional string periodTo = 8;
+  string type = 9;
+  string endpoint = 10;
 }
 
 message UpdateDashboardPanelResponse {

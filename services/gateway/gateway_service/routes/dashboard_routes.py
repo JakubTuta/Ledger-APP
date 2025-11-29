@@ -49,9 +49,11 @@ async def get_dashboard_panels(
                 name=panel.name,
                 index=panel.index,
                 project_id=panel.project_id,
-                time_range_from=panel.time_range_from,
-                time_range_to=panel.time_range_to,
+                period=panel.period if panel.HasField("period") else None,
+                periodFrom=panel.periodFrom if panel.HasField("periodFrom") else None,
+                periodTo=panel.periodTo if panel.HasField("periodTo") else None,
                 type=panel.type,
+                endpoint=panel.endpoint if panel.endpoint else None,
             )
             for panel in response.panels
         ]
@@ -112,15 +114,23 @@ async def create_dashboard_panel(
     try:
         stub = grpc_pool.get_stub("auth", auth_pb2_grpc.AuthServiceStub)
 
-        grpc_request = auth_pb2.CreateDashboardPanelRequest(
-            user_id=account_id,
-            name=request_data.name,
-            index=request_data.index,
-            project_id=request_data.project_id,
-            time_range_from=request_data.time_range_from,
-            time_range_to=request_data.time_range_to,
-            type=request_data.type,
-        )
+        grpc_request_kwargs = {
+            "user_id": account_id,
+            "name": request_data.name,
+            "index": request_data.index,
+            "project_id": request_data.project_id,
+            "type": request_data.type,
+            "endpoint": request_data.endpoint if request_data.endpoint else "",
+        }
+
+        if request_data.period is not None:
+            grpc_request_kwargs["period"] = request_data.period
+        if request_data.periodFrom is not None:
+            grpc_request_kwargs["periodFrom"] = request_data.periodFrom
+        if request_data.periodTo is not None:
+            grpc_request_kwargs["periodTo"] = request_data.periodTo
+
+        grpc_request = auth_pb2.CreateDashboardPanelRequest(**grpc_request_kwargs)
 
         response = await asyncio.wait_for(
             stub.CreateDashboardPanel(grpc_request), timeout=5.0
@@ -137,9 +147,11 @@ async def create_dashboard_panel(
             name=response.panel.name,
             index=response.panel.index,
             project_id=response.panel.project_id,
-            time_range_from=response.panel.time_range_from,
-            time_range_to=response.panel.time_range_to,
+            period=response.panel.period if response.panel.HasField("period") else None,
+            periodFrom=response.panel.periodFrom if response.panel.HasField("periodFrom") else None,
+            periodTo=response.panel.periodTo if response.panel.HasField("periodTo") else None,
             type=response.panel.type,
+            endpoint=response.panel.endpoint if response.panel.endpoint else None,
         )
 
     except asyncio.TimeoutError:
@@ -197,16 +209,24 @@ async def update_dashboard_panel(
     try:
         stub = grpc_pool.get_stub("auth", auth_pb2_grpc.AuthServiceStub)
 
-        grpc_request = auth_pb2.UpdateDashboardPanelRequest(
-            user_id=account_id,
-            panel_id=panel_id,
-            name=request_data.name,
-            index=request_data.index,
-            project_id=request_data.project_id,
-            time_range_from=request_data.time_range_from,
-            time_range_to=request_data.time_range_to,
-            type=request_data.type,
-        )
+        grpc_request_kwargs = {
+            "user_id": account_id,
+            "panel_id": panel_id,
+            "name": request_data.name,
+            "index": request_data.index,
+            "project_id": request_data.project_id,
+            "type": request_data.type,
+            "endpoint": request_data.endpoint if request_data.endpoint else "",
+        }
+
+        if request_data.period is not None:
+            grpc_request_kwargs["period"] = request_data.period
+        if request_data.periodFrom is not None:
+            grpc_request_kwargs["periodFrom"] = request_data.periodFrom
+        if request_data.periodTo is not None:
+            grpc_request_kwargs["periodTo"] = request_data.periodTo
+
+        grpc_request = auth_pb2.UpdateDashboardPanelRequest(**grpc_request_kwargs)
 
         response = await asyncio.wait_for(
             stub.UpdateDashboardPanel(grpc_request), timeout=5.0
@@ -223,9 +243,11 @@ async def update_dashboard_panel(
             name=response.panel.name,
             index=response.panel.index,
             project_id=response.panel.project_id,
-            time_range_from=response.panel.time_range_from,
-            time_range_to=response.panel.time_range_to,
+            period=response.panel.period if response.panel.HasField("period") else None,
+            periodFrom=response.panel.periodFrom if response.panel.HasField("periodFrom") else None,
+            periodTo=response.panel.periodTo if response.panel.HasField("periodTo") else None,
             type=response.panel.type,
+            endpoint=response.panel.endpoint if response.panel.endpoint else None,
         )
 
     except asyncio.TimeoutError:
