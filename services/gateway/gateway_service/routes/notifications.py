@@ -22,11 +22,11 @@ class ProjectNotificationSettings(BaseModel):
     enabled: bool = Field(default=True, description="Enable notifications for this project")
     levels: list[str] = Field(
         default_factory=list,
-        description="Filter by log levels (e.g., ['error', 'critical']). Empty means all levels.",
+        description="Filter by log levels. Only 'error' and 'critical' are published. Empty means both.",
     )
     types: list[str] = Field(
         default_factory=list,
-        description="Filter by log types (e.g., ['exception']). Empty means all types.",
+        description="Filter by log types. Only 'exception' type is published. Empty means all published types.",
     )
 
 
@@ -274,10 +274,11 @@ Update your notification preferences including global settings and per-project f
 - If a project has `enabled` false, no notifications for that project
 - If `levels` is specified, only matching levels will be sent
 - If `types` is specified, only matching types will be sent
-- Empty lists mean no filtering (all notifications)
+- Empty lists mean no filtering (all published notifications)
 
-**Available Levels:** error, critical, warning, info, debug
-**Available Types:** exception, console, endpoint, database, etc.
+**Important:** Only error/critical logs and exceptions are published to the notification system.
+**Available Levels:** error, critical (only these are published)
+**Available Types:** exception (only this type is published, though error/critical logs of any type also trigger notifications)
     """,
     responses={
         200: {
