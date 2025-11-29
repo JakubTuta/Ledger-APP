@@ -25,10 +25,12 @@ class TestNotificationsSSE(BaseGatewayTest):
             "GET",
             "/api/v1/notifications/stream",
             headers={"X-API-Key": "test-api-key"},
-            timeout=httpx.Timeout(5.0)
+            timeout=httpx.Timeout(5.0),
         ) as response:
             assert response.status_code == 200
-            assert response.headers["content-type"] == "text/event-stream; charset=utf-8"
+            assert (
+                response.headers["content-type"] == "text/event-stream; charset=utf-8"
+            )
 
             received_connected = False
             async for line in response.aiter_lines():
@@ -47,7 +49,7 @@ class TestNotificationsSSE(BaseGatewayTest):
             "GET",
             "/api/v1/notifications/stream",
             headers={"X-API-Key": "test-api-key"},
-            timeout=httpx.Timeout(5.0)
+            timeout=httpx.Timeout(5.0),
         ) as response:
             assert response.status_code == 200
 
@@ -68,33 +70,22 @@ class TestNotificationsSSE(BaseGatewayTest):
 
         with patch("gateway_service.config.settings.NOTIFICATIONS_ENABLED", False):
             response = await self.client.get(
-                "/api/v1/notifications/stream",
-                headers={"X-API-Key": "test-api-key"}
+                "/api/v1/notifications/stream", headers={"X-API-Key": "test-api-key"}
             )
 
             assert response.status_code == 503
             assert "disabled" in response.json()["detail"].lower()
-
-    async def test_notification_health_endpoint(self):
-        response = await self.client.get("/api/v1/notifications/health")
-
-        assert response.status_code == 200
-        data = response.json()
-        assert "status" in data
-        assert "enabled" in data
-        assert "heartbeat_interval" in data
-        assert data["status"] == "healthy"
 
     @pytest.mark.slow
     async def test_sse_receives_error_notification(self):
         await self.set_api_key_cache("test-api-key", project_id=1, account_id=1)
 
         redis_client = redis.Redis.from_url(
-            "redis://localhost:6379/0",
-            decode_responses=True
+            "redis://localhost:6379/0", decode_responses=True
         )
 
         try:
+
             async def publish_notification():
                 await asyncio.sleep(0.5)
                 notification = {
@@ -103,11 +94,10 @@ class TestNotificationsSSE(BaseGatewayTest):
                     "log_type": "exception",
                     "message": "Test error notification",
                     "error_type": "TestError",
-                    "timestamp": datetime.utcnow().isoformat() + "Z"
+                    "timestamp": datetime.utcnow().isoformat() + "Z",
                 }
                 await redis_client.publish(
-                    "notifications:errors:1",
-                    json.dumps(notification)
+                    "notifications:errors:1", json.dumps(notification)
                 )
 
             publisher_task = asyncio.create_task(publish_notification())
@@ -119,7 +109,7 @@ class TestNotificationsSSE(BaseGatewayTest):
                 "GET",
                 "/api/v1/notifications/stream",
                 headers={"X-API-Key": "test-api-key"},
-                timeout=httpx.Timeout(3.0)
+                timeout=httpx.Timeout(3.0),
             ) as response:
                 assert response.status_code == 200
 
@@ -147,14 +137,16 @@ class TestNotificationsSSE(BaseGatewayTest):
     async def test_sse_heartbeat_events(self):
         await self.set_api_key_cache("test-api-key", project_id=1, account_id=1)
 
-        with patch("gateway_service.config.settings.NOTIFICATIONS_HEARTBEAT_INTERVAL", 1):
+        with patch(
+            "gateway_service.config.settings.NOTIFICATIONS_HEARTBEAT_INTERVAL", 1
+        ):
             heartbeat_received = False
 
             async with self.client.stream(
                 "GET",
                 "/api/v1/notifications/stream",
                 headers={"X-API-Key": "test-api-key"},
-                timeout=httpx.Timeout(5.0)
+                timeout=httpx.Timeout(5.0),
             ) as response:
                 assert response.status_code == 200
 
@@ -175,21 +167,20 @@ class TestNotificationsSSE(BaseGatewayTest):
         await self.set_api_key_cache("test-api-key", project_id=1, account_id=1)
 
         redis_client = redis.Redis.from_url(
-            "redis://localhost:6379/0",
-            decode_responses=True
+            "redis://localhost:6379/0", decode_responses=True
         )
 
         try:
+
             async def publish_wrong_project():
                 await asyncio.sleep(0.5)
                 notification = {
                     "project_id": 999,
                     "level": "error",
-                    "message": "Wrong project error"
+                    "message": "Wrong project error",
                 }
                 await redis_client.publish(
-                    "notifications:errors:999",
-                    json.dumps(notification)
+                    "notifications:errors:999", json.dumps(notification)
                 )
 
             async def publish_correct_project():
@@ -197,11 +188,10 @@ class TestNotificationsSSE(BaseGatewayTest):
                 notification = {
                     "project_id": 1,
                     "level": "error",
-                    "message": "Correct project error"
+                    "message": "Correct project error",
                 }
                 await redis_client.publish(
-                    "notifications:errors:1",
-                    json.dumps(notification)
+                    "notifications:errors:1", json.dumps(notification)
                 )
 
             publisher_task1 = asyncio.create_task(publish_wrong_project())
@@ -213,7 +203,7 @@ class TestNotificationsSSE(BaseGatewayTest):
                 "GET",
                 "/api/v1/notifications/stream",
                 headers={"X-API-Key": "test-api-key"},
-                timeout=httpx.Timeout(3.0)
+                timeout=httpx.Timeout(3.0),
             ) as response:
                 assert response.status_code == 200
 
@@ -224,7 +214,10 @@ class TestNotificationsSSE(BaseGatewayTest):
                         data_str = line.split(":", 1)[1].strip()
                         try:
                             data = json.loads(data_str)
-                            if "message" in data and "error" in data.get("message", "").lower():
+                            if (
+                                "message" in data
+                                and "error" in data.get("message", "").lower()
+                            ):
                                 received_notifications.append(data)
                         except json.JSONDecodeError:
                             pass
@@ -251,7 +244,7 @@ class TestNotificationsSSE(BaseGatewayTest):
             for i in range(3):
                 client = httpx.AsyncClient(
                     transport=httpx.ASGITransport(app=self.client._transport._app),
-                    base_url="http://test"
+                    base_url="http://test",
                 )
                 clients.append(client)
 
@@ -259,7 +252,7 @@ class TestNotificationsSSE(BaseGatewayTest):
                     "GET",
                     "/api/v1/notifications/stream",
                     headers={"X-API-Key": "test-api-key"},
-                    timeout=httpx.Timeout(5.0)
+                    timeout=httpx.Timeout(5.0),
                 )
                 streams.append(stream)
 
@@ -287,7 +280,7 @@ class TestNotificationsSSE(BaseGatewayTest):
             "GET",
             "/api/v1/notifications/stream",
             headers={"X-API-Key": "test-api-key"},
-            timeout=httpx.Timeout(2.0)
+            timeout=httpx.Timeout(2.0),
         ) as response1:
             assert response1.status_code == 200
 
@@ -295,7 +288,7 @@ class TestNotificationsSSE(BaseGatewayTest):
             "GET",
             "/api/v1/notifications/stream",
             headers={"X-API-Key": "test-api-key"},
-            timeout=httpx.Timeout(2.0)
+            timeout=httpx.Timeout(2.0),
         ) as response2:
             assert response2.status_code == 200
 
@@ -309,8 +302,7 @@ class TestNotificationsSSE(BaseGatewayTest):
 
     async def test_sse_handles_invalid_authentication(self):
         response = await self.client.get(
-            "/api/v1/notifications/stream",
-            headers={"X-API-Key": "invalid-key"}
+            "/api/v1/notifications/stream", headers={"X-API-Key": "invalid-key"}
         )
 
         assert response.status_code == 401
@@ -318,25 +310,24 @@ class TestNotificationsSSE(BaseGatewayTest):
     async def test_sse_connection_with_session_token(self):
         await self.mock_redis.set(
             "session:test-token",
-            json.dumps({
-                "account_id": 1,
-                "email": "test@example.com"
-            })
+            json.dumps({"account_id": 1, "email": "test@example.com"}),
         )
 
         mock_auth_stub = self.get_mock_auth_stub()
-        mock_auth_stub.GetProjects = AsyncMock(return_value=MagicMock(
-            projects=[
-                MagicMock(project_id=1, name="Project 1"),
-                MagicMock(project_id=2, name="Project 2")
-            ]
-        ))
+        mock_auth_stub.GetProjects = AsyncMock(
+            return_value=MagicMock(
+                projects=[
+                    MagicMock(project_id=1, name="Project 1"),
+                    MagicMock(project_id=2, name="Project 2"),
+                ]
+            )
+        )
 
         async with self.client.stream(
             "GET",
             "/api/v1/notifications/stream",
             headers={"Authorization": "Bearer test-token"},
-            timeout=httpx.Timeout(3.0)
+            timeout=httpx.Timeout(3.0),
         ) as response:
             assert response.status_code == 200
 

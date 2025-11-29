@@ -191,6 +191,7 @@ You don't have to refresh the page or poll for updates. Errors appear instantly.
 We use SSE because it's perfect for this use case:
 
 **Why SSE?**
+
 - Built into browsers (no extra libraries needed)
 - Automatic reconnection if connection drops
 - Works over regular HTTP/HTTPS
@@ -199,13 +200,13 @@ We use SSE because it's perfect for this use case:
 **How to connect:**
 
 ```javascript
-const eventSource = new EventSource('/api/v1/notifications/stream', {
+const eventSource = new EventSource("/api/v1/notifications/stream", {
   headers: {
-    'X-API-Key': 'your-api-key-here'
-  }
+    "X-API-Key": "your-api-key-here",
+  },
 });
 
-eventSource.addEventListener('error_notification', (event) => {
+eventSource.addEventListener("error_notification", (event) => {
   const error = JSON.parse(event.data);
 
   // Show toast notification
@@ -213,18 +214,19 @@ eventSource.addEventListener('error_notification', (event) => {
     title: error.error_type,
     message: error.message,
     level: error.level,
-    timestamp: error.timestamp
+    timestamp: error.timestamp,
   });
 });
 
-eventSource.addEventListener('connected', (event) => {
-  console.log('Notifications connected:', JSON.parse(event.data));
+eventSource.addEventListener("connected", (event) => {
+  console.log("Notifications connected:", JSON.parse(event.data));
 });
 ```
 
 ### Event Types
 
 **`connected`** - Confirms connection is established
+
 ```json
 {
   "timestamp": "2025-01-15T10:00:00Z",
@@ -233,6 +235,7 @@ eventSource.addEventListener('connected', (event) => {
 ```
 
 **`error_notification`** - New error occurred
+
 ```json
 {
   "project_id": 1,
@@ -245,6 +248,7 @@ eventSource.addEventListener('connected', (event) => {
 ```
 
 **`heartbeat`** - Keepalive ping (every 30 seconds)
+
 ```json
 {
   "timestamp": "2025-01-15T10:05:00Z"
@@ -263,11 +267,13 @@ If you're authenticated with a session token (not an API key), you automatically
 ### What Gets Notified
 
 **Included:**
+
 - `level: "error"` logs
 - `level: "critical"` logs
 - `log_type: "exception"` logs (regardless of level)
 
 **Excluded:**
+
 - `level: "info"`, `"debug"`, `"warning"` logs (unless they're exceptions)
 - Regular application logs
 
@@ -286,6 +292,7 @@ Default settings work for most use cases:
 **Latency:** Typically under 30 milliseconds from log ingestion to browser notification
 
 **Breakdown:**
+
 - Ingestion validation: ~5ms
 - Redis Pub/Sub publish: <1ms
 - Pub/Sub fanout: ~5ms
@@ -293,6 +300,7 @@ Default settings work for most use cases:
 - SSE transmission: ~10ms (network latency)
 
 **Scalability:**
+
 - Multiple Gateway instances can all stream notifications
 - Redis Pub/Sub handles fanout to all subscribers automatically
 - No single point of failure
@@ -302,11 +310,13 @@ Default settings work for most use cases:
 Notifications are **not persisted**. If you're not connected when an error occurs, you won't receive that notification.
 
 **Why?**
+
 - Real-time alerts are for instant awareness, not reliable delivery
 - Keeps system simple and fast
 - Reduces Redis memory usage
 
 **How to handle this:**
+
 - On dashboard load, fetch recent errors via REST API
 - Use notifications for live updates while browsing
 - Critical errors are still stored in the database for later review
@@ -314,6 +324,7 @@ Notifications are **not persisted**. If you're not connected when an error occur
 ### Browser Compatibility
 
 SSE works in all modern browsers:
+
 - Chrome/Edge (Chromium): ✅
 - Firefox: ✅
 - Safari: ✅
@@ -324,14 +335,14 @@ Internet Explorer: ❌ (use a polyfill or skip notifications)
 ### React Hook Example
 
 ```typescript
-import { useEffect } from 'react';
-import { toast } from 'react-toastify';
+import { useEffect } from "react";
+import { toast } from "react-toastify";
 
 export function useErrorNotifications() {
   useEffect(() => {
-    const es = new EventSource('/api/v1/notifications/stream');
+    const es = new EventSource("/api/v1/notifications/stream");
 
-    es.addEventListener('error_notification', (event) => {
+    es.addEventListener("error_notification", (event) => {
       const error = JSON.parse(event.data);
 
       toast.error(
@@ -344,21 +355,6 @@ export function useErrorNotifications() {
 
     return () => es.close();
   }, []);
-}
-```
-
-### Health Check
-
-Check if notifications are working:
-
-```bash
-curl https://api.ledger.com/api/v1/notifications/health
-
-{
-  "status": "healthy",
-  "enabled": true,
-  "heartbeat_interval": 30,
-  "max_connections_per_user": 5
 }
 ```
 

@@ -1,16 +1,15 @@
 import asyncio
 import json
 import logging
-from typing import AsyncGenerator, Set
 from datetime import datetime
+from typing import AsyncGenerator, Set
 
 import fastapi
-from sse_starlette.sse import EventSourceResponse
-import redis.asyncio as redis
 import grpc
-
+import redis.asyncio as redis
 from gateway_service import config
 from gateway_service.proto import auth_pb2, auth_pb2_grpc
+from sse_starlette.sse import EventSourceResponse
 
 router = fastapi.APIRouter(tags=["Notifications"])
 logger = logging.getLogger(__name__)
@@ -25,9 +24,7 @@ class NotificationStream:
 
     async def subscribe(self):
         self.redis_client = redis.Redis.from_url(
-            self.redis_url,
-            decode_responses=True,
-            max_connections=10
+            self.redis_url, decode_responses=True, max_connections=10
         )
         self.pubsub = self.redis_client.pubsub()
         channels = [f"notifications:errors:{pid}" for pid in self.project_ids]
@@ -48,12 +45,11 @@ class NotificationStream:
                 if message["type"] == "message":
                     try:
                         data = json.loads(message["data"])
-                        yield {
-                            "event": "error_notification",
-                            "data": json.dumps(data)
-                        }
+                        yield {"event": "error_notification", "data": json.dumps(data)}
                     except json.JSONDecodeError:
-                        logger.error(f"Failed to decode notification message: {message['data']}")
+                        logger.error(
+                            f"Failed to decode notification message: {message['data']}"
+                        )
         except asyncio.CancelledError:
             logger.info("Notification stream cancelled")
             raise
@@ -61,7 +57,7 @@ class NotificationStream:
             logger.error(f"Error in notification stream: {e}", exc_info=True)
             yield {
                 "event": "error",
-                "data": json.dumps({"error": "Stream error occurred"})
+                "data": json.dumps({"error": "Stream error occurred"}),
             }
 
 
@@ -133,17 +129,15 @@ eventSource.addEventListener('connected', (event) => {
             "description": "SSE stream established",
             "content": {
                 "text/event-stream": {
-                    "example": "event: connected\\ndata: {\"timestamp\": \"2025-01-15T10:00:00Z\", \"projects\": [1, 2]}\\n\\n"
+                    "example": 'event: connected\\ndata: {"timestamp": "2025-01-15T10:00:00Z", "projects": [1, 2]}\\n\\n'
                 }
-            }
+            },
         },
         401: {
             "description": "Authentication required",
             "content": {
-                "application/json": {
-                    "example": {"detail": "Authentication required"}
-                }
-            }
+                "application/json": {"example": {"detail": "Authentication required"}}
+            },
         },
         503: {
             "description": "Notifications disabled",
@@ -151,17 +145,15 @@ eventSource.addEventListener('connected', (event) => {
                 "application/json": {
                     "example": {"detail": "Notifications are currently disabled"}
                 }
-            }
-        }
-    }
+            },
+        },
+    },
 )
-async def stream_error_notifications(
-    request: fastapi.Request
-):
+async def stream_error_notifications(request: fastapi.Request):
     if not config.settings.NOTIFICATIONS_ENABLED:
         raise fastapi.HTTPException(
             status_code=fastapi.status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Notifications are currently disabled"
+            detail="Notifications are currently disabled",
         )
 
     project_id = getattr(request.state, "project_id", None)
@@ -170,7 +162,7 @@ async def stream_error_notifications(
     if not account_id:
         raise fastapi.HTTPException(
             status_code=fastapi.status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required"
+            detail="Authentication required",
         )
 
     if project_id:
@@ -191,18 +183,24 @@ async def stream_error_notifications(
         try:
             yield {
                 "event": "connected",
-                "data": json.dumps({
-                    "timestamp": datetime.utcnow().isoformat() + "Z",
-                    "projects": list(project_ids)
-                })
+                "data": json.dumps(
+                    {
+                        "timestamp": datetime.utcnow().isoformat() + "Z",
+                        "projects": list(project_ids),
+                    }
+                ),
             }
 
             async def heartbeat():
                 while True:
-                    await asyncio.sleep(config.settings.NOTIFICATIONS_HEARTBEAT_INTERVAL)
+                    await asyncio.sleep(
+                        config.settings.NOTIFICATIONS_HEARTBEAT_INTERVAL
+                    )
                     yield {
                         "event": "heartbeat",
-                        "data": json.dumps({"timestamp": datetime.utcnow().isoformat() + "Z"})
+                        "data": json.dumps(
+                            {"timestamp": datetime.utcnow().isoformat() + "Z"}
+                        ),
                     }
 
             heartbeat_task = asyncio.create_task(_generate_heartbeats())
@@ -211,7 +209,9 @@ async def stream_error_notifications(
                 yield event
 
         except asyncio.CancelledError:
-            logger.info(f"Client disconnected from notification stream (account: {account_id})")
+            logger.info(
+                f"Client disconnected from notification stream (account: {account_id})"
+            )
         finally:
             if heartbeat_task:
                 heartbeat_task.cancel()
@@ -222,32 +222,3 @@ async def stream_error_notifications(
             await asyncio.sleep(config.settings.NOTIFICATIONS_HEARTBEAT_INTERVAL)
 
     return EventSourceResponse(event_generator())
-
-
-@router.get(
-    "/notifications/health",
-    summary="Check notification system health",
-    description="Returns the current status of the notification system",
-    response_description="Notification system health status",
-    responses={
-        200: {
-            "description": "Health status",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "status": "healthy",
-                        "enabled": True,
-                        "heartbeat_interval": 30
-                    }
-                }
-            }
-        }
-    }
-)
-async def notifications_health():
-    return {
-        "status": "healthy",
-        "enabled": config.settings.NOTIFICATIONS_ENABLED,
-        "heartbeat_interval": config.settings.NOTIFICATIONS_HEARTBEAT_INTERVAL,
-        "max_connections_per_user": config.settings.NOTIFICATIONS_MAX_CONNECTIONS_PER_USER
-    }
