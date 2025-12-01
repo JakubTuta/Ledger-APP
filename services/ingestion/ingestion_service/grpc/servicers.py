@@ -33,28 +33,30 @@ class IngestionServicer(ingestion_pb2_grpc.IngestionServiceServicer):
 
             await queue_service.enqueue_log(enriched_log)
 
-            if self.notification_publisher and self.notification_publisher.should_notify(
-                enriched_log.level,
-                enriched_log.log_type,
-                config.settings.NOTIFICATIONS_PUBLISH_ERRORS,
-                config.settings.NOTIFICATIONS_PUBLISH_CRITICAL
-            ):
-                notification = notifications.ErrorNotification(
-                    project_id=enriched_log.project_id,
-                    level=enriched_log.level,
-                    log_type=enriched_log.log_type,
-                    message=enriched_log.message[:500] if enriched_log.message else "",
-                    error_type=enriched_log.error_type,
-                    timestamp=enriched_log.timestamp,
-                    error_fingerprint=enriched_log.error_fingerprint,
-                    attributes=enriched_log.attributes or {},
-                    sdk_version=enriched_log.sdk_version,
-                    platform=enriched_log.platform
-                )
-                await self.notification_publisher.publish_error_notification(
-                    enriched_log.project_id,
-                    notification
-                )
+            if self.notification_publisher:
+                log = enriched_log.log_entry
+                if self.notification_publisher.should_notify(
+                    log.level,
+                    log.log_type,
+                    config.settings.NOTIFICATIONS_PUBLISH_ERRORS,
+                    config.settings.NOTIFICATIONS_PUBLISH_CRITICAL
+                ):
+                    notification = notifications.ErrorNotification(
+                        project_id=enriched_log.project_id,
+                        level=log.level,
+                        log_type=log.log_type,
+                        message=log.message[:500] if log.message else "",
+                        error_type=log.error_type,
+                        timestamp=log.timestamp,
+                        error_fingerprint=enriched_log.error_fingerprint,
+                        attributes=log.attributes or {},
+                        sdk_version=log.sdk_version,
+                        platform=log.platform
+                    )
+                    await self.notification_publisher.publish_error_notification(
+                        enriched_log.project_id,
+                        notification
+                    )
 
             return ingestion_pb2.IngestLogResponse(
                 success=True,
@@ -122,23 +124,24 @@ class IngestionServicer(ingestion_pb2_grpc.IngestionServiceServicer):
 
                 if self.notification_publisher:
                     for enriched_log in enriched_logs:
+                        log = enriched_log.log_entry
                         if self.notification_publisher.should_notify(
-                            enriched_log.level,
-                            enriched_log.log_type,
+                            log.level,
+                            log.log_type,
                             config.settings.NOTIFICATIONS_PUBLISH_ERRORS,
                             config.settings.NOTIFICATIONS_PUBLISH_CRITICAL
                         ):
                             notification = notifications.ErrorNotification(
                                 project_id=enriched_log.project_id,
-                                level=enriched_log.level,
-                                log_type=enriched_log.log_type,
-                                message=enriched_log.message[:500] if enriched_log.message else "",
-                                error_type=enriched_log.error_type,
-                                timestamp=enriched_log.timestamp,
+                                level=log.level,
+                                log_type=log.log_type,
+                                message=log.message[:500] if log.message else "",
+                                error_type=log.error_type,
+                                timestamp=log.timestamp,
                                 error_fingerprint=enriched_log.error_fingerprint,
-                                attributes=enriched_log.attributes or {},
-                                sdk_version=enriched_log.sdk_version,
-                                platform=enriched_log.platform
+                                attributes=log.attributes or {},
+                                sdk_version=log.sdk_version,
+                                platform=log.platform
                             )
                             await self.notification_publisher.publish_error_notification(
                                 enriched_log.project_id,
