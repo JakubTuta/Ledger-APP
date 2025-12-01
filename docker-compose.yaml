@@ -29,8 +29,8 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${AUTH_DB_USER}"]
       interval: 60s
-      timeout: 5s
-      retries: 5
+      timeout: 10s
+      retries: 3
     networks:
       - ledger-server-network
 
@@ -66,8 +66,8 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${LOGS_DB_USER}"]
       interval: 60s
-      timeout: 5s
-      retries: 5
+      timeout: 10s
+      retries: 3
     networks:
       - ledger-server-network
 
@@ -84,8 +84,8 @@ services:
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 60s
-      timeout: 5s
-      retries: 5
+      timeout: 10s
+      retries: 3
     networks:
       - ledger-server-network
     command: >
@@ -129,7 +129,7 @@ services:
           "import grpc; channel = grpc.insecure_channel('localhost:50051'); channel.close()",
         ]
       interval: 60s
-      timeout: 5s
+      timeout: 10s
       retries: 3
 
   # ==================== Gateway Service (REST) ====================
@@ -145,8 +145,13 @@ services:
       REDIS_HOST: ledger-redis
       AUTH_SERVICE_HOST: ledger-auth-service
       INGESTION_SERVICE_HOST: ledger-ingestion
+      QUERY_SERVICE_HOST: ledger-query
     depends_on:
       ledger-auth-service:
+        condition: service_healthy
+      ledger-ingestion:
+        condition: service_healthy
+      ledger-query:
         condition: service_healthy
       ledger-redis:
         condition: service_healthy
@@ -166,7 +171,7 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 60s
-      timeout: 5s
+      timeout: 10s
       retries: 3
 
   # ==================== Ingestion Service (gRPC) ====================
@@ -201,7 +206,7 @@ services:
           "import grpc; channel = grpc.insecure_channel('localhost:50052'); channel.close()",
         ]
       interval: 60s
-      timeout: 5s
+      timeout: 10s
       retries: 3
 
   # ==================== Storage Workers ====================
@@ -263,7 +268,7 @@ services:
           "test -f /tmp/analytics_health.json && cat /tmp/analytics_health.json | grep -q healthy",
         ]
       interval: 60s
-      timeout: 5s
+      timeout: 10s
       retries: 3
 
   # ==================== Query Service (gRPC) ====================
@@ -298,7 +303,7 @@ services:
           "import grpc; channel = grpc.insecure_channel('localhost:${QUERY_GRPC_PORT:-50053}'); channel.close()",
         ]
       interval: 60s
-      timeout: 5s
+      timeout: 10s
       retries: 3
 
 networks:
