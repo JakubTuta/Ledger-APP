@@ -1,10 +1,11 @@
 import json
+import logging
 from typing import Optional
 from datetime import datetime
 import redis.asyncio as redis
 from pydantic import BaseModel
 
-from ingestion_service.logger import logger
+logger = logging.getLogger(__name__)
 
 class ErrorNotification(BaseModel):
     log_id: Optional[str] = None
