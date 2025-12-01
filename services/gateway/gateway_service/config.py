@@ -6,6 +6,28 @@ import pydantic
 import pydantic_settings
 
 
+def _format_grpc_service_url(host: str, port: int) -> str:
+    """
+    Format gRPC service URL with IPv4 prefix for Docker container names.
+
+    Docker's embedded DNS has issues with IPv6 AAAA queries for container names,
+    causing gRPC's C-ares resolver to fail. Using 'ipv4:' prefix forces IPv4-only
+    resolution, avoiding the DNS failure.
+
+    Args:
+        host: Service hostname (e.g., 'ledger-ingestion', 'localhost', '10.0.0.1')
+        port: Service port number
+
+    Returns:
+        Formatted URL string:
+        - For Docker container names: 'ipv4:ledger-ingestion:50052'
+        - For localhost/IPs: 'localhost:50051' or '10.0.0.1:50051'
+    """
+    if host == "localhost" or "." in host:
+        return f"{host}:{port}"
+    return f"ipv4:{host}:{port}"
+
+
 class Settings(pydantic_settings.BaseSettings):
     model_config = pydantic_settings.SettingsConfigDict(
         env_file=os.getenv("ENV_FILE_PATH", "../../.env"),
@@ -105,7 +127,7 @@ class Settings(pydantic_settings.BaseSettings):
 
     @property
     def AUTH_SERVICE_URL(self) -> str:
-        return f"{self.AUTH_SERVICE_HOST}:{self.AUTH_SERVICE_PORT}"
+        return _format_grpc_service_url(self.AUTH_SERVICE_HOST, self.AUTH_SERVICE_PORT)
 
     INGESTION_SERVICE_HOST: str = pydantic.Field(
         default="localhost",
@@ -119,7 +141,7 @@ class Settings(pydantic_settings.BaseSettings):
 
     @property
     def INGESTION_SERVICE_URL(self) -> str:
-        return f"{self.INGESTION_SERVICE_HOST}:{self.INGESTION_GRPC_PORT}"
+        return _format_grpc_service_url(self.INGESTION_SERVICE_HOST, self.INGESTION_GRPC_PORT)
 
     QUERY_SERVICE_HOST: str = pydantic.Field(
         default="localhost",
@@ -133,7 +155,7 @@ class Settings(pydantic_settings.BaseSettings):
 
     @property
     def QUERY_SERVICE_URL(self) -> str:
-        return f"{self.QUERY_SERVICE_HOST}:{self.QUERY_SERVICE_PORT}"
+        return _format_grpc_service_url(self.QUERY_SERVICE_HOST, self.QUERY_SERVICE_PORT)
 
     GRPC_POOL_SIZE: int = pydantic.Field(
         default=2,
