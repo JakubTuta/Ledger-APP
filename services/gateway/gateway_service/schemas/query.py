@@ -115,3 +115,26 @@ class AggregatedMetricsResponse(pydantic.BaseModel):
     data: list[AggregatedMetricDataResponse] = pydantic.Field(
         description="Aggregated metrics data"
     )
+
+
+class ErrorListEntryResponse(pydantic.BaseModel):
+    log_id: int = pydantic.Field(description="Log entry ID")
+    project_id: int = pydantic.Field(description="Project ID")
+    level: str = pydantic.Field(description="Log level (error, critical)")
+    log_type: str = pydantic.Field(description="Log type (console, logger, exception, etc.)")
+    message: str = pydantic.Field(description="Error message")
+    error_type: typing.Optional[str] = pydantic.Field(default=None, description="Error type (e.g., ValueError)")
+    timestamp: datetime.datetime = pydantic.Field(description="Error timestamp")
+    error_fingerprint: typing.Optional[str] = pydantic.Field(default=None, description="Error fingerprint for grouping")
+    attributes: typing.Optional[dict] = pydantic.Field(default=None, description="Additional attributes")
+    sdk_version: typing.Optional[str] = pydantic.Field(default=None, description="SDK version")
+    platform: typing.Optional[str] = pydantic.Field(default=None, description="Platform (e.g., Python)")
+
+    model_config = pydantic.ConfigDict(from_attributes=True)
+
+
+class ErrorListResponse(pydantic.BaseModel):
+    project_id: int = pydantic.Field(description="Project ID")
+    errors: list[ErrorListEntryResponse] = pydantic.Field(description="List of errors")
+    total: int = pydantic.Field(description="Total number of errors matching filters")
+    has_more: bool = pydantic.Field(description="Whether there are more errors to fetch")

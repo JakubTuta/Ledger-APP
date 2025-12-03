@@ -75,6 +75,9 @@ class RegisterResponse(pydantic.BaseModel):
     access_token: str = pydantic.Field(
         ..., description="JWT access token for immediate use"
     )
+    refresh_token: str = pydantic.Field(
+        ..., description="Refresh token for obtaining new access tokens"
+    )
     token_type: str = pydantic.Field(
         default="bearer", description="Token type (always 'bearer')"
     )
@@ -82,7 +85,7 @@ class RegisterResponse(pydantic.BaseModel):
     email: str = pydantic.Field(..., description="Registered email address")
     name: str = pydantic.Field(..., description="User's full name")
     expires_in: int = pydantic.Field(
-        default=3600, description="Token expiration time in seconds"
+        default=900, description="Access token expiration time in seconds (15 minutes)"
     )
     message: str = pydantic.Field(
         default="Account created successfully", description="Success message"
@@ -93,11 +96,12 @@ class RegisterResponse(pydantic.BaseModel):
             "examples": [
                 {
                     "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                    "refresh_token": "AbCdEf123456...",
                     "token_type": "bearer",
                     "account_id": 123,
                     "email": "user@example.com",
                     "name": "John Doe",
-                    "expires_in": 3600,
+                    "expires_in": 900,
                     "message": "Account created successfully",
                 }
             ]
@@ -143,13 +147,16 @@ class LoginResponse(pydantic.BaseModel):
     """Response from successful login."""
 
     access_token: str = pydantic.Field(..., description="JWT access token")
+    refresh_token: str = pydantic.Field(
+        ..., description="Refresh token for obtaining new access tokens"
+    )
     token_type: str = pydantic.Field(
         default="bearer", description="Token type (always 'bearer')"
     )
     account_id: int = pydantic.Field(..., description="Account identifier")
     email: str = pydantic.Field(..., description="Logged in email address")
     expires_in: int = pydantic.Field(
-        default=3600, description="Token expiration time in seconds"
+        default=900, description="Access token expiration time in seconds (15 minutes)"
     )
 
     model_config = pydantic.ConfigDict(
@@ -157,10 +164,11 @@ class LoginResponse(pydantic.BaseModel):
             "examples": [
                 {
                     "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                    "refresh_token": "AbCdEf123456...",
                     "token_type": "bearer",
                     "account_id": 123,
                     "email": "user@example.com",
-                    "expires_in": 3600,
+                    "expires_in": 900,
                 }
             ]
         }
@@ -292,6 +300,58 @@ class ChangePasswordResponse(pydantic.BaseModel):
             "examples": [
                 {
                     "message": "Password changed successfully",
+                }
+            ]
+        }
+    )
+
+
+class RefreshTokenRequest(pydantic.BaseModel):
+    """Request body for refreshing access token."""
+
+    refresh_token: str = pydantic.Field(
+        ...,
+        description="Valid refresh token from login",
+        examples=["AbCdEf123456..."],
+    )
+
+    model_config = pydantic.ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "refresh_token": "AbCdEf123456...",
+                }
+            ]
+        }
+    )
+
+
+class RefreshTokenResponse(pydantic.BaseModel):
+    """Response from successful token refresh."""
+
+    access_token: str = pydantic.Field(..., description="New JWT access token")
+    refresh_token: str = pydantic.Field(
+        ..., description="New refresh token (token rotation)"
+    )
+    token_type: str = pydantic.Field(
+        default="bearer", description="Token type (always 'bearer')"
+    )
+    account_id: int = pydantic.Field(..., description="Account identifier")
+    email: str = pydantic.Field(..., description="Email address")
+    expires_in: int = pydantic.Field(
+        default=900, description="Access token expiration time in seconds (15 minutes)"
+    )
+
+    model_config = pydantic.ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                    "refresh_token": "XyZ789...",
+                    "token_type": "bearer",
+                    "account_id": 123,
+                    "email": "user@example.com",
+                    "expires_in": 900,
                 }
             ]
         }

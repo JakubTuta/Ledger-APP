@@ -74,6 +74,11 @@ class QueryServiceStub(object):
                 request_serializer=query__pb2.GetAggregatedMetricsRequest.SerializeToString,
                 response_deserializer=query__pb2.GetAggregatedMetricsResponse.FromString,
                 _registered_method=True)
+        self.GetErrorList = channel.unary_unary(
+                '/query.QueryService/GetErrorList',
+                request_serializer=query__pb2.GetErrorListRequest.SerializeToString,
+                response_deserializer=query__pb2.GetErrorListResponse.FromString,
+                _registered_method=True)
 
 
 class QueryServiceServicer(object):
@@ -127,6 +132,12 @@ class QueryServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetErrorList(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_QueryServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -169,6 +180,11 @@ def add_QueryServiceServicer_to_server(servicer, server):
                     servicer.GetAggregatedMetrics,
                     request_deserializer=query__pb2.GetAggregatedMetricsRequest.FromString,
                     response_serializer=query__pb2.GetAggregatedMetricsResponse.SerializeToString,
+            ),
+            'GetErrorList': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetErrorList,
+                    request_deserializer=query__pb2.GetErrorListRequest.FromString,
+                    response_serializer=query__pb2.GetErrorListResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -387,6 +403,33 @@ class QueryService(object):
             '/query.QueryService/GetAggregatedMetrics',
             query__pb2.GetAggregatedMetricsRequest.SerializeToString,
             query__pb2.GetAggregatedMetricsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetErrorList(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/query.QueryService/GetErrorList',
+            query__pb2.GetErrorListRequest.SerializeToString,
+            query__pb2.GetErrorListResponse.FromString,
             options,
             channel_credentials,
             insecure,

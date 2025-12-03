@@ -1,7 +1,7 @@
 import datetime
 import json
 import logging
-from typing import Literal, Optional
+import typing
 
 import fastapi
 import gateway_service.proto.query_pb2 as query_pb2
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 def _calculate_granularity_for_period(
     period: str,
-) -> Literal["hourly", "daily", "weekly", "monthly"]:
+) -> typing.Literal["hourly", "daily", "weekly", "monthly"]:
     """
     Calculate the appropriate granularity for predefined periods.
 
@@ -27,7 +27,9 @@ def _calculate_granularity_for_period(
     - currentMonth: daily
     - currentYear: monthly
     """
-    granularity_map: dict[str, Literal["hourly", "daily", "weekly", "monthly"]] = {
+    granularity_map: dict[
+        str, typing.Literal["hourly", "daily", "weekly", "monthly"]
+    ] = {
         "today": "hourly",
         "last7days": "daily",
         "last30days": "daily",
@@ -43,7 +45,7 @@ def _calculate_granularity_for_period(
 
 def _calculate_granularity_for_date_range(
     start_date: datetime.date, end_date: datetime.date
-) -> Literal["hourly", "daily", "weekly", "monthly"]:
+) -> typing.Literal["hourly", "daily", "weekly", "monthly"]:
     """
     Calculate the appropriate granularity based on date range duration.
 
@@ -84,9 +86,7 @@ def _calculate_granularity_for_date_range(
         400: {
             "description": "Invalid log ID",
             "content": {
-                "application/json": {
-                    "example": {"detail": "Invalid log ID format"}
-                }
+                "application/json": {"example": {"detail": "Invalid log ID format"}}
             },
         },
         500: {
@@ -282,12 +282,12 @@ async def get_aggregated_metrics(
         description="The project ID to retrieve metrics for",
         gt=0,
     ),
-    type: Literal["exception", "endpoint", "log_volume"] = fastapi.Query(
+    type: typing.Literal["exception", "endpoint", "log_volume"] = fastapi.Query(
         ...,
         description="Metric type to retrieve (exception for error tracking, endpoint for API monitoring, log_volume for log volume metrics)",
     ),
-    period: Optional[
-        Literal[
+    period: typing.Optional[
+        typing.Literal[
             "today",
             "last7days",
             "last30days",
@@ -299,17 +299,17 @@ async def get_aggregated_metrics(
         None,
         description="Predefined time period. Mutually exclusive with periodFrom/periodTo.",
     ),
-    periodFrom: Optional[str] = fastapi.Query(
+    periodFrom: typing.Optional[str] = fastapi.Query(
         None,
         description="Start date in ISO 8601 format (YYYY-MM-DD). Must be used with periodTo.",
         pattern=r"^\d{4}-\d{2}-\d{2}$",
     ),
-    periodTo: Optional[str] = fastapi.Query(
+    periodTo: typing.Optional[str] = fastapi.Query(
         None,
         description="End date in ISO 8601 format (YYYY-MM-DD). Must be used with periodFrom.",
         pattern=r"^\d{4}-\d{2}-\d{2}$",
     ),
-    endpointPath: Optional[str] = fastapi.Query(
+    endpointPath: typing.Optional[str] = fastapi.Query(
         None,
         description="Filter by specific endpoint path (e.g., /api/users). Only applicable when type=endpoint.",
     ),
@@ -514,7 +514,7 @@ async def get_aggregated_metrics(
             status_code=400, detail="periodFrom must be before or equal to periodTo"
         )
 
-    granularity: Literal["hourly", "daily", "weekly", "monthly"]
+    granularity: typing.Literal["hourly", "daily", "weekly", "monthly"]
     if period:
         granularity = _calculate_granularity_for_period(period)
     elif period_from_date and period_to_date:
@@ -602,6 +602,178 @@ async def get_aggregated_metrics(
         raise fastapi.HTTPException(
             status_code=500,
             detail="Failed to retrieve aggregated metrics",
+        )
+
+
+@router.get(
+    "/errors/list",
+    status_code=200,
+    summary="Get error list for dashboard panel",
+    description="Retrieve individual error/critical log entries for a specified time period. Returns error data matching the SSE notification format for dashboard panels.",
+    response_description="List of error entries",
+    response_model=schemas.ErrorListResponse,
+    responses={
+        400: {
+            "description": "Invalid parameters",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "missing_period": {
+                            "summary": "Missing period parameters",
+                            "value": {
+                                "detail": "Either 'period' or both 'periodFrom' and 'periodTo' must be provided"
+                            },
+                        },
+                        "invalid_period": {
+                            "summary": "Invalid period value",
+                            "value": {
+                                "detail": "period must be one of: today, last7days, last30days, currentWeek, currentMonth, currentYear"
+                            },
+                        },
+                    }
+                }
+            },
+        },
+        500: {
+            "description": "Server error",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Failed to retrieve error list"}
+                }
+            },
+        },
+    },
+)
+async def get_error_list(
+    request: fastapi.Request,
+    project_id: int = fastapi.Query(
+        ...,
+        description="The project ID to retrieve errors from",
+        gt=0,
+    ),
+    period: typing.Optional[
+        typing.Literal[
+            "today",
+            "last7days",
+            "last30days",
+            "currentWeek",
+            "currentMonth",
+            "currentYear",
+        ]
+    ] = fastapi.Query(
+        None,
+        description="Predefined time period. Mutually exclusive with periodFrom/periodTo.",
+    ),
+    periodFrom: typing.Optional[str] = fastapi.Query(
+        None,
+        description="Start date in ISO 8601 format (YYYY-MM-DD). Must be used with periodTo.",
+        pattern=r"^\\d{4}-\\d{2}-\\d{2}$",
+    ),
+    periodTo: typing.Optional[str] = fastapi.Query(
+        None,
+        description="End date in ISO 8601 format (YYYY-MM-DD). Must be used with periodFrom.",
+        pattern=r"^\\d{4}-\\d{2}-\\d{2}$",
+    ),
+    limit: int = fastapi.Query(
+        100,
+        description="Maximum number of errors to return",
+        ge=1,
+        le=1000,
+    ),
+    offset: int = fastapi.Query(
+        0,
+        description="Number of errors to skip for pagination",
+        ge=0,
+    ),
+) -> schemas.ErrorListResponse:
+    grpc_pool = request.app.state.grpc_pool
+
+    if not period and not (periodFrom and periodTo):
+        raise fastapi.HTTPException(
+            status_code=400,
+            detail="Either 'period' or both 'periodFrom' and 'periodTo' must be provided",
+        )
+
+    if period and (periodFrom or periodTo):
+        raise fastapi.HTTPException(
+            status_code=400,
+            detail="Cannot use both 'period' and 'periodFrom'/'periodTo' parameters",
+        )
+
+    try:
+        async with grpc_pool.get_query_stub() as stub:
+            response = await stub.GetErrorList(
+                query_pb2.GetErrorListRequest(
+                    project_id=project_id,
+                    period=period if period else "",
+                    period_from=periodFrom if periodFrom else "",
+                    period_to=periodTo if periodTo else "",
+                    limit=limit,
+                    offset=offset,
+                ),
+                timeout=10.0,
+            )
+
+        errors = []
+        for error in response.errors:
+            attributes = None
+            if error.attributes:
+                try:
+                    attributes = json.loads(error.attributes)
+                except json.JSONDecodeError:
+                    logger.warning(
+                        f"Failed to parse attributes JSON for error {error.log_id}"
+                    )
+                    attributes = None
+
+            errors.append(
+                schemas.ErrorListEntryResponse(
+                    log_id=error.log_id,
+                    project_id=error.project_id,
+                    level=error.level,
+                    log_type=error.log_type,
+                    message=error.message,
+                    error_type=error.error_type if error.error_type else None,
+                    timestamp=error.timestamp,
+                    error_fingerprint=(
+                        error.error_fingerprint if error.error_fingerprint else None
+                    ),
+                    attributes=attributes,
+                    sdk_version=error.sdk_version if error.sdk_version else None,
+                    platform=error.platform if error.platform else None,
+                )
+            )
+
+        return schemas.ErrorListResponse(
+            project_id=response.project_id,
+            errors=errors,
+            total=response.total,
+            has_more=response.has_more,
+        )
+
+    except grpc.RpcError as e:
+        if e.code() == grpc.StatusCode.INVALID_ARGUMENT:
+            raise fastapi.HTTPException(
+                status_code=400,
+                detail=e.details(),
+            )
+        else:
+            logger.error(
+                f"gRPC error retrieving error list: {e.code()} - {e.details()}"
+            )
+            raise fastapi.HTTPException(
+                status_code=500,
+                detail="Failed to retrieve error list",
+            )
+
+    except fastapi.HTTPException:
+        raise
+
+    except Exception as e:
+        logger.error(f"Failed to retrieve error list: {e}", exc_info=True)
+        raise fastapi.HTTPException(
+            status_code=500,
+            detail="Failed to retrieve error list",
         )
 
 

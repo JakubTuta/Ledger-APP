@@ -2,6 +2,8 @@ import grpc
 from auth_service import database
 from auth_service.proto import auth_pb2, auth_pb2_grpc
 from auth_service.services import auth_service, dashboard_service
+from auth_service.utils import jwt_utils
+from auth_service import config
 from redis.asyncio import Redis
 
 
@@ -52,7 +54,7 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
         request: auth_pb2.LoginRequest,
         context: grpc.aio.ServicerContext,
     ) -> auth_pb2.LoginResponse:
-        """Login and return account info."""
+        """Login and return JWT access token + refresh token."""
         try:
             async with database.get_session() as session:
                 account = await self.auth_service.login(
@@ -61,13 +63,27 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     password=request.password,
                 )
 
-                access_token = f"token_{account.id}_{account.email}"
+                access_token = jwt_utils.create_access_token(
+                    account_id=account.id,
+                    email=account.email,
+                )
+
+                refresh_token, _ = await self.auth_service.create_refresh_token(
+                    session=session,
+                    account_id=account.id,
+                    device_info=None,
+                )
+
+                settings = config.get_settings()
+                expires_in = settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60
 
                 return auth_pb2.LoginResponse(
                     account_id=account.id,
                     email=account.email,
                     plan=account.plan,
                     access_token=access_token,
+                    refresh_token=refresh_token,
+                    expires_in=expires_in,
                 )
 
         except ValueError as e:
@@ -79,6 +95,56 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f"Internal error: {str(e)}")
             return auth_pb2.LoginResponse()
+
+    async def RefreshToken(
+        self,
+        request: auth_pb2.RefreshTokenRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.RefreshTokenResponse:
+        """Refresh access token using refresh token."""
+        try:
+            async with database.get_session() as session:
+                account = await self.auth_service.validate_refresh_token(
+                    session=session,
+                    raw_token=request.refresh_token,
+                )
+
+                if not account:
+                    context.set_code(grpc.StatusCode.UNAUTHENTICATED)
+                    context.set_details("Invalid or expired refresh token")
+                    return auth_pb2.RefreshTokenResponse()
+
+                new_access_token = jwt_utils.create_access_token(
+                    account_id=account.id,
+                    email=account.email,
+                )
+
+                new_refresh_token, _ = await self.auth_service.create_refresh_token(
+                    session=session,
+                    account_id=account.id,
+                    device_info=None,
+                )
+
+                await self.auth_service.revoke_refresh_token(
+                    session=session,
+                    raw_token=request.refresh_token,
+                )
+
+                settings = config.get_settings()
+                expires_in = settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60
+
+                return auth_pb2.RefreshTokenResponse(
+                    access_token=new_access_token,
+                    refresh_token=new_refresh_token,
+                    expires_in=expires_in,
+                    account_id=account.id,
+                    email=account.email,
+                )
+
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.RefreshTokenResponse()
 
     async def GetAccount(
         self,

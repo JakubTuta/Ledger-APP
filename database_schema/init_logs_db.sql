@@ -92,6 +92,12 @@ WHERE importance IN ('critical', 'high');
 CREATE INDEX idx_logs_endpoint_monitoring ON logs (project_id, timestamp DESC, level)
 WHERE log_type = 'endpoint';
 
+-- Covering index for error list panel queries (index-only scan for maximum performance)
+-- Contains all columns needed for error list display in dashboard panels
+-- Matches SSE notification format for consistent error representation
+CREATE INDEX idx_logs_error_list_covering ON logs (project_id, timestamp DESC, level, log_type, error_type, message, error_fingerprint, sdk_version, platform)
+WHERE level IN ('error', 'critical');
+
 -- ============================================
 -- PARTITIONS (Monthly - Auto-created)
 -- ============================================

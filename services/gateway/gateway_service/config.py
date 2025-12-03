@@ -159,6 +159,14 @@ class Settings(pydantic_settings.BaseSettings):
         description="gRPC request timeout (seconds)",
     )
 
+    # ==================== Security ====================
+
+    JWT_SECRET: str = pydantic.Field(
+        default="your-secret-key-change-this-in-production",
+        min_length=32,
+        description="JWT signing secret (min 32 chars)",
+    )
+
     # ==================== Cache Configuration ====================
 
     API_KEY_CACHE_TTL: int = pydantic.Field(

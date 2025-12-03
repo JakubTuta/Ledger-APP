@@ -38,6 +38,8 @@ from gateway_service.schemas.projects import (
 from gateway_service.schemas.query import (
     AggregatedMetricDataResponse,
     AggregatedMetricsResponse,
+    ErrorListEntryResponse,
+    ErrorListResponse,
     LogEntryResponse,
 )
 from gateway_service.schemas.settings import (
@@ -93,4 +95,6 @@ __all__ = [
     "LogEntryResponse",
     "AggregatedMetricDataResponse",
     "AggregatedMetricsResponse",
+    "ErrorListEntryResponse",
+    "ErrorListResponse",
 ]

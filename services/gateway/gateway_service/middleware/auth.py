@@ -4,6 +4,7 @@ import typing
 
 import fastapi
 import grpc
+import jwt
 from gateway_service import config
 from gateway_service.proto import auth_pb2, auth_pb2_grpc
 from gateway_service.services import grpc_pool, redis_client
@@ -24,6 +25,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         "/openapi.json",
         "/api/v1/accounts/register",
         "/api/v1/accounts/login",
+        "/api/v1/accounts/refresh",
     }
 
     def __init__(self, app):
@@ -107,10 +109,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         if len(parts) == 2 and parts[0].lower() == "bearer":
             token = parts[1]
-            if token.startswith("token_"):
-                return (token, "session")
-            else:
+            if token.startswith("ledger_"):
                 return (token, "api_key")
+            else:
+                return (token, "session")
         elif len(parts) == 1:
             return (parts[0], "api_key")
         else:
@@ -122,43 +124,52 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     async def _validate_session_token(self, token: str) -> typing.Dict:
         """
-        Validate session token (JWT/Bearer token from login).
+        Validate JWT access token from login.
 
         Returns:
             Dict with account_id and other session data
         """
-        session_key = f"session:{token}"
-
         try:
-            session_data_str = await self.redis.client.get(session_key)
+            settings = config.get_settings()
 
-            if not session_data_str:
+            payload = jwt.decode(
+                token,
+                settings.JWT_SECRET,
+                algorithms=["HS256"]
+            )
+
+            if payload.get("type") != "access":
                 self._auth_failures += 1
                 raise fastapi.HTTPException(
                     status_code=fastapi.status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid or expired session token",
+                    detail="Invalid token type",
                 )
 
-            import ast
-
-            session_data = ast.literal_eval(
-                session_data_str.decode()
-                if isinstance(session_data_str, bytes)
-                else session_data_str
-            )
-
             return {
-                "account_id": session_data["account_id"],
-                "email": session_data.get("email"),
+                "account_id": int(payload["sub"]),
+                "email": payload.get("email"),
                 "project_id": None,
             }
 
-        except (ValueError, KeyError, SyntaxError) as e:
-            logger.error(f"Failed to parse session data: {e}")
+        except jwt.ExpiredSignatureError:
             self._auth_failures += 1
             raise fastapi.HTTPException(
                 status_code=fastapi.status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid session data",
+                detail="Token has expired",
+            )
+        except jwt.InvalidTokenError as e:
+            logger.error(f"JWT validation error: {e}")
+            self._auth_failures += 1
+            raise fastapi.HTTPException(
+                status_code=fastapi.status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or malformed token",
+            )
+        except Exception as e:
+            logger.error(f"Unexpected error validating JWT: {e}", exc_info=True)
+            self._auth_failures += 1
+            raise fastapi.HTTPException(
+                status_code=fastapi.status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication failed",
             )
 
     async def _validate_api_key(self, api_key: str) -> typing.Dict:

@@ -25,7 +25,41 @@ CREATE INDEX CONCURRENTLY idx_accounts_notification_prefs
 ON accounts USING GIN(notification_preferences);
 
 -- ============================================
--- 2. PROJECTS (multi-tenancy)
+-- 2. REFRESH TOKENS (JWT refresh)
+-- ============================================
+
+CREATE TABLE refresh_tokens (
+    id BIGSERIAL PRIMARY KEY,
+    account_id BIGINT NOT NULL,
+    token_hash CHAR(60) NOT NULL UNIQUE,
+    device_info VARCHAR(255),
+    expires_at TIMESTAMPTZ NOT NULL,
+    revoked BOOLEAN DEFAULT FALSE NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+    last_used_at TIMESTAMPTZ
+);
+
+CREATE INDEX CONCURRENTLY idx_refresh_tokens_token_hash
+ON refresh_tokens(token_hash);
+
+CREATE INDEX CONCURRENTLY idx_refresh_tokens_account_id
+ON refresh_tokens(account_id);
+
+CREATE INDEX CONCURRENTLY idx_refresh_tokens_active
+ON refresh_tokens(token_hash, account_id, expires_at)
+WHERE revoked = FALSE;
+
+CREATE INDEX CONCURRENTLY idx_refresh_tokens_cleanup
+ON refresh_tokens(expires_at)
+WHERE revoked = FALSE;
+
+ALTER TABLE refresh_tokens
+ADD CONSTRAINT fk_refresh_tokens_account
+FOREIGN KEY (account_id) REFERENCES accounts(id)
+ON DELETE CASCADE;
+
+-- ============================================
+-- 3. PROJECTS (multi-tenancy)
 -- ============================================
 
 CREATE TABLE projects (

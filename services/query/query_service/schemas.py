@@ -164,3 +164,33 @@ class AggregatedMetricsResponse(pydantic.BaseModel):
     start_date: str
     end_date: str
     data: list[AggregatedMetricData]
+
+
+class ErrorListEntry(pydantic.BaseModel):
+    log_id: int
+    project_id: int
+    level: str
+    log_type: str
+    message: str
+    error_type: str | None
+    timestamp: datetime.datetime
+    error_fingerprint: str | None
+    attributes: dict | None
+    sdk_version: str | None
+    platform: str | None
+
+    model_config = pydantic.ConfigDict(from_attributes=True)
+
+    @pydantic.field_validator("error_fingerprint", mode="before")
+    @classmethod
+    def strip_error_fingerprint(cls, v: str | None) -> str | None:
+        if v is not None and isinstance(v, str):
+            return v.strip()
+        return v
+
+
+class ErrorListResponse(pydantic.BaseModel):
+    project_id: int
+    errors: list[ErrorListEntry]
+    total: int
+    has_more: bool

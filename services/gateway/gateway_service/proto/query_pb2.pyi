@@ -327,3 +327,57 @@ class GetAggregatedMetricsResponse(_message.Message):
     end_date: str
     data: _containers.RepeatedCompositeFieldContainer[AggregatedMetricData]
     def __init__(self, project_id: _Optional[int] = ..., metric_type: _Optional[str] = ..., granularity: _Optional[str] = ..., start_date: _Optional[str] = ..., end_date: _Optional[str] = ..., data: _Optional[_Iterable[_Union[AggregatedMetricData, _Mapping]]] = ...) -> None: ...
+
+class GetErrorListRequest(_message.Message):
+    __slots__ = ("project_id", "period", "period_from", "period_to", "limit", "offset")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    PERIOD_FIELD_NUMBER: _ClassVar[int]
+    PERIOD_FROM_FIELD_NUMBER: _ClassVar[int]
+    PERIOD_TO_FIELD_NUMBER: _ClassVar[int]
+    LIMIT_FIELD_NUMBER: _ClassVar[int]
+    OFFSET_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    period: str
+    period_from: str
+    period_to: str
+    limit: int
+    offset: int
+    def __init__(self, project_id: _Optional[int] = ..., period: _Optional[str] = ..., period_from: _Optional[str] = ..., period_to: _Optional[str] = ..., limit: _Optional[int] = ..., offset: _Optional[int] = ...) -> None: ...
+
+class ErrorListEntry(_message.Message):
+    __slots__ = ("log_id", "project_id", "level", "log_type", "message", "error_type", "timestamp", "error_fingerprint", "attributes", "sdk_version", "platform")
+    LOG_ID_FIELD_NUMBER: _ClassVar[int]
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    LEVEL_FIELD_NUMBER: _ClassVar[int]
+    LOG_TYPE_FIELD_NUMBER: _ClassVar[int]
+    MESSAGE_FIELD_NUMBER: _ClassVar[int]
+    ERROR_TYPE_FIELD_NUMBER: _ClassVar[int]
+    TIMESTAMP_FIELD_NUMBER: _ClassVar[int]
+    ERROR_FINGERPRINT_FIELD_NUMBER: _ClassVar[int]
+    ATTRIBUTES_FIELD_NUMBER: _ClassVar[int]
+    SDK_VERSION_FIELD_NUMBER: _ClassVar[int]
+    PLATFORM_FIELD_NUMBER: _ClassVar[int]
+    log_id: int
+    project_id: int
+    level: str
+    log_type: str
+    message: str
+    error_type: str
+    timestamp: str
+    error_fingerprint: str
+    attributes: str
+    sdk_version: str
+    platform: str
+    def __init__(self, log_id: _Optional[int] = ..., project_id: _Optional[int] = ..., level: _Optional[str] = ..., log_type: _Optional[str] = ..., message: _Optional[str] = ..., error_type: _Optional[str] = ..., timestamp: _Optional[str] = ..., error_fingerprint: _Optional[str] = ..., attributes: _Optional[str] = ..., sdk_version: _Optional[str] = ..., platform: _Optional[str] = ...) -> None: ...
+
+class GetErrorListResponse(_message.Message):
+    __slots__ = ("project_id", "errors", "total", "has_more")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    ERRORS_FIELD_NUMBER: _ClassVar[int]
+    TOTAL_FIELD_NUMBER: _ClassVar[int]
+    HAS_MORE_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    errors: _containers.RepeatedCompositeFieldContainer[ErrorListEntry]
+    total: int
+    has_more: bool
+    def __init__(self, project_id: _Optional[int] = ..., errors: _Optional[_Iterable[_Union[ErrorListEntry, _Mapping]]] = ..., total: _Optional[int] = ..., has_more: bool = ...) -> None: ...

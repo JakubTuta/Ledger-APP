@@ -11,6 +11,7 @@ service QueryService {
     rpc GetTopErrors(GetTopErrorsRequest) returns (GetTopErrorsResponse);
     rpc GetUsageStats(GetUsageStatsRequest) returns (GetUsageStatsResponse);
     rpc GetAggregatedMetrics(GetAggregatedMetricsRequest) returns (GetAggregatedMetricsResponse);
+    rpc GetErrorList(GetErrorListRequest) returns (GetErrorListResponse);
 }
 
 message QueryLogsRequest {
@@ -194,4 +195,34 @@ message GetAggregatedMetricsResponse {
     string start_date = 4;
     string end_date = 5;
     repeated AggregatedMetricData data = 6;
+}
+
+message GetErrorListRequest {
+    int64 project_id = 1;
+    optional string period = 2;
+    optional string period_from = 3;
+    optional string period_to = 4;
+    int32 limit = 5;
+    int32 offset = 6;
+}
+
+message ErrorListEntry {
+    int64 log_id = 1;
+    int64 project_id = 2;
+    string level = 3;
+    string log_type = 4;
+    string message = 5;
+    optional string error_type = 6;
+    string timestamp = 7;
+    optional string error_fingerprint = 8;
+    optional string attributes = 9;
+    optional string sdk_version = 10;
+    optional string platform = 11;
+}
+
+message GetErrorListResponse {
+    int64 project_id = 1;
+    repeated ErrorListEntry errors = 2;
+    int32 total = 3;
+    bool has_more = 4;
 }

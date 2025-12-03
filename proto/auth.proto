@@ -6,6 +6,7 @@ service AuthService {
   // Account operations
   rpc Register(RegisterRequest) returns (RegisterResponse);
   rpc Login(LoginRequest) returns (LoginResponse);
+  rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
   rpc GetAccount(GetAccountRequest) returns (GetAccountResponse);
   rpc UpdateAccountName(UpdateAccountNameRequest) returns (UpdateAccountNameResponse);
   rpc ChangePassword(ChangePasswordRequest) returns (ChangePasswordResponse);
@@ -16,7 +17,7 @@ service AuthService {
   rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse);
   rpc GetProjects(GetProjectsRequest) returns (GetProjectsResponse);
   rpc GetProjectById(GetProjectByIdRequest) returns (GetProjectByIdResponse);
-  
+
   // API key operations
   rpc CreateApiKey(CreateApiKeyRequest) returns (CreateApiKeyResponse);
   rpc ValidateApiKey(ValidateApiKeyRequest) returns (ValidateApiKeyResponse);
@@ -58,6 +59,20 @@ message LoginResponse {
   string email = 2;
   string plan = 3;
   string access_token = 4;
+  string refresh_token = 5;
+  int32 expires_in = 6;
+}
+
+message RefreshTokenRequest {
+  string refresh_token = 1;
+}
+
+message RefreshTokenResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+  int32 expires_in = 3;
+  int64 account_id = 4;
+  string email = 5;
 }
 
 message GetAccountRequest {

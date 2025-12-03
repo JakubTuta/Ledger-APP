@@ -401,3 +401,62 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
             await context.abort(
                 grpc.StatusCode.INTERNAL, f"Get aggregated metrics failed: {str(e)}"
             )
+
+    async def GetErrorList(
+        self,
+        request: query_pb2.GetErrorListRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> query_pb2.GetErrorListResponse:
+        try:
+            period_from = None
+            period_to = None
+
+            if request.period_from:
+                period_from = datetime.datetime.fromisoformat(request.period_from)
+            if request.period_to:
+                period_to = datetime.datetime.fromisoformat(request.period_to)
+
+            pagination = schemas.Pagination(
+                limit=request.limit if request.limit > 0 else 100,
+                offset=request.offset if request.offset >= 0 else 0,
+            )
+
+            result = await log_query.get_error_list(
+                project_id=request.project_id,
+                period=request.period if request.period else None,
+                period_from=period_from,
+                period_to=period_to,
+                pagination=pagination,
+            )
+
+            error_entries = [
+                query_pb2.ErrorListEntry(
+                    log_id=error.log_id,
+                    project_id=error.project_id,
+                    level=error.level,
+                    log_type=error.log_type,
+                    message=error.message,
+                    error_type=error.error_type or "",
+                    timestamp=error.timestamp.isoformat(),
+                    error_fingerprint=error.error_fingerprint or "",
+                    attributes=json.dumps(error.attributes) if error.attributes else "",
+                    sdk_version=error.sdk_version or "",
+                    platform=error.platform or "",
+                )
+                for error in result.errors
+            ]
+
+            return query_pb2.GetErrorListResponse(
+                project_id=result.project_id,
+                errors=error_entries,
+                total=result.total,
+                has_more=result.has_more,
+            )
+
+        except ValueError as e:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
+
+        except Exception as e:
+            await context.abort(
+                grpc.StatusCode.INTERNAL, f"Get error list failed: {str(e)}"
+            )

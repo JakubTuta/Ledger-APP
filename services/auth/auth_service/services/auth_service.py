@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 import auth_service.config as config
 import auth_service.models as models
+import auth_service.utils.jwt_utils as jwt_utils
 import bcrypt
 from redis.asyncio import Redis
 from sqlalchemy import select
@@ -466,3 +467,132 @@ class AuthService:
         api_keys = result.scalars().all()
 
         return list(api_keys)
+
+    # ==================== Refresh Tokens ====================
+
+    async def create_refresh_token(
+        self,
+        session: AsyncSession,
+        account_id: int,
+        device_info: str | None = None,
+    ) -> tuple[str, models.RefreshToken]:
+        """
+        Create refresh token for account.
+
+        Args:
+            session: Database session
+            account_id: Account ID to create token for
+            device_info: Optional device/browser info
+
+        Returns:
+            Tuple of (raw_token, refresh_token_record)
+            WARNING: raw_token is shown only once!
+        """
+        raw_token, token_hash = jwt_utils.create_refresh_token()
+
+        expires_at = jwt_utils.get_token_expiration("refresh")
+
+        refresh_token = models.RefreshToken(
+            account_id=account_id,
+            token_hash=token_hash,
+            device_info=device_info,
+            expires_at=expires_at,
+            revoked=False,
+        )
+        session.add(refresh_token)
+        await session.commit()
+        await session.refresh(refresh_token)
+
+        return raw_token, refresh_token
+
+    async def validate_refresh_token(
+        self,
+        session: AsyncSession,
+        raw_token: str,
+    ) -> models.Account | None:
+        """
+        Validate refresh token and return associated account.
+
+        Args:
+            session: Database session
+            raw_token: Raw refresh token from client
+
+        Returns:
+            Account if token is valid, None otherwise
+        """
+        result = await session.execute(
+            select(models.RefreshToken).where(
+                models.RefreshToken.revoked == False,
+                models.RefreshToken.expires_at > datetime.now(timezone.utc),
+            )
+        )
+        refresh_tokens = result.scalars().all()
+
+        for token_record in refresh_tokens:
+            if jwt_utils.verify_refresh_token(raw_token, token_record.token_hash):
+                token_record.last_used_at = datetime.now(timezone.utc)
+                await session.commit()
+
+                account = await self.get_account_by_id(session, token_record.account_id)
+                return account
+
+        return None
+
+    async def revoke_refresh_token(
+        self,
+        session: AsyncSession,
+        raw_token: str,
+    ) -> bool:
+        """
+        Revoke a specific refresh token.
+
+        Args:
+            session: Database session
+            raw_token: Raw refresh token to revoke
+
+        Returns:
+            True if token was found and revoked, False otherwise
+        """
+        result = await session.execute(
+            select(models.RefreshToken).where(models.RefreshToken.revoked == False)
+        )
+        refresh_tokens = result.scalars().all()
+
+        for token_record in refresh_tokens:
+            if jwt_utils.verify_refresh_token(raw_token, token_record.token_hash):
+                token_record.revoked = True
+                await session.commit()
+                return True
+
+        return False
+
+    async def revoke_all_refresh_tokens(
+        self,
+        session: AsyncSession,
+        account_id: int,
+    ) -> int:
+        """
+        Revoke all refresh tokens for an account (logout from all devices).
+
+        Args:
+            session: Database session
+            account_id: Account ID
+
+        Returns:
+            Number of tokens revoked
+        """
+        result = await session.execute(
+            select(models.RefreshToken).where(
+                models.RefreshToken.account_id == account_id,
+                models.RefreshToken.revoked == False,
+            )
+        )
+        tokens = result.scalars().all()
+
+        count = 0
+        for token in tokens:
+            token.revoked = True
+            count += 1
+
+        await session.commit()
+        return count

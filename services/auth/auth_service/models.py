@@ -87,6 +87,81 @@ class Account(database.Base):
         return f"<Account(id={self.id}, email={self.email}, plan={self.plan})>"
 
 
+class RefreshToken(database.Base):
+    """
+    Refresh tokens table for JWT token refresh.
+
+    Stores refresh tokens with expiration for automatic access token renewal.
+    Enables token revocation and logout across devices.
+
+    Performance notes:
+    - Indexed token_hash for fast validation
+    - Indexed account_id for user logout (revoke all tokens)
+    - Partial index on active tokens only
+    - Automatic cleanup via expires_at timestamp
+    """
+
+    __tablename__ = "refresh_tokens"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+
+    account_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("accounts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    token_hash: Mapped[str] = mapped_column(
+        CHAR(60), unique=True, nullable=False, index=True
+    )
+
+    device_info: Mapped[str | None] = mapped_column(VARCHAR(255), nullable=True)
+
+    expires_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+
+    revoked: Mapped[bool] = mapped_column(
+        default=False,
+        nullable=False,
+    )
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+    last_used_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    account: Mapped["Account"] = relationship("Account", backref="refresh_tokens")
+
+    __table_args__ = (
+        Index("idx_refresh_tokens_token_hash", "token_hash"),
+        Index("idx_refresh_tokens_account_id", "account_id"),
+        Index(
+            "idx_refresh_tokens_active",
+            "token_hash",
+            "account_id",
+            "expires_at",
+            postgresql_where=(revoked == False),
+        ),
+        Index(
+            "idx_refresh_tokens_cleanup",
+            "expires_at",
+            postgresql_where=(revoked == False),
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return f"<RefreshToken(id={self.id}, account_id={self.account_id}, revoked={self.revoked})>"
+
+
 class Project(database.Base):
     """
     Projects table for multi-tenancy.

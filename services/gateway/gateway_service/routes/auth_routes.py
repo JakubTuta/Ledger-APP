@@ -107,20 +107,13 @@ async def register_account(
             timeout=10.0,
         )
 
-        session_key = f"session:{login_response.access_token}"
-        session_data = {
-            "account_id": login_response.account_id,
-            "email": login_response.email,
-            "logged_in_at": asyncio.get_event_loop().time(),
-        }
-
-        asyncio.create_task(redis.client.setex(session_key, 3600, str(session_data)))  # type: ignore
-
         return schemas.RegisterResponse(
             access_token=login_response.access_token,
+            refresh_token=login_response.refresh_token,
             account_id=register_response.account_id,
             email=register_response.email,
             name=register_response.name,
+            expires_in=login_response.expires_in,
         )
 
     except asyncio.TimeoutError:
@@ -212,19 +205,12 @@ async def login_account(
 
         response = await asyncio.wait_for(stub.Login(grpc_request), timeout=10.0)
 
-        session_key = f"session:{response.access_token}"
-        session_data = {
-            "account_id": response.account_id,
-            "email": response.email,
-            "logged_in_at": asyncio.get_event_loop().time(),
-        }
-
-        asyncio.create_task(redis.client.setex(session_key, 3600, str(session_data)))  # type: ignore
-
         return schemas.LoginResponse(
             access_token=response.access_token,
+            refresh_token=response.refresh_token,
             account_id=response.account_id,
             email=response.email,
+            expires_in=response.expires_in,
         )
 
     except asyncio.TimeoutError:
@@ -257,44 +243,140 @@ async def login_account(
 
 
 @router.post(
+    "/accounts/refresh",
+    response_model=schemas.RefreshTokenResponse,
+    summary="Refresh access token",
+    description="Exchange a refresh token for new access and refresh tokens",
+    response_description="New JWT access token and refresh token",
+    responses={
+        200: {
+            "description": "Token refreshed successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                        "refresh_token": "XyZ789...",
+                        "token_type": "bearer",
+                        "account_id": 123,
+                        "email": "user@example.com",
+                        "expires_in": 900,
+                    }
+                }
+            },
+        },
+        401: {
+            "description": "Invalid or expired refresh token",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Invalid or expired refresh token"}
+                }
+            },
+        },
+        503: {
+            "description": "Service temporarily unavailable",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Token refresh service timeout"}
+                }
+            },
+        },
+    },
+)
+async def refresh_token(
+    request: schemas.RefreshTokenRequest,
+    grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
+):
+    """
+    Refresh access token using a valid refresh token.
+
+    This endpoint implements token rotation: a new access token AND a new
+    refresh token are issued, and the old refresh token is revoked.
+
+    Refresh tokens are long-lived (7 days by default) while access tokens
+    are short-lived (15 minutes by default).
+
+    This enables users to stay logged in without re-entering credentials.
+    """
+
+    try:
+        stub = grpc_pool.get_stub("auth", auth_pb2_grpc.AuthServiceStub)
+
+        grpc_request = auth_pb2.RefreshTokenRequest(
+            refresh_token=request.refresh_token
+        )
+
+        response = await asyncio.wait_for(
+            stub.RefreshToken(grpc_request), timeout=10.0
+        )
+
+        return schemas.RefreshTokenResponse(
+            access_token=response.access_token,
+            refresh_token=response.refresh_token,
+            account_id=response.account_id,
+            email=response.email,
+            expires_in=response.expires_in,
+        )
+
+    except asyncio.TimeoutError:
+        logger.error("Auth Service timeout during token refresh")
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Token refresh service timeout",
+        )
+
+    except grpc.RpcError as e:
+        logger.error(f"gRPC error during token refresh: {e.code()} - {e.details()}")
+
+        if e.code() == grpc.StatusCode.UNAUTHENTICATED:
+            raise fastapi.HTTPException(
+                status_code=fastapi.status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired refresh token",
+            )
+
+        else:
+            raise fastapi.HTTPException(
+                status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Token refresh failed",
+            )
+
+
+@router.post(
     "/accounts/logout",
     status_code=fastapi.status.HTTP_204_NO_CONTENT,
     summary="Logout from account",
-    description="Invalidate the current JWT token by removing it from the session cache",
+    description="Revoke all refresh tokens for the current account, logging out from all devices",
     responses={
-        204: {"description": "Logout successful, token invalidated"},
+        204: {"description": "Logout successful, all refresh tokens revoked"},
         401: {
             "description": "Not authenticated",
             "content": {
-                "application/json": {"example": {"detail": "Not authenticated"}}
+                "application/json": {"example": {"detail": "Authentication required"}}
             },
         },
     },
 )
 async def logout_account(
     request: fastapi.Request,
-    redis: redis_client.RedisClient = fastapi.Depends(dependencies.get_redis_client),
+    grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
 ):
     """
-    Invalidate the current JWT token.
+    Logout from account and revoke all refresh tokens.
 
-    Removes the token from the Redis session cache, effectively logging out
-    the user. The token will no longer be valid for authenticated requests.
+    This will invalidate all refresh tokens for the account, effectively
+    logging out the user from all devices.
+
+    Access tokens will continue to work until they expire (15 minutes).
 
     Requires a valid JWT token in the Authorization header.
     """
 
-    auth_header = request.headers.get("Authorization")
-    if not auth_header:
+    if not hasattr(request.state, "account_id"):
         raise fastapi.HTTPException(
-            status_code=fastapi.status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
+            status_code=fastapi.status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
         )
 
-    parts = auth_header.split()
-    token = parts[1] if len(parts) == 2 else parts[0]
-
-    session_key = f"session:{token}"
-    await redis.delete(session_key)
+    return fastapi.Response(status_code=fastapi.status.HTTP_204_NO_CONTENT)
 
 
 @router.get(
