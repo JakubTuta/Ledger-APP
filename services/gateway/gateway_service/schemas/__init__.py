@@ -11,6 +11,8 @@ from gateway_service.schemas.auth import (
     ChangePasswordResponse,
     LoginRequest,
     LoginResponse,
+    RefreshTokenRequest,
+    RefreshTokenResponse,
     RegisterRequest,
     RegisterResponse,
     UpdateAccountNameRequest,
@@ -62,6 +64,8 @@ __all__ = [
     "UpdateAccountNameResponse",
     "ChangePasswordRequest",
     "ChangePasswordResponse",
+    "RefreshTokenRequest",
+    "RefreshTokenResponse",
     # Project schemas
     "CreateProjectRequest",
     "ProjectResponse",
