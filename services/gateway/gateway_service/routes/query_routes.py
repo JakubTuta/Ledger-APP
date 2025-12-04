@@ -7,7 +7,6 @@ import fastapi
 import gateway_service.proto.query_pb2 as query_pb2
 import gateway_service.schemas as schemas
 import grpc
-from pydantic import field_validator
 
 router = fastapi.APIRouter(tags=["Query"])
 logger = logging.getLogger(__name__)
@@ -301,9 +300,7 @@ async def get_log_by_id(
         500: {
             "description": "Server error",
             "content": {
-                "application/json": {
-                    "example": {"detail": "Failed to retrieve logs"}
-                }
+                "application/json": {"example": {"detail": "Failed to retrieve logs"}}
             },
         },
     },
@@ -343,7 +340,15 @@ async def query_logs(
         description="Filter by log level. If not specified, returns all levels.",
     ),
     log_type: typing.Optional[
-        typing.Literal["console", "logger", "exception", "network", "database", "endpoint", "custom"]
+        typing.Literal[
+            "console",
+            "logger",
+            "exception",
+            "network",
+            "database",
+            "endpoint",
+            "custom",
+        ]
     ] = fastapi.Query(
         None,
         description="Filter by log type. If not specified, returns all types.",
@@ -463,8 +468,12 @@ async def query_logs(
             start_time, end_time = _calculate_time_range_for_period(period)
         else:
             try:
-                start_time = datetime.datetime.fromisoformat(periodFrom.replace('Z', '+00:00'))
-                end_time = datetime.datetime.fromisoformat(periodTo.replace('Z', '+00:00'))
+                start_time = datetime.datetime.fromisoformat(
+                    periodFrom.replace("Z", "+00:00")
+                )
+                end_time = datetime.datetime.fromisoformat(
+                    periodTo.replace("Z", "+00:00")
+                )
             except (ValueError, AttributeError) as e:
                 raise fastapi.HTTPException(
                     status_code=400,
@@ -503,9 +512,7 @@ async def query_logs(
                 detail=e.details(),
             )
         else:
-            logger.error(
-                f"gRPC error retrieving logs: {e.code()} - {e.details()}"
-            )
+            logger.error(f"gRPC error retrieving logs: {e.code()} - {e.details()}")
             raise fastapi.HTTPException(
                 status_code=500,
                 detail="Failed to retrieve logs",

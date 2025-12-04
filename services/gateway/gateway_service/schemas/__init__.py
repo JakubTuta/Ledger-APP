@@ -43,6 +43,7 @@ from gateway_service.schemas.query import (
     ErrorListEntryResponse,
     ErrorListResponse,
     LogEntryResponse,
+    LogsListResponse,
 )
 from gateway_service.schemas.settings import (
     Constraints,
@@ -101,4 +102,5 @@ __all__ = [
     "AggregatedMetricsResponse",
     "ErrorListEntryResponse",
     "ErrorListResponse",
+    "LogsListResponse",
 ]
