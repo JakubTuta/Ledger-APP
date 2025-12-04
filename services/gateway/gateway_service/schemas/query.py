@@ -138,3 +138,10 @@ class ErrorListResponse(pydantic.BaseModel):
     errors: list[ErrorListEntryResponse] = pydantic.Field(description="List of errors")
     total: int = pydantic.Field(description="Total number of errors matching filters")
     has_more: bool = pydantic.Field(description="Whether there are more errors to fetch")
+
+
+class LogsListResponse(pydantic.BaseModel):
+    project_id: int = pydantic.Field(description="Project ID")
+    logs: list[LogEntryResponse] = pydantic.Field(description="List of log entries")
+    total: int = pydantic.Field(description="Total number of logs matching filters")
+    has_more: bool = pydantic.Field(description="Whether there are more logs to fetch")

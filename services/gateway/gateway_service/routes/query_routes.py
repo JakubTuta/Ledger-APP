@@ -67,6 +67,55 @@ def _calculate_granularity_for_date_range(
         return "monthly"
 
 
+def _calculate_time_range_for_period(
+    period: str | None,
+) -> tuple[datetime.datetime, datetime.datetime]:
+    """
+    Calculate start and end timestamps for predefined time periods.
+
+    Args:
+        period: Predefined period string (today, last7days, etc.)
+
+    Returns:
+        Tuple of (start_time, end_time) as timezone-aware datetimes
+
+    Periods:
+        - today: Start of current day to now
+        - last7days: 7 days ago to now
+        - last30days: 30 days ago to now
+        - currentWeek: Start of current week (Monday) to now
+        - currentMonth: Start of current month to now
+        - currentYear: Start of current year to now
+    """
+    now = datetime.datetime.now(datetime.timezone.utc)
+    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    if period == "today":
+        start_time = today
+        end_time = now
+    elif period == "last7days":
+        start_time = today - datetime.timedelta(days=7)
+        end_time = now
+    elif period == "last30days":
+        start_time = today - datetime.timedelta(days=30)
+        end_time = now
+    elif period == "currentWeek":
+        days_since_monday = today.weekday()
+        start_time = today - datetime.timedelta(days=days_since_monday)
+        end_time = now
+    elif period == "currentMonth":
+        start_time = today.replace(day=1)
+        end_time = now
+    elif period == "currentYear":
+        start_time = today.replace(month=1, day=1)
+        end_time = now
+    else:
+        start_time = today - datetime.timedelta(days=1)
+        end_time = now
+
+    return start_time, end_time
+
+
 @router.get(
     "/logs/{log_id}",
     status_code=200,
@@ -217,6 +266,259 @@ async def get_log_by_id(
         raise fastapi.HTTPException(
             status_code=500,
             detail="Failed to retrieve log",
+        )
+
+
+@router.get(
+    "/logs",
+    status_code=200,
+    summary="Query logs for dashboard panel",
+    description="Retrieve log entries for a specified time period. Returns logs of all levels (debug, info, warning, error, critical) for dashboard log viewer panels.",
+    response_description="List of log entries",
+    response_model=schemas.LogsListResponse,
+    responses={
+        400: {
+            "description": "Invalid parameters",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "missing_period": {
+                            "summary": "Missing period parameters",
+                            "value": {
+                                "detail": "Either 'period' or both 'periodFrom' and 'periodTo' must be provided"
+                            },
+                        },
+                        "invalid_period": {
+                            "summary": "Invalid period value",
+                            "value": {
+                                "detail": "period must be one of: today, last7days, last30days, currentWeek, currentMonth, currentYear"
+                            },
+                        },
+                    }
+                }
+            },
+        },
+        500: {
+            "description": "Server error",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Failed to retrieve logs"}
+                }
+            },
+        },
+    },
+)
+async def query_logs(
+    request: fastapi.Request,
+    project_id: int = fastapi.Query(
+        ...,
+        description="The project ID to retrieve logs from",
+        gt=0,
+    ),
+    period: typing.Optional[
+        typing.Literal[
+            "today",
+            "last7days",
+            "last30days",
+            "currentWeek",
+            "currentMonth",
+            "currentYear",
+        ]
+    ] = fastapi.Query(
+        None,
+        description="Predefined time period. Mutually exclusive with periodFrom/periodTo.",
+    ),
+    periodFrom: typing.Optional[str] = fastapi.Query(
+        None,
+        description="Start date in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ). Must be used with periodTo.",
+    ),
+    periodTo: typing.Optional[str] = fastapi.Query(
+        None,
+        description="End date in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ). Must be used with periodFrom.",
+    ),
+    level: typing.Optional[
+        typing.Literal["debug", "info", "warning", "error", "critical"]
+    ] = fastapi.Query(
+        None,
+        description="Filter by log level. If not specified, returns all levels.",
+    ),
+    log_type: typing.Optional[
+        typing.Literal["console", "logger", "exception", "network", "database", "endpoint", "custom"]
+    ] = fastapi.Query(
+        None,
+        description="Filter by log type. If not specified, returns all types.",
+    ),
+    limit: int = fastapi.Query(
+        100,
+        description="Maximum number of logs to return",
+        ge=1,
+        le=1000,
+    ),
+    offset: int = fastapi.Query(
+        0,
+        description="Number of logs to skip for pagination",
+        ge=0,
+    ),
+) -> schemas.LogsListResponse:
+    """
+    Query logs for dashboard panels.
+
+    This endpoint retrieves log entries for display in dashboard "logs" panels.
+    It supports filtering by time period, log level, and log type, making it
+    suitable for general log viewing and analysis.
+
+    ## Time Period Parameters
+
+    You must provide either:
+    - **period**: A predefined time period (today, last7days, etc.)
+    - **periodFrom + periodTo**: Custom date range in ISO 8601 format
+
+    These parameters are mutually exclusive.
+
+    ## Filters
+
+    - **level**: Filter by log severity (debug, info, warning, error, critical)
+    - **log_type**: Filter by log category (console, logger, exception, etc.)
+
+    If filters are not specified, all logs in the time range are returned.
+
+    ## Pagination
+
+    - **limit**: Number of logs per page (default: 100, max: 1000)
+    - **offset**: Skip N logs for pagination (default: 0)
+
+    ## Authorization
+
+    Requires session token authentication via `Authorization: Bearer <token>` header.
+
+    ## Response
+
+    Returns a paginated list of log entries with:
+    - **logs**: Array of log entry objects
+    - **total**: Total count of logs matching filters
+    - **has_more**: Boolean indicating if more logs are available
+
+    ## Use Cases
+
+    - **Dashboard log viewer panels**: Display recent logs with filtering
+    - **Application monitoring**: View all log levels for troubleshooting
+    - **Audit trails**: Filter by time range and log type
+    - **Debug sessions**: Filter by level to focus on specific issues
+
+    ## Example Response
+
+    ```json
+    {
+      "project_id": 1,
+      "logs": [
+        {
+          "id": 123456,
+          "project_id": 1,
+          "timestamp": "2025-12-02T14:30:00Z",
+          "ingested_at": "2025-12-02T14:30:01Z",
+          "level": "info",
+          "log_type": "console",
+          "importance": "standard",
+          "message": "User logged in successfully",
+          "attributes": {"user_id": 42},
+          "sdk_version": "1.0.0",
+          "platform": "Python"
+        },
+        {
+          "id": 123457,
+          "project_id": 1,
+          "timestamp": "2025-12-02T14:31:00Z",
+          "level": "warning",
+          "log_type": "database",
+          "message": "Slow query detected: 2.5s"
+        }
+      ],
+      "total": 1523,
+      "has_more": true
+    }
+    ```
+
+    ## Performance Notes
+
+    - Queries use optimized indexes for fast retrieval
+    - Limit pagination to reasonable page sizes for best performance
+    - Consider using log_type and level filters to reduce result sets
+    """
+    grpc_pool = request.app.state.grpc_pool
+
+    if not period and not (periodFrom and periodTo):
+        raise fastapi.HTTPException(
+            status_code=400,
+            detail="Either 'period' or both 'periodFrom' and 'periodTo' must be provided",
+        )
+
+    if period and (periodFrom or periodTo):
+        raise fastapi.HTTPException(
+            status_code=400,
+            detail="Cannot use both 'period' and 'periodFrom'/'periodTo' parameters",
+        )
+
+    try:
+        if period:
+            start_time, end_time = _calculate_time_range_for_period(period)
+        else:
+            try:
+                start_time = datetime.datetime.fromisoformat(periodFrom.replace('Z', '+00:00'))
+                end_time = datetime.datetime.fromisoformat(periodTo.replace('Z', '+00:00'))
+            except (ValueError, AttributeError) as e:
+                raise fastapi.HTTPException(
+                    status_code=400,
+                    detail=f"Invalid date format. Use ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ): {str(e)}",
+                )
+
+        async with grpc_pool.get_query_stub() as stub:
+            response = await stub.QueryLogs(
+                query_pb2.QueryLogsRequest(
+                    project_id=project_id,
+                    start_time=start_time.isoformat(),
+                    end_time=end_time.isoformat(),
+                    level=level if level else "",
+                    log_type=log_type if log_type else "",
+                    limit=limit,
+                    offset=offset,
+                ),
+                timeout=10.0,
+            )
+
+        logs = []
+        for log_entry in response.logs:
+            logs.append(_proto_to_pydantic_log(log_entry))
+
+        return schemas.LogsListResponse(
+            project_id=project_id,
+            logs=logs,
+            total=response.total,
+            has_more=response.has_more,
+        )
+
+    except grpc.RpcError as e:
+        if e.code() == grpc.StatusCode.INVALID_ARGUMENT:
+            raise fastapi.HTTPException(
+                status_code=400,
+                detail=e.details(),
+            )
+        else:
+            logger.error(
+                f"gRPC error retrieving logs: {e.code()} - {e.details()}"
+            )
+            raise fastapi.HTTPException(
+                status_code=500,
+                detail="Failed to retrieve logs",
+            )
+
+    except fastapi.HTTPException:
+        raise
+
+    except Exception as e:
+        logger.error(f"Failed to retrieve logs: {e}", exc_info=True)
+        raise fastapi.HTTPException(
+            status_code=500,
+            detail="Failed to retrieve logs",
         )
 
 
