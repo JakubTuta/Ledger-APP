@@ -617,6 +617,8 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                         periodTo=panel.get("periodTo"),
                         type=panel["type"],
                         endpoint=panel.get("endpoint", ""),
+                        routes=panel.get("routes", []),
+                        statistic=panel.get("statistic", ""),
                     )
                     for panel in panels
                 ]
@@ -647,6 +649,8 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     period_from=request.periodFrom if request.HasField("periodFrom") else None,
                     period_to=request.periodTo if request.HasField("periodTo") else None,
                     endpoint=request.endpoint if request.endpoint else None,
+                    routes=list(request.routes) if request.routes else None,
+                    statistic=request.statistic if request.statistic else None,
                 )
 
                 panel_message = auth_pb2.Panel(
@@ -659,6 +663,8 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     periodTo=panel.get("periodTo"),
                     type=panel["type"],
                     endpoint=panel.get("endpoint", ""),
+                    routes=panel.get("routes", []),
+                    statistic=panel.get("statistic", ""),
                 )
 
                 return auth_pb2.CreateDashboardPanelResponse(panel=panel_message)
@@ -693,6 +699,8 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     period_from=request.periodFrom if request.HasField("periodFrom") else None,
                     period_to=request.periodTo if request.HasField("periodTo") else None,
                     endpoint=request.endpoint if request.endpoint else None,
+                    routes=list(request.routes) if request.routes else None,
+                    statistic=request.statistic if request.statistic else None,
                 )
 
                 panel_message = auth_pb2.Panel(
@@ -705,6 +713,8 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     periodTo=panel.get("periodTo"),
                     type=panel["type"],
                     endpoint=panel.get("endpoint", ""),
+                    routes=panel.get("routes", []),
+                    statistic=panel.get("statistic", ""),
                 )
 
                 return auth_pb2.UpdateDashboardPanelResponse(panel=panel_message)

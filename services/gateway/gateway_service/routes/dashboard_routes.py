@@ -54,6 +54,8 @@ async def get_dashboard_panels(
                 periodTo=panel.periodTo if panel.HasField("periodTo") else None,
                 type=panel.type,
                 endpoint=panel.endpoint if panel.endpoint else None,
+                routes=list(panel.routes) if panel.routes else None,
+                statistic=panel.statistic if panel.statistic else None,
             )
             for panel in response.panels
         ]
@@ -121,6 +123,8 @@ async def create_dashboard_panel(
             "project_id": request_data.project_id,
             "type": request_data.type,
             "endpoint": request_data.endpoint if request_data.endpoint else "",
+            "routes": request_data.routes if request_data.routes else [],
+            "statistic": request_data.statistic if request_data.statistic else "",
         }
 
         if request_data.period is not None:
@@ -152,6 +156,8 @@ async def create_dashboard_panel(
             periodTo=response.panel.periodTo if response.panel.HasField("periodTo") else None,
             type=response.panel.type,
             endpoint=response.panel.endpoint if response.panel.endpoint else None,
+            routes=list(response.panel.routes) if response.panel.routes else None,
+            statistic=response.panel.statistic if response.panel.statistic else None,
         )
 
     except asyncio.TimeoutError:
@@ -217,6 +223,8 @@ async def update_dashboard_panel(
             "project_id": request_data.project_id,
             "type": request_data.type,
             "endpoint": request_data.endpoint if request_data.endpoint else "",
+            "routes": request_data.routes if request_data.routes else [],
+            "statistic": request_data.statistic if request_data.statistic else "",
         }
 
         if request_data.period is not None:
@@ -248,6 +256,8 @@ async def update_dashboard_panel(
             periodTo=response.panel.periodTo if response.panel.HasField("periodTo") else None,
             type=response.panel.type,
             endpoint=response.panel.endpoint if response.panel.endpoint else None,
+            routes=list(response.panel.routes) if response.panel.routes else None,
+            statistic=response.panel.statistic if response.panel.statistic else None,
         )
 
     except asyncio.TimeoutError:

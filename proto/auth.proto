@@ -266,6 +266,8 @@ message Panel {
   optional string periodTo = 7;
   string type = 8;
   string endpoint = 9;
+  repeated string routes = 10;
+  string statistic = 11;
 }
 
 message GetDashboardPanelsRequest {
@@ -286,6 +288,8 @@ message CreateDashboardPanelRequest {
   optional string periodTo = 7;
   string type = 8;
   string endpoint = 9;
+  repeated string routes = 10;
+  string statistic = 11;
 }
 
 message CreateDashboardPanelResponse {
@@ -303,6 +307,8 @@ message UpdateDashboardPanelRequest {
   optional string periodTo = 8;
   string type = 9;
   string endpoint = 10;
+  repeated string routes = 11;
+  string statistic = 12;
 }
 
 message UpdateDashboardPanelResponse {

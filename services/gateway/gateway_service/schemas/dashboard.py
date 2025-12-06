@@ -35,14 +35,25 @@ class PanelRequest(pydantic.BaseModel):
     )
     type: str = pydantic.Field(
         ...,
-        pattern=r"^(logs|errors|metrics|error_list)$",
-        description="Panel type: logs (log viewer), errors (error tracking aggregated), error_list (individual error entries), or metrics (charts/graphs)",
+        pattern=r"^(logs|errors|metrics|error_list|bottleneck)$",
+        description="Panel type: logs (log viewer), errors (error tracking aggregated), error_list (individual error entries), metrics (charts/graphs), or bottleneck (route performance metrics)",
         examples=["errors"],
     )
     endpoint: str | None = pydantic.Field(
         None,
         description="Endpoint route (required for metrics type panels)",
         examples=["/api/v1/ingest/single"],
+    )
+    routes: list[str] | None = pydantic.Field(
+        None,
+        description="List of route paths (required for bottleneck type panels)",
+        examples=[["/api/users", "/api/posts"]],
+    )
+    statistic: str | None = pydantic.Field(
+        None,
+        pattern=r"^(min|max|avg|median|count)$",
+        description="Statistic to display (required for bottleneck type panels): min/max/avg/median duration (ms) or request count",
+        examples=["avg"],
     )
 
     @pydantic.model_validator(mode="after")
@@ -112,6 +123,8 @@ class PanelResponse(pydantic.BaseModel):
     periodTo: str | None = pydantic.Field(None, description="Time range end (ISO 8601)")
     type: str = pydantic.Field(..., description="Panel type")
     endpoint: str | None = pydantic.Field(None, description="Endpoint route (for metrics panels)")
+    routes: list[str] | None = pydantic.Field(None, description="List of route paths (for bottleneck panels)")
+    statistic: str | None = pydantic.Field(None, description="Statistic type (for bottleneck panels)")
 
     model_config = pydantic.ConfigDict(
         json_schema_extra={
@@ -227,14 +240,25 @@ class UpdatePanelRequest(pydantic.BaseModel):
     )
     type: str = pydantic.Field(
         ...,
-        pattern=r"^(logs|errors|metrics|error_list)$",
-        description="Panel type (logs, errors, metrics, error_list)",
+        pattern=r"^(logs|errors|metrics|error_list|bottleneck)$",
+        description="Panel type (logs, errors, metrics, error_list, bottleneck)",
         examples=["errors"],
     )
     endpoint: str | None = pydantic.Field(
         None,
         description="Endpoint route (required for metrics type panels)",
         examples=["/api/v1/ingest/single"],
+    )
+    routes: list[str] | None = pydantic.Field(
+        None,
+        description="List of route paths (required for bottleneck type panels)",
+        examples=[["/api/users", "/api/posts"]],
+    )
+    statistic: str | None = pydantic.Field(
+        None,
+        pattern=r"^(min|max|avg|median|count)$",
+        description="Statistic to display (required for bottleneck type panels): min/max/avg/median duration (ms) or request count",
+        examples=["avg"],
     )
 
     @pydantic.model_validator(mode="after")
@@ -256,6 +280,16 @@ class UpdatePanelRequest(pydantic.BaseModel):
             raise ValueError(
                 "Both 'periodFrom' and 'periodTo' must be provided together"
             )
+
+        if self.type == "bottleneck":
+            if not self.routes or len(self.routes) == 0:
+                raise ValueError("'routes' is required for bottleneck type panels")
+            if not self.statistic:
+                raise ValueError("'statistic' is required for bottleneck type panels")
+
+        if self.type == "metrics":
+            if not self.endpoint:
+                raise ValueError("'endpoint' is required for metrics type panels")
 
         return self
 

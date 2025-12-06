@@ -80,13 +80,27 @@ class DashboardService:
         period_from: str | None = None,
         period_to: str | None = None,
         endpoint: str | None = None,
+        routes: list[str] | None = None,
+        statistic: str | None = None,
     ) -> dict:
         """Create a new dashboard panel."""
 
         if not self._validate_panel_type(panel_type):
             raise ValueError(
-                f"Invalid panel type '{panel_type}'. Must be one of: logs, errors, metrics, error_list"
+                f"Invalid panel type '{panel_type}'. Must be one of: logs, errors, metrics, error_list, bottleneck"
             )
+
+        if panel_type == "bottleneck":
+            if not routes or len(routes) == 0:
+                raise ValueError("'routes' is required for bottleneck type panels")
+            if not statistic:
+                raise ValueError("'statistic' is required for bottleneck type panels")
+            if statistic not in {"min", "max", "avg", "median", "count"}:
+                raise ValueError("'statistic' must be one of: min, max, avg, median, count")
+
+        if panel_type == "metrics":
+            if not endpoint:
+                raise ValueError("'endpoint' is required for metrics type panels")
 
         has_period = period is not None
         has_dates = period_from is not None and period_to is not None
@@ -113,6 +127,8 @@ class DashboardService:
             "periodTo": period_to,
             "type": panel_type,
             "endpoint": endpoint,
+            "routes": routes if routes else [],
+            "statistic": statistic if statistic else "",
         }
 
         result = await session.execute(
@@ -153,13 +169,27 @@ class DashboardService:
         period_from: str | None = None,
         period_to: str | None = None,
         endpoint: str | None = None,
+        routes: list[str] | None = None,
+        statistic: str | None = None,
     ) -> dict:
         """Update an existing dashboard panel."""
 
         if not self._validate_panel_type(panel_type):
             raise ValueError(
-                f"Invalid panel type '{panel_type}'. Must be one of: logs, errors, metrics, error_list"
+                f"Invalid panel type '{panel_type}'. Must be one of: logs, errors, metrics, error_list, bottleneck"
             )
+
+        if panel_type == "bottleneck":
+            if not routes or len(routes) == 0:
+                raise ValueError("'routes' is required for bottleneck type panels")
+            if not statistic:
+                raise ValueError("'statistic' is required for bottleneck type panels")
+            if statistic not in {"min", "max", "avg", "median", "count"}:
+                raise ValueError("'statistic' must be one of: min, max, avg, median, count")
+
+        if panel_type == "metrics":
+            if not endpoint:
+                raise ValueError("'endpoint' is required for metrics type panels")
 
         has_period = period is not None
         has_dates = period_from is not None and period_to is not None
@@ -197,6 +227,8 @@ class DashboardService:
                     "periodTo": period_to,
                     "type": panel_type,
                     "endpoint": endpoint,
+                    "routes": routes if routes else [],
+                    "statistic": statistic if statistic else "",
                 }
                 panel_found = True
                 break
@@ -251,7 +283,7 @@ class DashboardService:
 
     def _validate_panel_type(self, panel_type: str) -> bool:
         """Validate panel type."""
-        valid_types = {"logs", "errors", "metrics", "error_list"}
+        valid_types = {"logs", "errors", "metrics", "error_list", "bottleneck"}
         return panel_type in valid_types
 
     def _generate_panel_id(self) -> str:
