@@ -12,6 +12,7 @@ service QueryService {
     rpc GetUsageStats(GetUsageStatsRequest) returns (GetUsageStatsResponse);
     rpc GetAggregatedMetrics(GetAggregatedMetricsRequest) returns (GetAggregatedMetricsResponse);
     rpc GetErrorList(GetErrorListRequest) returns (GetErrorListResponse);
+    rpc GetBottleneckMetrics(GetBottleneckMetricsRequest) returns (GetBottleneckMetricsResponse);
 }
 
 message QueryLogsRequest {
@@ -225,4 +226,30 @@ message GetErrorListResponse {
     repeated ErrorListEntry errors = 2;
     int32 total = 3;
     bool has_more = 4;
+}
+
+message GetBottleneckMetricsRequest {
+    int64 project_id = 1;
+    repeated string routes = 2;
+    string statistic = 3;
+    optional string period = 4;
+    optional string period_from = 5;
+    optional string period_to = 6;
+    optional string granularity = 7;
+}
+
+message BottleneckMetricDataPoint {
+    string date = 1;
+    optional int32 hour = 2;
+    string route = 3;
+    double value = 4;
+}
+
+message GetBottleneckMetricsResponse {
+    int64 project_id = 1;
+    string statistic = 2;
+    string granularity = 3;
+    string start_date = 4;
+    string end_date = 5;
+    repeated BottleneckMetricDataPoint data = 6;
 }

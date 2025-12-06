@@ -314,3 +314,76 @@ class AggregatedMetric(Base):
             f"<AggregatedMetric(id={self.id}, project_id={self.project_id}, "
             f"date={self.date}, hour={self.hour}, type={self.metric_type})>"
         )
+
+
+class BottleneckMetric(Base):
+    __tablename__ = "bottleneck_metrics"
+
+    id: orm.Mapped[int] = orm.mapped_column(
+        sqlalchemy.BigInteger, primary_key=True, autoincrement=True
+    )
+    project_id: orm.Mapped[int] = orm.mapped_column(
+        sqlalchemy.BigInteger, nullable=False, index=True
+    )
+
+    date: orm.Mapped[str] = orm.mapped_column(
+        sqlalchemy.VARCHAR(8), nullable=False
+    )
+    hour: orm.Mapped[int] = orm.mapped_column(sqlalchemy.SmallInteger, nullable=False)
+
+    route: orm.Mapped[str] = orm.mapped_column(
+        sqlalchemy.VARCHAR(500), nullable=False
+    )
+
+    log_count: orm.Mapped[int] = orm.mapped_column(
+        sqlalchemy.Integer, nullable=False, default=0
+    )
+
+    min_duration_ms: orm.Mapped[int | None] = orm.mapped_column(
+        sqlalchemy.Integer, nullable=True, default=0
+    )
+    max_duration_ms: orm.Mapped[int | None] = orm.mapped_column(
+        sqlalchemy.Integer, nullable=True, default=0
+    )
+    avg_duration_ms: orm.Mapped[float | None] = orm.mapped_column(
+        sqlalchemy.Float, nullable=True, default=0
+    )
+    median_duration_ms: orm.Mapped[int | None] = orm.mapped_column(
+        sqlalchemy.Integer, nullable=True, default=0
+    )
+
+    created_at: orm.Mapped[datetime.datetime] = orm.mapped_column(
+        sqlalchemy.DateTime(timezone=True),
+        default=datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+    updated_at: orm.Mapped[datetime.datetime] = orm.mapped_column(
+        sqlalchemy.DateTime(timezone=True),
+        default=datetime.datetime.now(datetime.timezone.utc),
+        onupdate=datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        sqlalchemy.Index(
+            "idx_bottleneck_metrics_lookup",
+            "project_id",
+            "date",
+            "hour",
+        ),
+        sqlalchemy.Index(
+            "idx_bottleneck_metrics_route",
+            "project_id",
+            "date",
+            "route",
+        ),
+        sqlalchemy.CheckConstraint(
+            "hour >= 0 AND hour <= 23", name="check_bottleneck_hour_range"
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<BottleneckMetric(id={self.id}, project_id={self.project_id}, "
+            f"date={self.date}, hour={self.hour}, route={self.route})>"
+        )

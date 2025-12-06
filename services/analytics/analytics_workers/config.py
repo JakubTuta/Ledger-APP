@@ -176,6 +176,11 @@ class Settings(pydantic_settings.BaseSettings):
         description="Available routes update cron schedule",
     )
 
+    ANALYTICS_BOTTLENECK_METRICS_CRON: str = pydantic.Field(
+        default="30 * * * *",
+        description="Bottleneck metrics aggregation cron schedule (runs at 30 minutes past each hour)",
+    )
+
     ANALYTICS_ERROR_RATE_TTL: int = pydantic.Field(
         default=600,
         ge=300,

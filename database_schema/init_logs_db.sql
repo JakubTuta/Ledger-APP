@@ -267,3 +267,49 @@ CHECK (log_level IS NULL OR log_level IN ('debug', 'info', 'warning', 'error', '
 ALTER TABLE aggregated_metrics ADD CONSTRAINT check_log_type
 CHECK (log_type IS NULL OR log_type IN ('console', 'logger', 'exception', 'network', 'database', 'endpoint', 'custom'));
 
+-- ============================================
+-- 4. BOTTLENECK METRICS (Route Performance Tracking)
+-- ============================================
+-- Per-route performance metrics grouped by project, date, hour, and route
+-- Enables users to identify slow endpoints and performance bottlenecks
+
+CREATE TABLE bottleneck_metrics (
+    id BIGSERIAL PRIMARY KEY,
+    project_id BIGINT NOT NULL,
+
+    -- Time bucket
+    date VARCHAR(8) NOT NULL,  -- YYYYMMDD format
+    hour SMALLINT NOT NULL,  -- 0-23
+
+    -- Route identification
+    route VARCHAR(500) NOT NULL,  -- Endpoint path (e.g., /api/users/{id})
+
+    -- Request counts
+    log_count INTEGER DEFAULT 0 NOT NULL,
+
+    -- Performance metrics (duration in milliseconds)
+    min_duration_ms INTEGER DEFAULT 0,
+    max_duration_ms INTEGER DEFAULT 0,
+    avg_duration_ms FLOAT DEFAULT 0,
+    median_duration_ms INTEGER DEFAULT 0,  -- p50
+
+    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+);
+
+-- Composite index for fast lookups by project, date, and hour
+CREATE INDEX idx_bottleneck_metrics_lookup
+ON bottleneck_metrics(project_id, date, hour);
+
+-- Index for route-specific queries
+CREATE INDEX idx_bottleneck_metrics_route
+ON bottleneck_metrics(project_id, date, route);
+
+-- Unique constraint for UPSERT operations
+CREATE UNIQUE INDEX uq_bottleneck_metrics
+ON bottleneck_metrics(project_id, date, hour, route);
+
+-- Constraints
+ALTER TABLE bottleneck_metrics ADD CONSTRAINT check_bottleneck_hour_range
+CHECK (hour >= 0 AND hour <= 23);
+

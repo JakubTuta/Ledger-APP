@@ -1,5 +1,6 @@
 from analytics_workers.jobs.aggregated_metrics import aggregate_hourly_metrics
 from analytics_workers.jobs.available_routes import update_available_routes
+from analytics_workers.jobs.bottleneck_metrics import aggregate_bottleneck_metrics
 from analytics_workers.jobs.error_rates import aggregate_error_rates
 from analytics_workers.jobs.log_volumes import aggregate_log_volumes
 from analytics_workers.jobs.top_errors import compute_top_errors
@@ -12,4 +13,5 @@ __all__ = [
     "generate_usage_stats",
     "aggregate_hourly_metrics",
     "update_available_routes",
+    "aggregate_bottleneck_metrics",
 ]

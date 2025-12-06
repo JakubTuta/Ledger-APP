@@ -381,3 +381,49 @@ class GetErrorListResponse(_message.Message):
     total: int
     has_more: bool
     def __init__(self, project_id: _Optional[int] = ..., errors: _Optional[_Iterable[_Union[ErrorListEntry, _Mapping]]] = ..., total: _Optional[int] = ..., has_more: bool = ...) -> None: ...
+
+class GetBottleneckMetricsRequest(_message.Message):
+    __slots__ = ("project_id", "routes", "statistic", "period", "period_from", "period_to", "granularity")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    ROUTES_FIELD_NUMBER: _ClassVar[int]
+    STATISTIC_FIELD_NUMBER: _ClassVar[int]
+    PERIOD_FIELD_NUMBER: _ClassVar[int]
+    PERIOD_FROM_FIELD_NUMBER: _ClassVar[int]
+    PERIOD_TO_FIELD_NUMBER: _ClassVar[int]
+    GRANULARITY_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    routes: _containers.RepeatedScalarFieldContainer[str]
+    statistic: str
+    period: str
+    period_from: str
+    period_to: str
+    granularity: str
+    def __init__(self, project_id: _Optional[int] = ..., routes: _Optional[_Iterable[str]] = ..., statistic: _Optional[str] = ..., period: _Optional[str] = ..., period_from: _Optional[str] = ..., period_to: _Optional[str] = ..., granularity: _Optional[str] = ...) -> None: ...
+
+class BottleneckMetricDataPoint(_message.Message):
+    __slots__ = ("date", "hour", "route", "value")
+    DATE_FIELD_NUMBER: _ClassVar[int]
+    HOUR_FIELD_NUMBER: _ClassVar[int]
+    ROUTE_FIELD_NUMBER: _ClassVar[int]
+    VALUE_FIELD_NUMBER: _ClassVar[int]
+    date: str
+    hour: int
+    route: str
+    value: float
+    def __init__(self, date: _Optional[str] = ..., hour: _Optional[int] = ..., route: _Optional[str] = ..., value: _Optional[float] = ...) -> None: ...
+
+class GetBottleneckMetricsResponse(_message.Message):
+    __slots__ = ("project_id", "statistic", "granularity", "start_date", "end_date", "data")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    STATISTIC_FIELD_NUMBER: _ClassVar[int]
+    GRANULARITY_FIELD_NUMBER: _ClassVar[int]
+    START_DATE_FIELD_NUMBER: _ClassVar[int]
+    END_DATE_FIELD_NUMBER: _ClassVar[int]
+    DATA_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    statistic: str
+    granularity: str
+    start_date: str
+    end_date: str
+    data: _containers.RepeatedCompositeFieldContainer[BottleneckMetricDataPoint]
+    def __init__(self, project_id: _Optional[int] = ..., statistic: _Optional[str] = ..., granularity: _Optional[str] = ..., start_date: _Optional[str] = ..., end_date: _Optional[str] = ..., data: _Optional[_Iterable[_Union[BottleneckMetricDataPoint, _Mapping]]] = ...) -> None: ...

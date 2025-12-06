@@ -60,6 +60,9 @@ def setup_jobs() -> None:
     available_routes_cron = _parse_cron_expression(
         settings.ANALYTICS_AVAILABLE_ROUTES_CRON
     )
+    bottleneck_metrics_cron = _parse_cron_expression(
+        settings.ANALYTICS_BOTTLENECK_METRICS_CRON
+    )
 
     scheduler.add_job(
         jobs.aggregate_error_rates,
@@ -109,6 +112,14 @@ def setup_jobs() -> None:
         replace_existing=True,
     )
 
+    scheduler.add_job(
+        jobs.aggregate_bottleneck_metrics,
+        trigger=cron_trigger.CronTrigger(**bottleneck_metrics_cron),
+        id="aggregate_bottleneck_metrics",
+        name="Aggregate Bottleneck Metrics",
+        replace_existing=True,
+    )
+
     logger.info("Scheduled jobs with cron expressions:")
     logger.info(
         f"  - Aggregate Error Rates: {settings.ANALYTICS_ERROR_RATE_CRON}"
@@ -127,6 +138,9 @@ def setup_jobs() -> None:
     )
     logger.info(
         f"  - Update Available Routes: {settings.ANALYTICS_AVAILABLE_ROUTES_CRON}"
+    )
+    logger.info(
+        f"  - Aggregate Bottleneck Metrics: {settings.ANALYTICS_BOTTLENECK_METRICS_CRON}"
     )
 
 

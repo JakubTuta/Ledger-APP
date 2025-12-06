@@ -145,3 +145,31 @@ class LogsListResponse(pydantic.BaseModel):
     logs: list[LogEntryResponse] = pydantic.Field(description="List of log entries")
     total: int = pydantic.Field(description="Total number of logs matching filters")
     has_more: bool = pydantic.Field(description="Whether there are more logs to fetch")
+
+
+class BottleneckMetricDataPointResponse(pydantic.BaseModel):
+    date: str = pydantic.Field(description="Date in YYYYMMDD format")
+    hour: typing.Optional[int] = pydantic.Field(
+        default=None, description="Hour (0-23) for hourly granularity, null for daily"
+    )
+    route: str = pydantic.Field(description="Route path (e.g., /api/users)")
+    value: float = pydantic.Field(description="Metric value (duration in ms or request count)")
+
+
+class BottleneckMetricsResponse(pydantic.BaseModel):
+    project_id: int = pydantic.Field(description="Project ID")
+    statistic: typing.Literal["min", "max", "avg", "median", "count"] = pydantic.Field(
+        description="Statistic type: min/max/avg/median duration (ms) or request count"
+    )
+    granularity: typing.Literal["hourly", "daily", "weekly", "monthly"] = pydantic.Field(
+        description="Data granularity (hourly/daily/weekly/monthly)"
+    )
+    start_date: str = pydantic.Field(description="Start date in YYYYMMDD format")
+    end_date: str = pydantic.Field(description="End date in YYYYMMDD format")
+    data: list[BottleneckMetricDataPointResponse] = pydantic.Field(
+        description=(
+            "Time-series data points for route performance. "
+            "Each route has a data point for each time bucket (hour/day/week/month). "
+            "Format optimized for charting: routes as separate series, time as x-axis, value as y-axis."
+        )
+    )

@@ -194,3 +194,21 @@ class ErrorListResponse(pydantic.BaseModel):
     errors: list[ErrorListEntry]
     total: int
     has_more: bool
+
+
+class BottleneckMetricDataPoint(pydantic.BaseModel):
+    date: str
+    hour: int | None = None
+    route: str
+    value: float | int
+
+    model_config = pydantic.ConfigDict(from_attributes=True)
+
+
+class BottleneckMetricsResponse(pydantic.BaseModel):
+    project_id: int
+    statistic: typing.Literal["min", "max", "avg", "median", "count"]
+    granularity: typing.Literal["hourly", "daily", "weekly", "monthly"]
+    start_date: str
+    end_date: str
+    data: list[BottleneckMetricDataPoint]
