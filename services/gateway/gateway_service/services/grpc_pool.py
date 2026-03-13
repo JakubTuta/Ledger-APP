@@ -26,11 +26,6 @@ class GRPCChannelPool:
             channel = grpc.aio.insecure_channel(
                 target,
                 options=[
-                    ("grpc.keepalive_time_ms", config.settings.GRPC_KEEPALIVE_TIME_MS),
-                    ("grpc.keepalive_timeout_ms", config.settings.GRPC_KEEPALIVE_TIMEOUT_MS),
-                    ("grpc.keepalive_permit_without_calls", 0),
-                    ("grpc.http2.max_pings_without_data", 2),
-                    ("grpc.http2.min_time_between_pings_ms", config.settings.GRPC_KEEPALIVE_TIME_MS),
                     ("grpc.max_receive_message_length", 100 * 1024 * 1024),
                     ("grpc.max_send_message_length", 100 * 1024 * 1024),
                     ("grpc.enable_http_proxy", 0),

@@ -48,8 +48,8 @@ help:
 	@echo "  clean-all   - Clean everything including Docker volumes"
 	@echo ""
 	@echo "Production Commands:"
-	@echo "  prod-build  - Build production images for GCP"
-	@echo "  prod-push   - Push production images to GCP Artifact Registry"
+	@echo "  prod-build  - Build production images for Registry"
+	@echo "  prod-push   - Push production images to Registry"
 	@echo "  prod-deploy - Build and push production images"
 	@echo "  prod-up     - Start services using production images"
 	@echo "  prod-down   - Stop production services"
@@ -460,7 +460,7 @@ load-test:
 
 # ==================== Production Deployment ====================
 
-PROD_REGISTRY := europe-central2-docker.pkg.dev/ledger-478119/images
+PROD_REGISTRY := container-repository.jtuta.cloud/ledger
 PROD_TAG := latest
 SERVICES := auth gateway ingestion analytics query
 
@@ -471,17 +471,13 @@ define check_docker
 	fi
 endef
 
-define check_gcloud
-	@if ! command -v gcloud > /dev/null 2>&1; then \
-		echo "\033[0;31mgcloud CLI is not installed\033[0m"; \
-		exit 1; \
-	fi
-	@if ! gcloud auth print-access-token > /dev/null 2>&1; then \
-		echo "\033[0;33mGoogle Cloud authentication required.\033[0m"; \
-		echo "\033[0;33mAttempting to authenticate with gcloud...\033[0m"; \
-		gcloud auth configure-docker europe-central2-docker.pkg.dev || \
-		(echo "\033[0;31mFailed to configure Docker for GCP\033[0m" && \
-		 echo "Please run: gcloud auth configure-docker europe-central2-docker.pkg.dev" && \
+define check_registry
+	@if ! grep -q "container-repository.jtuta.cloud" ~/.docker/config.json 2>/dev/null; then \
+		echo "\033[0;33mRegistry authentication required.\033[0m"; \
+		echo "\033[0;33mAttempting to authenticate with docker login...\033[0m"; \
+		docker login container-repository.jtuta.cloud || \
+		(echo "\033[0;31mFailed to login to registry\033[0m" && \
+		 echo "Please run: docker login container-repository.jtuta.cloud" && \
 		 exit 1); \
 	fi
 endef
@@ -528,7 +524,7 @@ endef
 prod-build:
 	@echo ""
 	@echo "======================================================================"
-	@echo "Building production images for GCP"
+	@echo "Building production images for Registry"
 	@echo "======================================================================"
 	@echo ""
 	@echo "Registry: $(PROD_REGISTRY)"
@@ -557,13 +553,13 @@ prod-build:
 prod-push:
 	@echo ""
 	@echo "======================================================================"
-	@echo "Pushing production images to GCP Artifact Registry"
+	@echo "Pushing production images to Registry"
 	@echo "======================================================================"
 	@echo ""
 	@echo "Registry: $(PROD_REGISTRY)"
 	@echo "Tag: $(PROD_TAG)"
 	$(call check_docker)
-	$(call check_gcloud)
+	$(call check_registry)
 	@success=0; \
 	total=5; \
 	for service in $(SERVICES); do \
@@ -596,7 +592,7 @@ prod-deploy:
 	@echo "Registry: $(PROD_REGISTRY)"
 	@echo "Tag: $(PROD_TAG)"
 	$(call check_docker)
-	$(call check_gcloud)
+	$(call check_registry)
 	@success=0; \
 	total=5; \
 	for service in $(SERVICES); do \

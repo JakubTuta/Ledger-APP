@@ -1,6 +1,5 @@
-import redis.asyncio as redis
-
 import ingestion_service.config as config
+import redis.asyncio as redis
 
 _redis_client: redis.Redis | None = None
 
@@ -14,6 +13,8 @@ def get_redis_client() -> redis.Redis:
             decode_responses=False,
             socket_timeout=config.settings.REDIS_TIMEOUT,
             socket_connect_timeout=config.settings.REDIS_TIMEOUT,
+            socket_keepalive=True,
+            health_check_interval=30,
         )
     return _redis_client
 

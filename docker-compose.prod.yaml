@@ -1,28 +1,32 @@
 services:
-  # ==================== PostgreSQL (Auth DB) ====================
   ledger-postgres:
     image: postgres:15-alpine
     container_name: ledger-postgres
     restart: unless-stopped
-    env_file: .env
+    env_file: ../secrets/.env.ledger
     environment:
       POSTGRES_DB: ${AUTH_DB_NAME}
       POSTGRES_USER: ${AUTH_DB_USER}
       POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD}
-      POSTGRES_SHARED_BUFFERS: 256MB
-      POSTGRES_WORK_MEM: 8MB
-      POSTGRES_MAINTENANCE_WORK_MEM: 64MB
-      POSTGRES_EFFECTIVE_CACHE_SIZE: 1GB
-      POSTGRES_CHECKPOINT_TIMEOUT: 5min
+    command: >
+      postgres
+      -c shared_buffers=64MB
+      -c work_mem=4MB
+      -c maintenance_work_mem=32MB
+      -c effective_cache_size=256MB
+      -c checkpoint_completion_target=0.9
+      -c max_connections=30
     volumes:
       - ledger-postgres-data:/var/lib/postgresql/data
-      - ./database_schema/init_auth_db.sql:/docker-entrypoint-initdb.d/init.sql
+      - ../LedgerServer/database_schema/init_auth_db.sql:/docker-entrypoint-initdb.d/init.sql
     deploy:
       resources:
         limits:
-          memory: 2G
-        reservations:
+          cpus: "0.5"
           memory: 512M
+        reservations:
+          cpus: "0.1"
+          memory: 128M
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${AUTH_DB_USER}"]
       interval: 60s
@@ -30,33 +34,42 @@ services:
       retries: 3
     networks:
       - ledger-server-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
 
-  # ==================== PostgreSQL (Logs DB) ====================
   ledger-postgres-logs:
     image: postgres:15-alpine
     container_name: ledger-postgres-logs
     restart: unless-stopped
-    env_file: .env
+    env_file: ../secrets/.env.ledger
     environment:
       POSTGRES_DB: ${LOGS_DB_NAME}
       POSTGRES_USER: ${LOGS_DB_USER}
       POSTGRES_PASSWORD: ${LOGS_DB_PASSWORD}
-      POSTGRES_SHARED_BUFFERS: 1GB
-      POSTGRES_WORK_MEM: 64MB
-      POSTGRES_MAINTENANCE_WORK_MEM: 512MB
-      POSTGRES_EFFECTIVE_CACHE_SIZE: 4GB
-      POSTGRES_CHECKPOINT_TIMEOUT: 30min
-      POSTGRES_MAX_WAL_SIZE: 4GB
-      POSTGRES_AUTOVACUUM_MAX_WORKERS: 4
+    command: >
+      postgres
+      -c shared_buffers=128MB
+      -c work_mem=8MB
+      -c maintenance_work_mem=64MB
+      -c effective_cache_size=512MB
+      -c checkpoint_completion_target=0.9
+      -c max_wal_size=1GB
+      -c autovacuum_max_workers=2
+      -c max_connections=30
     volumes:
       - ledger-postgres-logs-data:/var/lib/postgresql/data
-      - ./database_schema/init_logs_db.sql:/docker-entrypoint-initdb.d/init.sql
+      - ../LedgerServer/database_schema/init_logs_db.sql:/docker-entrypoint-initdb.d/init.sql
     deploy:
       resources:
         limits:
-          memory: 6G
+          cpus: "0.5"
+          memory: 768M
         reservations:
-          memory: 2G
+          cpus: "0.1"
+          memory: 256M
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${LOGS_DB_USER}"]
       interval: 60s
@@ -64,13 +77,17 @@ services:
       retries: 3
     networks:
       - ledger-server-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
 
-  # ==================== Redis ====================
   ledger-redis:
     image: redis:7-alpine
     container_name: ledger-redis
     restart: unless-stopped
-    env_file: .env
+    env_file: ../secrets/.env.ledger
     volumes:
       - ledger-redis-data:/data
     healthcheck:
@@ -78,23 +95,40 @@ services:
       interval: 60s
       timeout: 10s
       retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+        reservations:
+          cpus: "0.05"
+          memory: 32M
     networks:
       - ledger-server-network
     command: >
       redis-server
-      --maxmemory 2gb
+      --maxmemory 64mb
       --maxmemory-policy allkeys-lru
       --appendonly yes
       --requirepass ${REDIS_PASSWORD}
       --bind 0.0.0.0
       --protected-mode no
+      --save 300 10
+      --save 900 1
+      --tcp-keepalive 300
+      --timeout 300
+      --maxclients 50
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
 
-  # ==================== Auth Service (gRPC) ====================
   ledger-auth-service:
-    image: europe-central2-docker.pkg.dev/ledger-478119/images/auth:latest
+    image: container-repository.jtuta.cloud/ledger/auth:latest
     container_name: ledger-auth-service
     restart: unless-stopped
-    env_file: .env
+    env_file: ../secrets/.env.ledger
     environment:
       AUTH_DB_HOST: ledger-postgres
       REDIS_HOST: ledger-redis
@@ -103,6 +137,14 @@ services:
         condition: service_healthy
       ledger-redis:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 192M
+        reservations:
+          cpus: "0.05"
+          memory: 96M
     networks:
       - ledger-server-network
     healthcheck:
@@ -116,13 +158,17 @@ services:
       interval: 60s
       timeout: 10s
       retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
 
-  # ==================== Gateway Service (REST) ====================
   ledger-gateway:
-    image: europe-central2-docker.pkg.dev/ledger-478119/images/gateway:latest
+    image: container-repository.jtuta.cloud/ledger/gateway:latest
     container_name: ledger-gateway
     restart: unless-stopped
-    env_file: .env
+    env_file: ../secrets/.env.ledger
     environment:
       REDIS_HOST: ledger-redis
       AUTH_SERVICE_HOST: ledger-auth-service
@@ -138,7 +184,15 @@ services:
       ledger-redis:
         condition: service_healthy
     ports:
-      - "${GATEWAY_HTTP_PORT}:8000"
+      - "127.0.0.1:${GATEWAY_HTTP_PORT}:8000"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 384M
+        reservations:
+          cpus: "0.15"
+          memory: 192M
     networks:
       - ledger-server-network
     command: >
@@ -147,18 +201,17 @@ services:
       --port 8000
       --workers ${GATEWAY_WORKERS}
       --log-level info
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 60s
-      timeout: 10s
-      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
 
-  # ==================== Ingestion Service (gRPC) ====================
   ledger-ingestion:
-    image: europe-central2-docker.pkg.dev/ledger-478119/images/ingestion:latest
+    image: container-repository.jtuta.cloud/ledger/ingestion:latest
     container_name: ledger-ingestion
     restart: unless-stopped
-    env_file: .env
+    env_file: ../secrets/.env.ledger
     environment:
       REDIS_HOST: ledger-redis
       LOGS_DB_HOST: ledger-postgres-logs
@@ -167,6 +220,14 @@ services:
         condition: service_healthy
       ledger-redis:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 192M
+        reservations:
+          cpus: "0.05"
+          memory: 96M
     networks:
       - ledger-server-network
     command: python -m ingestion_service.main
@@ -181,13 +242,17 @@ services:
       interval: 60s
       timeout: 10s
       retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
 
-  # ==================== Storage Workers ====================
   ledger-ingestion-worker:
-    image: europe-central2-docker.pkg.dev/ledger-478119/images/ingestion:latest
+    image: container-repository.jtuta.cloud/ledger/ingestion:latest
     container_name: ledger-ingestion-worker
     restart: unless-stopped
-    env_file: .env
+    env_file: ../secrets/.env.ledger
     environment:
       REDIS_HOST: ledger-redis
       LOGS_DB_HOST: ledger-postgres-logs
@@ -198,16 +263,28 @@ services:
         condition: service_healthy
       ledger-ingestion:
         condition: service_started
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 192M
+        reservations:
+          cpus: "0.05"
+          memory: 64M
     networks:
       - ledger-server-network
     command: python -m ingestion_service.worker
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
 
-  # ==================== Analytics Workers ====================
   ledger-analytics-workers:
-    image: europe-central2-docker.pkg.dev/ledger-478119/images/analytics:latest
+    image: container-repository.jtuta.cloud/ledger/analytics:latest
     container_name: ledger-analytics-workers
     restart: unless-stopped
-    env_file: .env
+    env_file: ../secrets/.env.ledger
     environment:
       REDIS_HOST: ledger-redis
       LOGS_DB_HOST: ledger-postgres-logs
@@ -219,25 +296,28 @@ services:
         condition: service_healthy
       ledger-redis:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 192M
+        reservations:
+          cpus: "0.05"
+          memory: 96M
     networks:
       - ledger-server-network
     command: python -m analytics_workers.main
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "test -f /tmp/analytics_health.json && cat /tmp/analytics_health.json | grep -q healthy",
-        ]
-      interval: 60s
-      timeout: 10s
-      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
 
-  # ==================== Query Service (gRPC) ====================
   ledger-query:
-    image: europe-central2-docker.pkg.dev/ledger-478119/images/query:latest
+    image: container-repository.jtuta.cloud/ledger/query:latest
     container_name: ledger-query
     restart: unless-stopped
-    env_file: .env
+    env_file: ../secrets/.env.ledger
     environment:
       REDIS_HOST: ledger-redis
       LOGS_DB_HOST: ledger-postgres-logs
@@ -246,6 +326,14 @@ services:
         condition: service_healthy
       ledger-redis:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 192M
+        reservations:
+          cpus: "0.05"
+          memory: 96M
     networks:
       - ledger-server-network
     command: python -m query_service.main
@@ -260,10 +348,11 @@ services:
       interval: 60s
       timeout: 10s
       retries: 3
-
-networks:
-  ledger-server-network:
-    driver: bridge
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
 
 volumes:
   ledger-postgres-data:
@@ -272,3 +361,9 @@ volumes:
     name: ledger-postgres-logs-data
   ledger-redis-data:
     name: ledger-redis-data
+
+networks:
+  ledger-server-network:
+    driver: bridge
+  ledger-frontend-network:
+    driver: bridge

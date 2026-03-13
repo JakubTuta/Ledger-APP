@@ -103,8 +103,8 @@ function Show-Help {
     Write-Host "  load-test    - Run load tests with Locust"
     Write-Host ""
     Write-Host "Production Commands:" -ForegroundColor Yellow
-    Write-Host "  prod-build   - Build production images for GCP"
-    Write-Host "  prod-push    - Push production images to GCP Artifact Registry"
+    Write-Host "  prod-build   - Build production images for Registry"
+    Write-Host "  prod-push    - Push production images to Registry"
     Write-Host "  prod-deploy  - Build and push production images"
     Write-Host "  prod-up      - Start services using production images"
     Write-Host "  prod-down    - Stop production services"
@@ -874,7 +874,7 @@ function Clean-All {
 
 # ==================== Production Deployment ====================
 
-$PROD_REGISTRY = "europe-central2-docker.pkg.dev/ledger-478119/images"
+$PROD_REGISTRY = "container-registry.jtuta.cloud/ledger"
 $PROD_TAG = "latest"
 
 $PROD_SERVICES = @{
@@ -911,30 +911,36 @@ function Test-DockerRunning {
     }
 }
 
-function Test-GCloudAuthentication {
+function Test-RegistryAuthentication {
     try {
-        $result = gcloud auth print-access-token 2>$null
-        return $result -ne $null
+        $configFile = Join-Path $env:USERPROFILE ".docker\config.json"
+        if (Test-Path $configFile) {
+            $config = Get-Content $configFile -Raw | ConvertFrom-Json
+            if ($null -ne $config.auths -and $null -ne $config.auths."container-registry.jtuta.cloud") {
+                return $true
+            }
+        }
+        return $false
     }
     catch {
         return $false
     }
 }
 
-function Configure-GCloudDocker {
-    Write-Host "Google Cloud authentication required." -ForegroundColor Yellow
-    Write-Host "Attempting to authenticate with gcloud..." -ForegroundColor Yellow
+function Configure-DockerRegistry {
+    Write-Host "Registry authentication required." -ForegroundColor Yellow
+    Write-Host "Attempting to authenticate with docker login..." -ForegroundColor Yellow
 
     try {
-        gcloud auth configure-docker europe-central2-docker.pkg.dev
+        docker login container-registry.jtuta.cloud
         if ($LASTEXITCODE -eq 0) {
-            Write-Host "Docker configured for GCP Artifact Registry" -ForegroundColor Green
+            Write-Host "Docker configured for registry" -ForegroundColor Green
             return $true
         }
         return $false
     }
     catch {
-        Write-Host "Failed to configure Docker for GCP. Please run: gcloud auth configure-docker europe-central2-docker.pkg.dev" -ForegroundColor Red
+        Write-Host "Failed to login to registry. Please run: docker login container-registry.jtuta.cloud" -ForegroundColor Red
         return $false
     }
 }
@@ -1012,13 +1018,19 @@ function Build-ProductionImages {
     )
 
     Write-Host "`n======================================================================"
-    Write-Host "Building production images for GCP"
+    Write-Host "Building production images for Registry"
     Write-Host "======================================================================`n"
     Write-Host "Registry: $PROD_REGISTRY"
     Write-Host "Tag: $Tag"
 
     if (-not (Test-DockerRunning)) {
         exit 1
+    }
+
+    if (-not (Test-RegistryAuthentication)) {
+        if (-not (Configure-DockerRegistry)) {
+            exit 1
+        }
     }
 
     $successCount = 0
@@ -1055,7 +1067,7 @@ function Push-ProductionImages {
     )
 
     Write-Host "`n======================================================================"
-    Write-Host "Pushing production images to GCP Artifact Registry"
+    Write-Host "Pushing production images to Registry"
     Write-Host "======================================================================`n"
     Write-Host "Registry: $PROD_REGISTRY"
     Write-Host "Tag: $Tag"
@@ -1064,8 +1076,8 @@ function Push-ProductionImages {
         exit 1
     }
 
-    if (-not (Test-GCloudAuthentication)) {
-        if (-not (Configure-GCloudDocker)) {
+    if (-not (Test-RegistryAuthentication)) {
+        if (-not (Configure-DockerRegistry)) {
             exit 1
         }
     }
@@ -1115,8 +1127,8 @@ function Deploy-ProductionImages {
         exit 1
     }
 
-    if (-not (Test-GCloudAuthentication)) {
-        if (-not (Configure-GCloudDocker)) {
+    if (-not (Test-RegistryAuthentication)) {
+        if (-not (Configure-DockerRegistry)) {
             exit 1
         }
     }
