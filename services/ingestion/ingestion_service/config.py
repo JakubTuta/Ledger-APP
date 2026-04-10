@@ -237,6 +237,79 @@ class Settings(pydantic_settings.BaseSettings):
         description="Redis operation timeout (seconds)",
     )
 
+    RABBITMQ_HOST: str = pydantic.Field(
+        default="localhost",
+        description="RabbitMQ host",
+    )
+
+    RABBITMQ_PORT: int = pydantic.Field(
+        default=5672,
+        description="RabbitMQ AMQP port",
+    )
+
+    RABBITMQ_USER: str = pydantic.Field(
+        default="ledger",
+        description="RabbitMQ username",
+    )
+
+    RABBITMQ_PASSWORD: str = pydantic.Field(
+        default="ledger",
+        description="RabbitMQ password",
+    )
+
+    RABBITMQ_VHOST: str = pydantic.Field(
+        default="/",
+        description="RabbitMQ virtual host",
+    )
+
+    RABBITMQ_EXCHANGE: str = pydantic.Field(
+        default="logs",
+        description="RabbitMQ topic exchange name for log messages",
+    )
+
+    RABBITMQ_QUEUE: str = pydantic.Field(
+        default="ingestion.logs",
+        description="RabbitMQ queue name for log ingestion",
+    )
+
+    RABBITMQ_DLX: str = pydantic.Field(
+        default="logs.dlx",
+        description="RabbitMQ dead-letter exchange name",
+    )
+
+    RABBITMQ_DLQ: str = pydantic.Field(
+        default="ingestion.logs.dlq",
+        description="RabbitMQ dead-letter queue name",
+    )
+
+    RABBITMQ_CHANNEL_POOL_SIZE: int = pydantic.Field(
+        default=10,
+        ge=1,
+        le=50,
+        description="Number of publish channels in the channel pool",
+    )
+
+    RABBITMQ_PREFETCH_COUNT: int = pydantic.Field(
+        default=1000,
+        ge=100,
+        le=10_000,
+        description="Consumer prefetch count per worker channel",
+    )
+
+    BATCH_FLUSH_INTERVAL: float = pydantic.Field(
+        default=1.0,
+        ge=0.1,
+        le=30.0,
+        description="Max seconds to wait before flushing a partial batch",
+    )
+
+    @property
+    def RABBITMQ_URL(self) -> str:
+        import urllib.parse
+        password = urllib.parse.quote(self.RABBITMQ_PASSWORD, safe="")
+        vhost = urllib.parse.quote(self.RABBITMQ_VHOST, safe="")
+        return f"amqp://{self.RABBITMQ_USER}:{password}@{self.RABBITMQ_HOST}:{self.RABBITMQ_PORT}/{vhost}"
+
     REQUEST_TIMEOUT: float = pydantic.Field(
         default=30.0,
         ge=5.0,

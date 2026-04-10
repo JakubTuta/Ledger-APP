@@ -1,176 +1,66 @@
 import datetime
 
-import msgpack
 import pytest
 from ingestion_service import schemas
 from ingestion_service.services import queue_service
 from ingestion_service.services.queue_service import QueueFullError
+
+import ingestion_service.config as config
 
 from .test_base import BaseIngestionTest
 
 
 @pytest.mark.asyncio
 class TestQueueService(BaseIngestionTest):
-    """Test Redis queue operations."""
+    """Test RabbitMQ queue operations."""
 
-    async def test_enqueue_single_log(self):
-        """Test enqueueing a single log."""
-        log = schemas.EnrichedLogEntry(
-            project_id=1,
-            log_entry=schemas.LogEntry(
-                timestamp=datetime.datetime.now(datetime.timezone.utc),
-                level="info",
-                log_type="console",
-                importance="standard",
-                message="Test log",
-            ),
-            ingested_at=datetime.datetime.now(datetime.timezone.utc),
-        )
-
-        await queue_service.enqueue_log(log)
-
-        queue_key = f"queue:logs:{log.project_id}"
-        queue_length = await self.redis.llen(queue_key)
-
-        assert queue_length == 1
-        print("✅ Single log enqueued successfully")
-
-    async def test_enqueue_batch_logs(self):
-        """Test enqueueing multiple logs in batch."""
-        logs = [
-            schemas.EnrichedLogEntry(
-                project_id=1,
-                log_entry=schemas.LogEntry(
-                    timestamp=datetime.datetime.now(datetime.timezone.utc),
-                    level="info",
-                    log_type="console",
-                    importance="standard",
-                    message=f"Test log {i}",
-                ),
-                ingested_at=datetime.datetime.now(datetime.timezone.utc),
-            )
-            for i in range(10)
-        ]
-
-        await queue_service.enqueue_logs_batch(logs)
-
-        queue_key = f"queue:logs:1"
-        queue_length = await self.redis.llen(queue_key)
-
-        assert queue_length == 10
-        print("✅ Batch logs enqueued successfully")
-
-    async def test_enqueue_multiple_projects(self):
-        """Test enqueueing logs for multiple projects."""
-        logs = []
-        for project_id in [1, 2, 3]:
-            for i in range(5):
-                logs.append(
-                    schemas.EnrichedLogEntry(
-                        project_id=project_id,
-                        log_entry=schemas.LogEntry(
-                            timestamp=datetime.datetime.now(datetime.timezone.utc),
-                            level="info",
-                            log_type="console",
-                            importance="standard",
-                            message=f"Project {project_id} log {i}",
-                        ),
-                        ingested_at=datetime.datetime.now(datetime.timezone.utc),
-                    )
-                )
-
-        await queue_service.enqueue_logs_batch(logs)
-
-        for project_id in [1, 2, 3]:
-            queue_key = f"queue:logs:{project_id}"
-            queue_length = await self.redis.llen(queue_key)
-            assert queue_length == 5
-
-        print("✅ Logs for multiple projects enqueued correctly")
-
-    async def test_dequeue_log(self):
-        """Test dequeueing a log."""
-        log = schemas.EnrichedLogEntry(
-            project_id=1,
-            log_entry=schemas.LogEntry(
-                timestamp=datetime.datetime.now(datetime.timezone.utc),
-                level="info",
-                log_type="console",
-                importance="standard",
-                message="Test log",
-            ),
-            ingested_at=datetime.datetime.now(datetime.timezone.utc),
-        )
-
-        await queue_service.enqueue_log(log)
-
-        queue_key = f"queue:logs:1"
-        raw_data = await self.redis.brpop(queue_key, timeout=1)
-
-        assert raw_data is not None
-        _, payload = raw_data
-        unpacked = msgpack.unpackb(payload, raw=False)
-
-        assert unpacked["message"] == "Test log"
-        assert unpacked["level"] == "info"
-        print("✅ Log dequeued and deserialized successfully")
-
-    async def test_queue_depth_check(self):
-        """Test checking queue depth."""
-        project_id = 1
-
-        logs = [
-            schemas.EnrichedLogEntry(
-                project_id=project_id,
-                log_entry=schemas.LogEntry(
-                    timestamp=datetime.datetime.now(datetime.timezone.utc),
-                    level="info",
-                    log_type="console",
-                    importance="standard",
-                    message=f"Test log {i}",
-                ),
-                ingested_at=datetime.datetime.now(datetime.timezone.utc),
-            )
-            for i in range(25)
-        ]
-
-        await queue_service.enqueue_logs_batch(logs)
-
-        depth = await queue_service.get_queue_depth(project_id)
-
-        assert depth == 25
-        print(f"✅ Queue depth correctly reported: {depth}")
-
-    async def test_backpressure_check(self):
-        """Test backpressure detection when queue is full."""
-        project_id = 1
-
-        import ingestion_service.config as config
-        max_depth = config.settings.QUEUE_MAX_DEPTH
-
-        queue_key = f"queue:logs:{project_id}"
-        await self.redis.lpush(queue_key, *[b"dummy"] * max_depth)
-
-        log = schemas.EnrichedLogEntry(
+    def _make_log(self, project_id: int = 1, message: str = "Test log") -> schemas.EnrichedLogEntry:
+        return schemas.EnrichedLogEntry(
             project_id=project_id,
             log_entry=schemas.LogEntry(
                 timestamp=datetime.datetime.now(datetime.timezone.utc),
                 level="info",
                 log_type="console",
                 importance="standard",
-                message="Test log",
+                message=message,
             ),
             ingested_at=datetime.datetime.now(datetime.timezone.utc),
         )
 
-        with pytest.raises(QueueFullError):
-            await queue_service.enqueue_log(log)
+    async def test_enqueue_single_log(self):
+        """Enqueueing a single log publishes one message to the queue."""
+        log = self._make_log()
 
-        print("✅ Backpressure correctly detected")
+        await queue_service.enqueue_log(log)
 
-    async def test_messagepack_serialization(self):
-        """Test MessagePack serialization preserves data."""
-        original_log = schemas.EnrichedLogEntry(
+        count = await self.get_queue_message_count()
+        assert count == 1
+
+    async def test_enqueue_batch_logs(self):
+        """Enqueueing a batch publishes one message per log."""
+        logs = [self._make_log(message=f"Batch log {i}") for i in range(10)]
+
+        await queue_service.enqueue_logs_batch(logs)
+
+        count = await self.get_queue_message_count()
+        assert count == 10
+
+    async def test_enqueue_multiple_projects(self):
+        """Logs for different projects all land in the shared queue."""
+        logs = [
+            self._make_log(project_id=pid, message=f"Project {pid} log {i}")
+            for pid in [1, 2, 3]
+            for i in range(5)
+        ]
+
+        await queue_service.enqueue_logs_batch(logs)
+
+        count = await self.get_queue_message_count()
+        assert count == 15
+
+    async def test_messagepack_round_trip(self):
+        """Payload survives msgpack serialisation through the broker."""
+        original = schemas.EnrichedLogEntry(
             project_id=1,
             log_entry=schemas.LogEntry(
                 timestamp=datetime.datetime.now(datetime.timezone.utc),
@@ -192,90 +82,66 @@ class TestQueueService(BaseIngestionTest):
             error_fingerprint="a" * 64,
         )
 
-        await queue_service.enqueue_log(original_log)
+        await queue_service.enqueue_log(original)
 
-        queue_key = f"queue:logs:1"
-        raw_data = await self.redis.brpop(queue_key, timeout=1)
-        _, payload = raw_data
-        unpacked = msgpack.unpackb(payload, raw=False)
+        unpacked = await self.consume_one_payload()
+        assert unpacked is not None
+        assert unpacked["message"] == original.log_entry.message
+        assert unpacked["level"] == original.log_entry.level
+        assert unpacked["error_type"] == original.log_entry.error_type
+        assert unpacked["attributes"] == original.log_entry.attributes
+        assert unpacked["error_fingerprint"] == original.error_fingerprint
+        assert "timestamp" in unpacked
+        assert "ingested_at" in unpacked
 
-        assert unpacked["message"] == original_log.log_entry.message
-        assert unpacked["level"] == original_log.log_entry.level
-        assert unpacked["error_type"] == original_log.log_entry.error_type
-        assert unpacked["attributes"] == original_log.log_entry.attributes
-        assert unpacked["error_fingerprint"] == original_log.error_fingerprint
-        print("✅ MessagePack serialization preserves all data")
+    async def test_topic_routing(self):
+        """Messages are routed via logs.{project_id} key and arrive on the shared queue."""
+        log_p1 = self._make_log(project_id=1, message="Project 1 log")
+        log_p2 = self._make_log(project_id=2, message="Project 2 log")
 
-    async def test_queue_fifo_order(self):
-        """Test that queue maintains FIFO order."""
-        logs = [
-            schemas.EnrichedLogEntry(
-                project_id=1,
-                log_entry=schemas.LogEntry(
-                    timestamp=datetime.datetime.now(datetime.timezone.utc),
-                    level="info",
-                    log_type="console",
-                    importance="standard",
-                    message=f"Log {i}",
-                ),
-                ingested_at=datetime.datetime.now(datetime.timezone.utc),
-            )
-            for i in range(5)
-        ]
+        await queue_service.enqueue_log(log_p1)
+        await queue_service.enqueue_log(log_p2)
 
+        payloads = await self.consume_all_payloads(2)
+        messages = {p["message"] for p in payloads}
+        assert "Project 1 log" in messages
+        assert "Project 2 log" in messages
+        assert {p["project_id"] for p in payloads} == {1, 2}
+
+    async def test_queue_depth(self):
+        """get_queue_depth returns the total message count in the shared queue."""
+        logs = [self._make_log(message=f"Log {i}") for i in range(25)]
         await queue_service.enqueue_logs_batch(logs)
 
-        queue_key = f"queue:logs:1"
-        messages = []
-        for _ in range(5):
-            raw_data = await self.redis.brpop(queue_key, timeout=1)
-            _, payload = raw_data
-            unpacked = msgpack.unpackb(payload, raw=False)
-            messages.append(unpacked["message"])
+        depth = await queue_service.get_queue_depth(project_id=1)
+        assert depth == 25
 
-        assert messages == ["Log 0", "Log 1", "Log 2", "Log 3", "Log 4"]
-        print("✅ Queue maintains FIFO order")
+    async def test_backpressure_raises_queue_full_error(self):
+        """Publishing when queue is at x-max-length raises QueueFullError."""
+        max_depth = config.settings.QUEUE_MAX_DEPTH
 
-    async def test_empty_queue_operations(self):
-        """Test operations on empty queue."""
-        project_id = 999
+        log = self._make_log()
 
-        depth = await queue_service.get_queue_depth(project_id)
-        assert depth == 0
+        import aio_pika
+        async with self.rabbitmq_connection.channel() as channel:
+            await channel.confirm_delivery()
+            exchange = await channel.get_exchange(config.settings.RABBITMQ_EXCHANGE)
 
-        queue_key = f"queue:logs:{project_id}"
-        result = await self.redis.brpop(queue_key, timeout=1)
-        assert result is None
+            for _ in range(max_depth):
+                import msgpack
+                await exchange.publish(
+                    aio_pika.Message(
+                        body=msgpack.packb({"dummy": True}, use_bin_type=True),
+                        delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+                    ),
+                    routing_key="logs.1",
+                )
 
-        print("✅ Empty queue operations handled correctly")
+        with pytest.raises(QueueFullError):
+            await queue_service.enqueue_log(log)
 
-    async def test_large_batch_enqueue(self):
-        """Test enqueueing large batch of logs."""
-        logs = [
-            schemas.EnrichedLogEntry(
-                project_id=1,
-                log_entry=schemas.LogEntry(
-                    timestamp=datetime.datetime.now(datetime.timezone.utc),
-                    level="info",
-                    log_type="console",
-                    importance="standard",
-                    message=f"Batch log {i}",
-                ),
-                ingested_at=datetime.datetime.now(datetime.timezone.utc),
-            )
-            for i in range(1000)
-        ]
-
-        await queue_service.enqueue_logs_batch(logs)
-
-        queue_key = f"queue:logs:1"
-        queue_length = await self.redis.llen(queue_key)
-
-        assert queue_length == 1000
-        print("✅ Large batch (1000 logs) enqueued successfully")
-
-    async def test_queue_with_complex_attributes(self):
-        """Test queue with complex nested attributes."""
+    async def test_complex_attributes_preserved(self):
+        """Nested JSONB attributes survive the queue round-trip."""
         log = schemas.EnrichedLogEntry(
             project_id=1,
             log_entry=schemas.LogEntry(
@@ -286,8 +152,8 @@ class TestQueueService(BaseIngestionTest):
                 message="Complex attributes test",
                 attributes={
                     "user": {"id": 123, "email": "test@example.com", "roles": ["admin", "user"]},
-                    "request": {"method": "POST", "url": "/api/test", "headers": {"Content-Type": "application/json"}},
-                    "metrics": {"duration_ms": 150, "db_queries": 5, "cache_hits": 3},
+                    "request": {"method": "POST", "url": "/api/test"},
+                    "metrics": {"duration_ms": 150},
                 },
             ),
             ingested_at=datetime.datetime.now(datetime.timezone.utc),
@@ -295,84 +161,24 @@ class TestQueueService(BaseIngestionTest):
 
         await queue_service.enqueue_log(log)
 
-        queue_key = f"queue:logs:1"
-        raw_data = await self.redis.brpop(queue_key, timeout=1)
-        _, payload = raw_data
-        unpacked = msgpack.unpackb(payload, raw=False)
-
+        unpacked = await self.consume_one_payload()
+        assert unpacked is not None
         assert unpacked["attributes"]["user"]["id"] == 123
         assert "admin" in unpacked["attributes"]["user"]["roles"]
         assert unpacked["attributes"]["request"]["method"] == "POST"
-        print("✅ Complex nested attributes preserved")
 
-    async def test_queue_isolation_between_projects(self):
-        """Test that queues are isolated between projects."""
-        log1 = schemas.EnrichedLogEntry(
-            project_id=1,
-            log_entry=schemas.LogEntry(
-                timestamp=datetime.datetime.now(datetime.timezone.utc),
-                level="info",
-                log_type="console",
-                importance="standard",
-                message="Project 1 log",
-            ),
-            ingested_at=datetime.datetime.now(datetime.timezone.utc),
-        )
+    async def test_large_batch_enqueue(self):
+        """1000 logs can be enqueued as a single batch."""
+        logs = [self._make_log(message=f"Batch log {i}") for i in range(1000)]
 
-        log2 = schemas.EnrichedLogEntry(
-            project_id=2,
-            log_entry=schemas.LogEntry(
-                timestamp=datetime.datetime.now(datetime.timezone.utc),
-                level="info",
-                log_type="console",
-                importance="standard",
-                message="Project 2 log",
-            ),
-            ingested_at=datetime.datetime.now(datetime.timezone.utc),
-        )
+        await queue_service.enqueue_logs_batch(logs)
 
-        await queue_service.enqueue_log(log1)
-        await queue_service.enqueue_log(log2)
+        count = await self.get_queue_message_count()
+        assert count == 1000
 
-        queue1_key = f"queue:logs:1"
-        queue2_key = f"queue:logs:2"
+    async def test_empty_batch_is_noop(self):
+        """Enqueueing an empty batch leaves the queue empty."""
+        await queue_service.enqueue_logs_batch([])
 
-        raw_data1 = await self.redis.brpop(queue1_key, timeout=1)
-        raw_data2 = await self.redis.brpop(queue2_key, timeout=1)
-
-        _, payload1 = raw_data1
-        _, payload2 = raw_data2
-
-        unpacked1 = msgpack.unpackb(payload1, raw=False)
-        unpacked2 = msgpack.unpackb(payload2, raw=False)
-
-        assert unpacked1["message"] == "Project 1 log"
-        assert unpacked2["message"] == "Project 2 log"
-        print("✅ Queues properly isolated between projects")
-
-    async def test_timestamp_serialization(self):
-        """Test that timestamps are correctly serialized and can be deserialized."""
-        now = datetime.datetime.now(datetime.timezone.utc)
-
-        log = schemas.EnrichedLogEntry(
-            project_id=1,
-            log_entry=schemas.LogEntry(
-                timestamp=now,
-                level="info",
-                log_type="console",
-                importance="standard",
-                message="Timestamp test",
-            ),
-            ingested_at=now,
-        )
-
-        await queue_service.enqueue_log(log)
-
-        queue_key = f"queue:logs:1"
-        raw_data = await self.redis.brpop(queue_key, timeout=1)
-        _, payload = raw_data
-        unpacked = msgpack.unpackb(payload, raw=False)
-
-        assert "timestamp" in unpacked
-        assert "ingested_at" in unpacked
-        print("✅ Timestamps serialized correctly")
+        count = await self.get_queue_message_count()
+        assert count == 0

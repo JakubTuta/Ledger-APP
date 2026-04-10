@@ -11,6 +11,9 @@ alembic==1.17.2
 # Redis Client
 redis[hiredis]==6.4.0
 
+# RabbitMQ Client
+aio-pika>=9.4,<10
+
 # MessagePack for serialization
 msgpack==1.1.2
 

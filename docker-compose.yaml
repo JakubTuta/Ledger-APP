@@ -97,6 +97,35 @@ services:
       --bind 0.0.0.0
       --protected-mode no
 
+  # ==================== RabbitMQ ====================
+  ledger-rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: ledger-rabbitmq
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+      RABBITMQ_DEFAULT_VHOST: "/"
+    volumes:
+      - ledger-rabbitmq-data:/var/lib/rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - ledger-server-network
+
   # ==================== Auth Service (gRPC) ====================
   ledger-auth-service:
     build:
@@ -186,10 +215,13 @@ services:
       # Override host names for Docker network
       REDIS_HOST: ledger-redis
       LOGS_DB_HOST: ledger-postgres-logs
+      RABBITMQ_HOST: ledger-rabbitmq
     depends_on:
       ledger-postgres-logs:
         condition: service_healthy
       ledger-redis:
+        condition: service_healthy
+      ledger-rabbitmq:
         condition: service_healthy
     networks:
       - ledger-server-network
@@ -221,10 +253,13 @@ services:
       # Override host names for Docker network
       REDIS_HOST: ledger-redis
       LOGS_DB_HOST: ledger-postgres-logs
+      RABBITMQ_HOST: ledger-rabbitmq
     depends_on:
       ledger-postgres-logs:
         condition: service_healthy
       ledger-redis:
+        condition: service_healthy
+      ledger-rabbitmq:
         condition: service_healthy
       ledger-ingestion:
         condition: service_started
@@ -317,3 +352,5 @@ volumes:
     name: ledger-postgres-logs-data
   ledger-redis-data:
     name: ledger-redis-data
+  ledger-rabbitmq-data:
+    name: ledger-rabbitmq-data

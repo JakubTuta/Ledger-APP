@@ -83,6 +83,40 @@ services:
         max-size: "5m"
         max-file: "2"
 
+  ledger-rabbitmq:
+    image: rabbitmq:3.13-alpine
+    container_name: ledger-rabbitmq
+    restart: unless-stopped
+    env_file: ../secrets/.env.ledger
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+      RABBITMQ_DEFAULT_VHOST: "/"
+    volumes:
+      - ledger-rabbitmq-data:/var/lib/rabbitmq
+    ports:
+      - "127.0.0.1:5672:5672"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+        reservations:
+          cpus: "0.05"
+          memory: 96M
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - ledger-server-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
   ledger-redis:
     image: redis:7-alpine
     container_name: ledger-redis
@@ -215,10 +249,13 @@ services:
     environment:
       REDIS_HOST: ledger-redis
       LOGS_DB_HOST: ledger-postgres-logs
+      RABBITMQ_HOST: ledger-rabbitmq
     depends_on:
       ledger-postgres-logs:
         condition: service_healthy
       ledger-redis:
+        condition: service_healthy
+      ledger-rabbitmq:
         condition: service_healthy
     deploy:
       resources:
@@ -256,10 +293,13 @@ services:
     environment:
       REDIS_HOST: ledger-redis
       LOGS_DB_HOST: ledger-postgres-logs
+      RABBITMQ_HOST: ledger-rabbitmq
     depends_on:
       ledger-postgres-logs:
         condition: service_healthy
       ledger-redis:
+        condition: service_healthy
+      ledger-rabbitmq:
         condition: service_healthy
       ledger-ingestion:
         condition: service_started
@@ -361,6 +401,8 @@ volumes:
     name: ledger-postgres-logs-data
   ledger-redis-data:
     name: ledger-redis-data
+  ledger-rabbitmq-data:
+    name: ledger-rabbitmq-data
 
 networks:
   ledger-server-network:

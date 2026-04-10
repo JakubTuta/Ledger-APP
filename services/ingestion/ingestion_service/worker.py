@@ -4,14 +4,17 @@ import logging
 import signal
 import sys
 
+import aio_pika
+import aio_pika.abc
+import msgpack
+
 import ingestion_service.config as config
 import ingestion_service.database as database
 import ingestion_service.models as models
 import ingestion_service.services.partition_manager as partition_manager
 import ingestion_service.services.partition_scheduler as partition_scheduler
-import ingestion_service.services.queue_service as queue_service
-import ingestion_service.services.redis_client as redis_client
-from sqlalchemy import insert, text
+import ingestion_service.services.rabbitmq_client as rabbitmq_client
+from sqlalchemy import insert
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 logging.basicConfig(
@@ -113,42 +116,93 @@ class StorageWorker:
         except Exception as e:
             logger.error(
                 f"Worker {self.worker_id}: Failed to upsert error group: {e}",
-                exc_info=True,
             )
+
+    async def _flush_batch(
+        self,
+        messages: list[aio_pika.abc.AbstractIncomingMessage],
+        payloads: list[dict],
+    ) -> None:
+        try:
+            await self.process_logs_batch(payloads)
+            await messages[-1].ack(multiple=True)
+            logger.debug(
+                f"Worker {self.worker_id}: ACKed batch of {len(messages)} messages"
+            )
+        except Exception as e:
+            logger.error(
+                f"Worker {self.worker_id}: Batch of {len(messages)} failed, sending to DLQ: {e}",
+            )
+            self.failed_count += len(messages)
+            for message in messages:
+                await message.nack(requeue=False)
 
     async def run(self) -> None:
         self.running = True
 
-        while self.running:
-            try:
-                redis_conn = redis_client.get_redis_client()
-                all_project_keys = await redis_conn.keys("queue:logs:*")
+        connection = await rabbitmq_client.get_connection()
+        channel = await connection.channel()
+        await channel.set_qos(prefetch_count=config.settings.RABBITMQ_PREFETCH_COUNT)
 
-                if not all_project_keys:
-                    await asyncio.sleep(5)
+        queue = await channel.declare_queue(
+            config.settings.RABBITMQ_QUEUE,
+            passive=True,
+        )
+
+        message_buffer: asyncio.Queue[aio_pika.abc.AbstractIncomingMessage] = (
+            asyncio.Queue()
+        )
+
+        async def on_message(
+            message: aio_pika.abc.AbstractIncomingMessage,
+        ) -> None:
+            await message_buffer.put(message)
+
+        consumer_tag = await queue.consume(on_message)
+        logger.info(f"Worker {self.worker_id}: consuming from {config.settings.RABBITMQ_QUEUE}")
+
+        try:
+            while self.running:
+                batch_messages: list[aio_pika.abc.AbstractIncomingMessage] = []
+                batch_payloads: list[dict] = []
+
+                try:
+                    first_message = await asyncio.wait_for(
+                        message_buffer.get(),
+                        timeout=config.settings.BATCH_FLUSH_INTERVAL,
+                    )
+                except asyncio.TimeoutError:
                     continue
 
-                for queue_key in all_project_keys:
-                    if not self.running:
+                try:
+                    payload = msgpack.unpackb(first_message.body, raw=False)
+                    batch_messages.append(first_message)
+                    batch_payloads.append(payload)
+                except Exception as e:
+                    logger.error(f"Worker {self.worker_id}: Failed to decode message: {e}")
+                    await first_message.nack(requeue=False)
+                    continue
+
+                while len(batch_messages) < config.settings.QUEUE_BATCH_SIZE:
+                    try:
+                        message = message_buffer.get_nowait()
+                    except asyncio.QueueEmpty:
                         break
 
-                    project_id_str = queue_key.decode().split(":")[-1]
-                    project_id = int(project_id_str)
+                    try:
+                        payload = msgpack.unpackb(message.body, raw=False)
+                        batch_messages.append(message)
+                        batch_payloads.append(payload)
+                    except Exception as e:
+                        logger.error(f"Worker {self.worker_id}: Failed to decode message: {e}")
+                        await message.nack(requeue=False)
 
-                    logs = await queue_service.dequeue_logs_batch(
-                        project_id, batch_size=config.settings.QUEUE_BATCH_SIZE
-                    )
+                if batch_messages:
+                    await self._flush_batch(batch_messages, batch_payloads)
 
-                    if logs:
-                        await self.process_logs_batch(logs)
-                    else:
-                        await asyncio.sleep(1)
-
-            except Exception as e:
-                logger.error(
-                    f"Worker {self.worker_id}: Error in main loop: {e}", exc_info=True
-                )
-                await asyncio.sleep(5)
+        finally:
+            await queue.cancel(consumer_tag)
+            await channel.close()
 
     async def stop(self) -> None:
         self.running = False
@@ -194,7 +248,7 @@ async def main():
     else:
         logger.warning("Partition scheduler disabled by configuration")
 
-    redis_client.get_redis_client()
+    await rabbitmq_client.setup_topology()
 
     manager = WorkerManager(worker_count=config.settings.WORKER_COUNT)
 
@@ -217,7 +271,7 @@ async def shutdown(manager: WorkerManager):
         scheduler = partition_scheduler.get_partition_scheduler()
         scheduler.stop()
 
-    await redis_client.close_redis()
+    await rabbitmq_client.close()
     await database.close_db()
     sys.exit(0)
 

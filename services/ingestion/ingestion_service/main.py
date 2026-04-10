@@ -6,6 +6,7 @@ import ingestion_service.config as config
 import ingestion_service.database as database
 import ingestion_service.grpc.servicers as servicers
 import ingestion_service.proto.ingestion_pb2_grpc as ingestion_pb2_grpc
+import ingestion_service.services.rabbitmq_client as rabbitmq_client
 import ingestion_service.services.redis_client as redis_client
 
 logging.basicConfig(
@@ -19,6 +20,8 @@ async def serve():
     await redis.ping()
 
     db_engine = database.get_engine()
+
+    await rabbitmq_client.setup_topology()
 
     server = grpc.aio.server(
         options=[
@@ -44,6 +47,7 @@ async def serve():
     finally:
         await server.stop(grace=5)
 
+        await rabbitmq_client.close()
         await redis_client.close_redis()
 
         await database.close_db()
