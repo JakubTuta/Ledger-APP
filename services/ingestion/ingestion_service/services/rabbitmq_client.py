@@ -24,9 +24,7 @@ async def get_connection() -> aio_pika.abc.AbstractRobustConnection:
 
 async def _create_publish_channel() -> aio_pika.abc.AbstractChannel:
     connection = await get_connection()
-    channel = await connection.channel()
-    await channel.confirm_delivery()
-    return channel
+    return await connection.channel(publisher_confirms=True)
 
 
 async def get_channel_pool() -> aio_pika.pool.Pool:
