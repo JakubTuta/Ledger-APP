@@ -1,5 +1,6 @@
 import datetime
 import json
+import time
 
 import analytics_workers.config as config
 import analytics_workers.database as database
@@ -9,10 +10,13 @@ import sqlalchemy as sa
 
 logger = logging.get_logger("jobs.log_volumes")
 
+_VALID_LEVELS = frozenset({"debug", "info", "warning", "error", "critical"})
+
 
 async def aggregate_log_volumes() -> None:
     settings = config.get_settings()
     redis = redis_client.get_redis()
+    start = time.perf_counter()
 
     try:
         async with database.get_logs_session() as session:
@@ -25,6 +29,7 @@ async def aggregate_log_volumes() -> None:
                     COUNT(*) as count
                 FROM logs
                 WHERE timestamp > NOW() - INTERVAL '7 days'
+                  AND level IN ('debug', 'info', 'warning', 'error', 'critical')
                 GROUP BY project_id, bucket, level
                 ORDER BY project_id, bucket DESC
             """
@@ -52,10 +57,11 @@ async def aggregate_log_volumes() -> None:
                         "critical": 0,
                     }
 
-                aggregated[key][level] = count
+                if level in _VALID_LEVELS:
+                    aggregated[key][level] = count
 
             by_project: dict[int, list] = {}
-            for (project_id, bucket), data in aggregated.items():
+            for (project_id, _bucket), data in aggregated.items():
                 if project_id not in by_project:
                     by_project[project_id] = []
                 by_project[project_id].append(data)
@@ -69,6 +75,11 @@ async def aggregate_log_volumes() -> None:
                     settings.ANALYTICS_LOG_VOLUME_TTL,
                     cache_value,
                 )
+
+        elapsed = time.perf_counter() - start
+        logger.info(
+            f"Log volume aggregation done in {elapsed:.2f}s for {len(by_project)} projects"
+        )
 
     except Exception as e:
         logger.error(f"Log volume aggregation failed: {e}", exc_info=True)

@@ -153,7 +153,7 @@ class Settings(pydantic_settings.BaseSettings):
     )
 
     GRPC_TIMEOUT: float = pydantic.Field(
-        default=5.0,
+        default=10.0,
         ge=1.0,
         le=30.0,
         description="gRPC request timeout (seconds)",

@@ -1,4 +1,5 @@
 import datetime
+import time
 
 import analytics_workers.database as database
 import analytics_workers.utils.logging as logging
@@ -16,31 +17,27 @@ async def aggregate_bottleneck_metrics() -> None:
     date_str = previous_hour_start.strftime("%Y%m%d")
     hour = previous_hour_start.hour
 
+    start = time.perf_counter()
     logger.info(
         f"Starting bottleneck metrics aggregation for {date_str} hour {hour} "
         f"({previous_hour_start} to {previous_hour_end})"
     )
 
     try:
-        active_project_ids = await _get_active_projects(
-            previous_hour_start, previous_hour_end
-        )
-
-        if not active_project_ids:
-            logger.info("No projects with logs in the previous hour")
+        project_routes = await _get_all_project_routes()
+        if not project_routes:
+            logger.info("No projects with available routes configured")
             return
 
-        logger.info(
-            f"Found {len(active_project_ids)} projects with logs in the previous hour"
+        route_metrics = await _get_all_route_metrics(previous_hour_start, previous_hour_end)
+
+        await _batch_upsert_bottleneck_metrics(
+            project_routes, route_metrics, date_str, hour
         )
 
-        for project_id in active_project_ids:
-            await _aggregate_project_bottlenecks(
-                project_id, date_str, hour, previous_hour_start, previous_hour_end
-            )
-
+        elapsed = time.perf_counter() - start
         logger.info(
-            f"Completed bottleneck metrics aggregation for {len(active_project_ids)} projects"
+            f"Bottleneck metrics done in {elapsed:.2f}s for {len(project_routes)} projects"
         )
 
     except Exception as e:
@@ -48,16 +45,51 @@ async def aggregate_bottleneck_metrics() -> None:
         raise
 
 
-async def _get_active_projects(
+async def _get_all_project_routes() -> dict[int, list[str]]:
+    async with database.get_auth_session() as session:
+        query = sa.text(
+            """
+            SELECT id, available_routes
+            FROM projects
+            WHERE available_routes IS NOT NULL
+        """
+        )
+        result = await session.execute(query)
+        rows = result.fetchall()
+        return {row[0]: row[1] for row in rows if row[1]}
+
+
+async def _get_all_route_metrics(
     start_time: datetime.datetime, end_time: datetime.datetime
-) -> list[int]:
+) -> dict[int, dict[str, dict]]:
     async with database.get_logs_session() as session:
         query = sa.text(
             """
-            SELECT DISTINCT project_id
-            FROM logs
-            WHERE timestamp >= :start_time AND timestamp < :end_time
-            ORDER BY project_id
+            WITH endpoint_data AS (
+                SELECT
+                    project_id,
+                    (attributes->'endpoint'->>'path')::VARCHAR AS route,
+                    (attributes->'endpoint'->>'duration_ms')::FLOAT AS duration_ms
+                FROM logs
+                WHERE
+                    log_type = 'endpoint'
+                    AND timestamp >= :start_time
+                    AND timestamp < :end_time
+                    AND attributes->'endpoint'->>'path' IS NOT NULL
+                    AND attributes->'endpoint'->>'duration_ms' IS NOT NULL
+            )
+            SELECT
+                project_id,
+                route,
+                COUNT(*) AS log_count,
+                ROUND(MIN(duration_ms))::INTEGER AS min_duration_ms,
+                ROUND(MAX(duration_ms))::INTEGER AS max_duration_ms,
+                AVG(duration_ms) AS avg_duration_ms,
+                ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (
+                    ORDER BY duration_ms
+                ))::INTEGER AS median_duration_ms
+            FROM endpoint_data
+            GROUP BY project_id, route
         """
         )
 
@@ -65,179 +97,100 @@ async def _get_active_projects(
             query, {"start_time": start_time, "end_time": end_time}
         )
         rows = result.fetchall()
-        return [row[0] for row in rows]
 
-
-async def _aggregate_project_bottlenecks(
-    project_id: int,
-    date_str: str,
-    hour: int,
-    start_time: datetime.datetime,
-    end_time: datetime.datetime,
-) -> None:
-    available_routes = await _get_project_routes(project_id)
-
-    if not available_routes:
-        logger.warning(
-            f"Project {project_id} has no available_routes configured, skipping"
-        )
-        return
-
-    route_metrics = await _get_route_metrics(
-        project_id, start_time, end_time
-    )
-
-    await _upsert_bottleneck_metrics(
-        project_id, date_str, hour, available_routes, route_metrics
-    )
-
-    logger.info(
-        f"Aggregated bottleneck metrics for project {project_id}: "
-        f"{len(available_routes)} routes ({len(route_metrics)} with data)"
-    )
-
-
-async def _get_project_routes(project_id: int) -> list[str]:
-    async with database.get_auth_session() as session:
-        query = sa.text(
-            """
-            SELECT available_routes
-            FROM projects
-            WHERE id = :project_id
-        """
-        )
-
-        result = await session.execute(query, {"project_id": project_id})
-        row = result.fetchone()
-
-        if row and row[0]:
-            return row[0]
-        return []
-
-
-async def _get_route_metrics(
-    project_id: int, start_time: datetime.datetime, end_time: datetime.datetime
-) -> dict[str, dict]:
-    async with database.get_logs_session() as session:
-        query = sa.text(
-            """
-            SELECT
-                (attributes->'endpoint'->>'path')::VARCHAR AS route,
-                COUNT(*) AS log_count,
-                ROUND(MIN((attributes->'endpoint'->>'duration_ms')::FLOAT))::INTEGER AS min_duration_ms,
-                ROUND(MAX((attributes->'endpoint'->>'duration_ms')::FLOAT))::INTEGER AS max_duration_ms,
-                AVG((attributes->'endpoint'->>'duration_ms')::FLOAT) AS avg_duration_ms,
-                ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (
-                    ORDER BY (attributes->'endpoint'->>'duration_ms')::FLOAT
-                ))::INTEGER AS median_duration_ms
-            FROM logs
-            WHERE
-                project_id = :project_id
-                AND log_type = 'endpoint'
-                AND timestamp >= :start_time
-                AND timestamp < :end_time
-                AND attributes->'endpoint'->>'path' IS NOT NULL
-                AND attributes->'endpoint'->>'duration_ms' IS NOT NULL
-            GROUP BY
-                attributes->'endpoint'->>'path'
-        """
-        )
-
-        result = await session.execute(
-            query,
-            {
-                "project_id": project_id,
-                "start_time": start_time,
-                "end_time": end_time,
-            },
-        )
-        rows = result.fetchall()
-
-        metrics = {}
+        metrics: dict[int, dict[str, dict]] = {}
         for row in rows:
-            route = row[0]
-            metrics[route] = {
-                "log_count": row[1],
-                "min_duration_ms": row[2],
-                "max_duration_ms": row[3],
-                "avg_duration_ms": row[4],
-                "median_duration_ms": row[5],
+            project_id, route = row[0], row[1]
+            if project_id not in metrics:
+                metrics[project_id] = {}
+            metrics[project_id][route] = {
+                "log_count": row[2],
+                "min_duration_ms": row[3],
+                "max_duration_ms": row[4],
+                "avg_duration_ms": float(row[5]),
+                "median_duration_ms": row[6],
             }
-
         return metrics
 
 
-async def _upsert_bottleneck_metrics(
-    project_id: int,
+async def _batch_upsert_bottleneck_metrics(
+    project_routes: dict[int, list[str]],
+    route_metrics: dict[int, dict[str, dict]],
     date_str: str,
     hour: int,
-    available_routes: list[str],
-    route_metrics: dict[str, dict],
 ) -> None:
-    async with database.get_logs_session() as session:
-        for route in available_routes:
-            if route in route_metrics:
-                metrics = route_metrics[route]
-                log_count = metrics["log_count"]
-                min_duration_ms = metrics["min_duration_ms"]
-                max_duration_ms = metrics["max_duration_ms"]
-                avg_duration_ms = metrics["avg_duration_ms"]
-                median_duration_ms = metrics["median_duration_ms"]
+    params = []
+    for project_id, routes in project_routes.items():
+        for route in routes:
+            project_data = route_metrics.get(project_id, {})
+            if route in project_data:
+                m = project_data[route]
+                params.append(
+                    {
+                        "project_id": project_id,
+                        "date_str": date_str,
+                        "hour": hour,
+                        "route": route,
+                        "log_count": m["log_count"],
+                        "min_duration_ms": m["min_duration_ms"],
+                        "max_duration_ms": m["max_duration_ms"],
+                        "avg_duration_ms": m["avg_duration_ms"],
+                        "median_duration_ms": m["median_duration_ms"],
+                    }
+                )
             else:
-                log_count = 0
-                min_duration_ms = 0
-                max_duration_ms = 0
-                avg_duration_ms = 0
-                median_duration_ms = 0
-
-            query = sa.text(
-                """
-                INSERT INTO bottleneck_metrics (
-                    project_id,
-                    date,
-                    hour,
-                    route,
-                    log_count,
-                    min_duration_ms,
-                    max_duration_ms,
-                    avg_duration_ms,
-                    median_duration_ms
+                params.append(
+                    {
+                        "project_id": project_id,
+                        "date_str": date_str,
+                        "hour": hour,
+                        "route": route,
+                        "log_count": 0,
+                        "min_duration_ms": 0,
+                        "max_duration_ms": 0,
+                        "avg_duration_ms": 0.0,
+                        "median_duration_ms": 0,
+                    }
                 )
-                VALUES (
-                    :project_id,
-                    :date_str,
-                    :hour,
-                    :route,
-                    :log_count,
-                    :min_duration_ms,
-                    :max_duration_ms,
-                    :avg_duration_ms,
-                    :median_duration_ms
-                )
-                ON CONFLICT (project_id, date, hour, route)
-                DO UPDATE SET
-                    log_count = EXCLUDED.log_count,
-                    min_duration_ms = EXCLUDED.min_duration_ms,
-                    max_duration_ms = EXCLUDED.max_duration_ms,
-                    avg_duration_ms = EXCLUDED.avg_duration_ms,
-                    median_duration_ms = EXCLUDED.median_duration_ms,
-                    updated_at = NOW()
-            """
-            )
 
-            await session.execute(
-                query,
-                {
-                    "project_id": project_id,
-                    "date_str": date_str,
-                    "hour": hour,
-                    "route": route,
-                    "log_count": log_count,
-                    "min_duration_ms": min_duration_ms,
-                    "max_duration_ms": max_duration_ms,
-                    "avg_duration_ms": avg_duration_ms,
-                    "median_duration_ms": median_duration_ms,
-                },
-            )
+    if not params:
+        return
 
+    query = sa.text(
+        """
+        INSERT INTO bottleneck_metrics (
+            project_id,
+            date,
+            hour,
+            route,
+            log_count,
+            min_duration_ms,
+            max_duration_ms,
+            avg_duration_ms,
+            median_duration_ms
+        )
+        VALUES (
+            :project_id,
+            :date_str,
+            :hour,
+            :route,
+            :log_count,
+            :min_duration_ms,
+            :max_duration_ms,
+            :avg_duration_ms,
+            :median_duration_ms
+        )
+        ON CONFLICT (project_id, date, hour, route)
+        DO UPDATE SET
+            log_count = EXCLUDED.log_count,
+            min_duration_ms = EXCLUDED.min_duration_ms,
+            max_duration_ms = EXCLUDED.max_duration_ms,
+            avg_duration_ms = EXCLUDED.avg_duration_ms,
+            median_duration_ms = EXCLUDED.median_duration_ms,
+            updated_at = NOW()
+    """
+    )
+
+    async with database.get_logs_session() as session:
+        await session.execute(query, params)
         await session.commit()

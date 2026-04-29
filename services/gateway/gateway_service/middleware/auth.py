@@ -193,9 +193,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
             request = auth_pb2.ValidateApiKeyRequest(api_key=api_key)
 
-            response = await asyncio.wait_for(
-                stub.ValidateApiKey(request), timeout=config.settings.GRPC_TIMEOUT
-            )
+            response = await stub.ValidateApiKey(request, timeout=config.settings.GRPC_TIMEOUT)
 
             if not response.valid:
                 self._auth_failures += 1
@@ -215,20 +213,21 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
             return auth_data
 
-        except asyncio.TimeoutError:
-            logger.error("Auth Service timeout")
-            stale_data = await self.redis.get_stale_cache(api_key)
-            if stale_data:
-                logger.warning("Using stale cache due to timeout")
-                return stale_data
-
-            raise fastapi.HTTPException(
-                status_code=fastapi.status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Authentication service timeout",
-            )
-
         except grpc.RpcError as e:
             logger.error(f"gRPC error: {e.code()} - {e.details()}")
+
+            if e.code() in (grpc.StatusCode.DEADLINE_EXCEEDED, grpc.StatusCode.UNAVAILABLE):
+                stale_data = await self.redis.get_stale_cache(api_key)
+                if stale_data:
+                    logger.warning("Using stale cache due to auth service error")
+                    return stale_data
+
+                if e.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
+                    logger.error("Auth Service timeout")
+                    raise fastapi.HTTPException(
+                        status_code=fastapi.status.HTTP_503_SERVICE_UNAVAILABLE,
+                        detail="Authentication service timeout",
+                    )
 
             if e.code() == grpc.StatusCode.UNAVAILABLE:
                 stale_data = await self.redis.get_stale_cache(api_key)

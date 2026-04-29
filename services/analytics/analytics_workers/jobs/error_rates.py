@@ -1,4 +1,5 @@
 import json
+import time
 
 import analytics_workers.config as config
 import analytics_workers.database as database
@@ -12,6 +13,7 @@ logger = logging.get_logger("jobs.error_rates")
 async def aggregate_error_rates() -> None:
     settings = config.get_settings()
     redis = redis_client.get_redis()
+    start = time.perf_counter()
 
     try:
         async with database.get_logs_session() as session:
@@ -19,7 +21,7 @@ async def aggregate_error_rates() -> None:
                 """
                 SELECT
                     project_id,
-                    date_trunc('minute', timestamp) +
+                    date_trunc('hour', timestamp) +
                         (EXTRACT(minute FROM timestamp)::int / 5) * INTERVAL '5 minutes' as bucket,
                     COUNT(*) FILTER (WHERE level = 'error') as error_count,
                     COUNT(*) FILTER (WHERE level = 'critical') as critical_count
@@ -37,8 +39,8 @@ async def aggregate_error_rates() -> None:
             for row in rows:
                 project_id = row[0]
                 bucket = row[1]
-                error_count = row[2] or 0
-                critical_count = row[3] or 0
+                error_count = row[2]
+                critical_count = row[3]
 
                 if project_id not in by_project:
                     by_project[project_id] = []
@@ -60,6 +62,11 @@ async def aggregate_error_rates() -> None:
                     settings.ANALYTICS_ERROR_RATE_TTL,
                     cache_value,
                 )
+
+        elapsed = time.perf_counter() - start
+        logger.info(
+            f"Error rate aggregation done in {elapsed:.2f}s for {len(by_project)} projects"
+        )
 
     except Exception as e:
         logger.error(f"Error rate aggregation failed: {e}", exc_info=True)

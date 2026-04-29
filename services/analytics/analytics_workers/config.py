@@ -202,6 +202,13 @@ class Settings(pydantic_settings.BaseSettings):
         description="Top errors cache TTL (seconds)",
     )
 
+    ANALYTICS_TOP_ERRORS_LIMIT: int = pydantic.Field(
+        default=50,
+        ge=10,
+        le=500,
+        description="Max top errors per project cached",
+    )
+
     ANALYTICS_USAGE_STATS_TTL: int = pydantic.Field(
         default=3600,
         ge=600,

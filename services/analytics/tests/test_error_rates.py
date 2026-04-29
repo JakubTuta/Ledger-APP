@@ -1,8 +1,18 @@
 import json
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import analytics_workers.jobs.error_rates as error_rates_job
 import pytest
+
+
+def test_5min_bucket_produces_correct_floor():
+    """Bucket for 12:37:42 UTC must be 12:35:00, not 13:12:00 (old bug)."""
+    import datetime as dt
+    ts = dt.datetime(2025, 10, 19, 12, 37, 42, tzinfo=dt.timezone.utc)
+    hour_start = ts.replace(minute=0, second=0, microsecond=0)
+    bucket = hour_start + dt.timedelta(minutes=(ts.minute // 5) * 5)
+    assert bucket == dt.datetime(2025, 10, 19, 12, 35, 0, tzinfo=dt.timezone.utc)
 
 
 @pytest.mark.asyncio

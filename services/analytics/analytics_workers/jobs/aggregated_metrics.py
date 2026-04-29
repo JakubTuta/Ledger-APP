@@ -1,4 +1,5 @@
 import datetime
+import time
 
 import analytics_workers.database as database
 import analytics_workers.utils.logging as logging
@@ -16,6 +17,7 @@ async def aggregate_hourly_metrics() -> None:
     date_str = previous_hour_start.strftime("%Y%m%d")
     hour = previous_hour_start.hour
 
+    start = time.perf_counter()
     logger.info(
         f"Starting hourly aggregation for {date_str} hour {hour} "
         f"({previous_hour_start} to {previous_hour_end})"
@@ -34,6 +36,9 @@ async def aggregate_hourly_metrics() -> None:
             date_str, hour, previous_hour_start, previous_hour_end
         )
 
+        elapsed = time.perf_counter() - start
+        logger.info(f"Hourly aggregation done in {elapsed:.2f}s for {date_str} hour {hour}")
+
     except Exception as e:
         logger.error(f"Hourly metrics aggregation failed: {e}", exc_info=True)
         raise
@@ -48,6 +53,21 @@ async def _aggregate_endpoint_metrics(
     async with database.get_logs_session() as session:
         query = sa.text(
             """
+            WITH endpoint_data AS (
+                SELECT
+                    project_id,
+                    (attributes->'endpoint'->>'method')::VARCHAR AS method,
+                    (attributes->'endpoint'->>'path')::VARCHAR AS path,
+                    (attributes->'endpoint'->>'status_code')::INTEGER AS status_code,
+                    (attributes->'endpoint'->>'duration_ms')::FLOAT AS duration_ms
+                FROM logs
+                WHERE
+                    log_type = 'endpoint'
+                    AND timestamp >= :start_time
+                    AND timestamp < :end_time
+                    AND attributes->'endpoint'->>'method' IS NOT NULL
+                    AND attributes->'endpoint'->>'path' IS NOT NULL
+            )
             INSERT INTO aggregated_metrics (
                 project_id,
                 date,
@@ -70,34 +90,23 @@ async def _aggregate_endpoint_metrics(
                 :date_str AS date,
                 :hour AS hour,
                 'endpoint' AS metric_type,
-                (attributes->'endpoint'->>'method')::VARCHAR AS endpoint_method,
-                (attributes->'endpoint'->>'path')::VARCHAR AS endpoint_path,
+                method AS endpoint_method,
+                path AS endpoint_path,
                 NULL AS log_level,
                 NULL AS log_type,
                 COUNT(*) AS log_count,
-                COUNT(*) FILTER (
-                    WHERE (attributes->'endpoint'->>'status_code')::INTEGER >= 400
-                ) AS error_count,
-                AVG((attributes->'endpoint'->>'duration_ms')::FLOAT) AS avg_duration_ms,
-                ROUND(MIN((attributes->'endpoint'->>'duration_ms')::FLOAT))::INTEGER AS min_duration_ms,
-                ROUND(MAX((attributes->'endpoint'->>'duration_ms')::FLOAT))::INTEGER AS max_duration_ms,
+                COUNT(*) FILTER (WHERE status_code >= 400) AS error_count,
+                AVG(duration_ms) AS avg_duration_ms,
+                ROUND(MIN(duration_ms))::INTEGER AS min_duration_ms,
+                ROUND(MAX(duration_ms))::INTEGER AS max_duration_ms,
                 ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (
-                    ORDER BY (attributes->'endpoint'->>'duration_ms')::FLOAT
+                    ORDER BY duration_ms
                 ))::INTEGER AS p95_duration_ms,
                 ROUND(PERCENTILE_CONT(0.99) WITHIN GROUP (
-                    ORDER BY (attributes->'endpoint'->>'duration_ms')::FLOAT
+                    ORDER BY duration_ms
                 ))::INTEGER AS p99_duration_ms
-            FROM logs
-            WHERE
-                log_type = 'endpoint'
-                AND timestamp >= :start_time
-                AND timestamp < :end_time
-                AND attributes->'endpoint'->>'method' IS NOT NULL
-                AND attributes->'endpoint'->>'path' IS NOT NULL
-            GROUP BY
-                project_id,
-                attributes->'endpoint'->>'method',
-                attributes->'endpoint'->>'path'
+            FROM endpoint_data
+            GROUP BY project_id, method, path
             ON CONFLICT (
                 project_id,
                 date,

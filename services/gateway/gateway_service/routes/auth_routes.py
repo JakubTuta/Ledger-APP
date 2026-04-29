@@ -1,11 +1,10 @@
-import asyncio
 import logging
 import typing
 
 import fastapi
 import gateway_service.schemas as schemas
 import grpc
-from gateway_service import dependencies
+from gateway_service import config, dependencies
 from gateway_service.proto import auth_pb2, auth_pb2_grpc
 from gateway_service.services import grpc_pool, redis_client
 
@@ -93,18 +92,16 @@ async def register_account(
             email=request.email, password=request.password
         )
 
-        register_response = await asyncio.wait_for(
-            stub.Register(register_request),
-            timeout=10.0,
+        register_response = await stub.Register(
+            register_request, timeout=config.settings.GRPC_TIMEOUT
         )
 
         login_request = auth_pb2.LoginRequest(
             email=request.email, password=request.password
         )
 
-        login_response = await asyncio.wait_for(
-            stub.Login(login_request),
-            timeout=10.0,
+        login_response = await stub.Login(
+            login_request, timeout=config.settings.GRPC_TIMEOUT
         )
 
         return schemas.RegisterResponse(
@@ -116,17 +113,16 @@ async def register_account(
             expires_in=login_response.expires_in,
         )
 
-    except asyncio.TimeoutError:
-        logger.error("Auth Service timeout during registration")
-        raise fastapi.HTTPException(
-            status_code=fastapi.status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Registration service timeout, please try again",
-        )
-
     except grpc.RpcError as e:
         logger.error(f"gRPC error during registration: {e.code()} - {e.details()}")
 
-        if e.code() == grpc.StatusCode.ALREADY_EXISTS:
+        if e.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
+            raise fastapi.HTTPException(
+                status_code=fastapi.status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Registration service timeout, please try again",
+            )
+
+        elif e.code() == grpc.StatusCode.ALREADY_EXISTS:
             raise fastapi.HTTPException(
                 status_code=fastapi.status.HTTP_409_CONFLICT,
                 detail="Email already registered",
@@ -137,11 +133,10 @@ async def register_account(
                 status_code=fastapi.status.HTTP_400_BAD_REQUEST, detail=e.details()
             )
 
-        else:
-            raise fastapi.HTTPException(
-                status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Registration failed",
-            )
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Registration failed",
+        )
 
 
 @router.post(
@@ -203,7 +198,7 @@ async def login_account(
             email=request.email, password=request.password
         )
 
-        response = await asyncio.wait_for(stub.Login(grpc_request), timeout=10.0)
+        response = await stub.Login(grpc_request, timeout=config.settings.GRPC_TIMEOUT)
 
         return schemas.LoginResponse(
             access_token=response.access_token,
@@ -213,17 +208,16 @@ async def login_account(
             expires_in=response.expires_in,
         )
 
-    except asyncio.TimeoutError:
-        logger.error("Auth Service timeout during login")
-        raise fastapi.HTTPException(
-            status_code=fastapi.status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Login service timeout, please try again",
-        )
-
     except grpc.RpcError as e:
         logger.error(f"gRPC error during login: {e.code()} - {e.details()}")
 
-        if e.code() == grpc.StatusCode.UNAUTHENTICATED:
+        if e.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
+            raise fastapi.HTTPException(
+                status_code=fastapi.status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Login service timeout, please try again",
+            )
+
+        elif e.code() == grpc.StatusCode.UNAUTHENTICATED:
             raise fastapi.HTTPException(
                 status_code=fastapi.status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password",
@@ -235,11 +229,10 @@ async def login_account(
                 detail="Invalid email or password",
             )
 
-        else:
-            raise fastapi.HTTPException(
-                status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Login failed",
-            )
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Login failed",
+        )
 
 
 @router.post(
@@ -305,9 +298,7 @@ async def refresh_token(
             refresh_token=request.refresh_token
         )
 
-        response = await asyncio.wait_for(
-            stub.RefreshToken(grpc_request), timeout=10.0
-        )
+        response = await stub.RefreshToken(grpc_request, timeout=config.settings.GRPC_TIMEOUT)
 
         return schemas.RefreshTokenResponse(
             access_token=response.access_token,
@@ -317,27 +308,25 @@ async def refresh_token(
             expires_in=response.expires_in,
         )
 
-    except asyncio.TimeoutError:
-        logger.error("Auth Service timeout during token refresh")
-        raise fastapi.HTTPException(
-            status_code=fastapi.status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Token refresh service timeout",
-        )
-
     except grpc.RpcError as e:
         logger.error(f"gRPC error during token refresh: {e.code()} - {e.details()}")
 
-        if e.code() == grpc.StatusCode.UNAUTHENTICATED:
+        if e.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
+            raise fastapi.HTTPException(
+                status_code=fastapi.status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Token refresh service timeout",
+            )
+
+        elif e.code() == grpc.StatusCode.UNAUTHENTICATED:
             raise fastapi.HTTPException(
                 status_code=fastapi.status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid or expired refresh token",
             )
 
-        else:
-            raise fastapi.HTTPException(
-                status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Token refresh failed",
-            )
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Token refresh failed",
+        )
 
 
 @router.post(
@@ -440,7 +429,7 @@ async def get_current_account(
 
         grpc_request = auth_pb2.GetAccountRequest(account_id=account_id)
 
-        response = await asyncio.wait_for(stub.GetAccount(grpc_request), timeout=5.0)
+        response = await stub.GetAccount(grpc_request, timeout=config.settings.GRPC_TIMEOUT)
 
         return {
             "account_id": response.account_id,
@@ -449,14 +438,14 @@ async def get_current_account(
             "created_at": response.created_at,
         }
 
-    except asyncio.TimeoutError:
-        raise fastapi.HTTPException(
-            status_code=fastapi.status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Service timeout",
-        )
-
     except grpc.RpcError as e:
-        if e.code() == grpc.StatusCode.NOT_FOUND:
+        if e.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
+            raise fastapi.HTTPException(
+                status_code=fastapi.status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Service timeout",
+            )
+
+        elif e.code() == grpc.StatusCode.NOT_FOUND:
             raise fastapi.HTTPException(
                 status_code=fastapi.status.HTTP_404_NOT_FOUND,
                 detail="Account not found",
@@ -535,9 +524,7 @@ async def update_account_name(
             name=body.name,
         )
 
-        response = await asyncio.wait_for(
-            stub.UpdateAccountName(grpc_request), timeout=5.0
-        )
+        response = await stub.UpdateAccountName(grpc_request, timeout=config.settings.GRPC_TIMEOUT)
 
         if not response.success:
             raise fastapi.HTTPException(
@@ -547,14 +534,14 @@ async def update_account_name(
 
         return schemas.UpdateAccountNameResponse(name=response.name)
 
-    except asyncio.TimeoutError:
-        raise fastapi.HTTPException(
-            status_code=fastapi.status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Service timeout",
-        )
-
     except grpc.RpcError as e:
-        if e.code() == grpc.StatusCode.INVALID_ARGUMENT:
+        if e.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
+            raise fastapi.HTTPException(
+                status_code=fastapi.status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Service timeout",
+            )
+
+        elif e.code() == grpc.StatusCode.INVALID_ARGUMENT:
             raise fastapi.HTTPException(
                 status_code=fastapi.status.HTTP_400_BAD_REQUEST,
                 detail=e.details(),
@@ -638,9 +625,7 @@ async def change_password(
             new_password=body.new_password,
         )
 
-        response = await asyncio.wait_for(
-            stub.ChangePassword(grpc_request), timeout=5.0
-        )
+        response = await stub.ChangePassword(grpc_request, timeout=config.settings.GRPC_TIMEOUT)
 
         if not response.success:
             raise fastapi.HTTPException(
@@ -650,14 +635,14 @@ async def change_password(
 
         return schemas.ChangePasswordResponse()
 
-    except asyncio.TimeoutError:
-        raise fastapi.HTTPException(
-            status_code=fastapi.status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Service timeout",
-        )
-
     except grpc.RpcError as e:
-        if e.code() == grpc.StatusCode.INVALID_ARGUMENT:
+        if e.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
+            raise fastapi.HTTPException(
+                status_code=fastapi.status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Service timeout",
+            )
+
+        elif e.code() == grpc.StatusCode.INVALID_ARGUMENT:
             raise fastapi.HTTPException(
                 status_code=fastapi.status.HTTP_400_BAD_REQUEST,
                 detail=e.details(),

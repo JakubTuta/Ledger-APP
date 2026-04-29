@@ -19,28 +19,44 @@ class GRPCChannelPool:
         self.current_index = 0
         self._lock = asyncio.Lock()
 
+    def _channel_options(self) -> typing.List[typing.Tuple]:
+        return [
+            ("grpc.max_receive_message_length", 100 * 1024 * 1024),
+            ("grpc.max_send_message_length", 100 * 1024 * 1024),
+            ("grpc.enable_http_proxy", 0),
+            ("grpc.keepalive_time_ms", 20000),
+            ("grpc.keepalive_timeout_ms", 5000),
+            ("grpc.keepalive_permit_without_calls", 1),
+            ("grpc.http2.max_pings_without_data", 0),
+            ("grpc.http2.min_time_between_pings_ms", 10000),
+            ("grpc.http2.min_ping_interval_without_data_ms", 5000),
+        ]
+
+    def _create_channel(self) -> grpc.aio.Channel:
+        return grpc.aio.insecure_channel(
+            f"dns:///{self.address}",
+            options=self._channel_options(),
+        )
+
     async def initialize(self):
-        for i in range(self.pool_size):
-            target = f"dns:///{self.address}"
-
-            channel = grpc.aio.insecure_channel(
-                target,
-                options=[
-                    ("grpc.max_receive_message_length", 100 * 1024 * 1024),
-                    ("grpc.max_send_message_length", 100 * 1024 * 1024),
-                    ("grpc.enable_http_proxy", 0),
-                ],
-            )
-
-            self.channels.append(channel)
+        for _ in range(self.pool_size):
+            self.channels.append(self._create_channel())
 
     def get_channel(self) -> grpc.aio.Channel:
         if not self.channels:
             raise RuntimeError(f"No channels available for {self.service_name}")
 
         channel = self.channels[self.current_index]
-        self.current_index = (self.current_index + 1) % len(self.channels)
+        state = channel.get_state(try_to_connect=True)
 
+        if state in (grpc.ChannelConnectivity.TRANSIENT_FAILURE, grpc.ChannelConnectivity.SHUTDOWN):
+            logger.warning(
+                f"Channel {self.current_index} for {self.service_name} is {state.name}, rebuilding"
+            )
+            channel = self._create_channel()
+            self.channels[self.current_index] = channel
+
+        self.current_index = (self.current_index + 1) % len(self.channels)
         return channel
 
     def get_stub(self, stub_class):

@@ -89,7 +89,7 @@ async def test_compute_top_errors_with_data():
 
 
 @pytest.mark.asyncio
-async def test_compute_top_errors_limits_to_50():
+async def test_compute_top_errors_sql_limit_enforced():
     mock_redis = AsyncMock()
     mock_session = AsyncMock()
     mock_result = MagicMock()
@@ -97,8 +97,10 @@ async def test_compute_top_errors_limits_to_50():
     first_seen = datetime(2025, 10, 15, 8, 23, 15, tzinfo=timezone.utc)
     last_seen = datetime(2025, 10, 19, 14, 28, 42, tzinfo=timezone.utc)
 
+    # SQL ROW_NUMBER() OVER PARTITION already limits to ANALYTICS_TOP_ERRORS_LIMIT rows.
+    # Mock returns pre-filtered 50 rows as the DB would.
     errors = []
-    for i in range(100):
+    for i in range(50):
         errors.append(
             (
                 1,

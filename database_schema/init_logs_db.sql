@@ -92,6 +92,16 @@ WHERE importance IN ('critical', 'high');
 CREATE INDEX idx_logs_endpoint_monitoring ON logs (project_id, timestamp DESC, level)
 WHERE log_type = 'endpoint';
 
+-- Expression index for endpoint duration extraction (avoids repeated cast in analytics queries)
+CREATE INDEX idx_logs_endpoint_duration
+ON logs (
+    project_id,
+    timestamp DESC,
+    ((attributes->'endpoint'->>'duration_ms')::float)
+)
+WHERE log_type = 'endpoint'
+  AND attributes->'endpoint'->>'duration_ms' IS NOT NULL;
+
 -- Covering index for error list panel queries (index-only scan for maximum performance)
 -- Contains all columns needed for error list display in dashboard panels
 -- Matches SSE notification format for consistent error representation
