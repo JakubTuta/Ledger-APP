@@ -225,6 +225,16 @@ class Project(database.Base):
         back_populates="project",
         cascade="all, delete-orphan",
     )
+    members: Mapped[list["ProjectMember"]] = relationship(
+        "ProjectMember",
+        back_populates="project",
+        cascade="all, delete-orphan",
+    )
+    invite_codes: Mapped[list["ProjectInviteCode"]] = relationship(
+        "ProjectInviteCode",
+        back_populates="project",
+        cascade="all, delete-orphan",
+    )
 
     __table_args__ = (
         Index("idx_projects_account_id", "account_id"),
@@ -396,6 +406,99 @@ class DailyUsage(database.Base):
 
     def __repr__(self) -> str:
         return f"<DailyUsage(project_id={self.project_id}, date={self.date}, logs={self.logs_ingested})>"
+
+
+class ProjectMember(database.Base):
+    __tablename__ = "project_members"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+
+    project_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    account_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("accounts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    role: Mapped[str] = mapped_column(VARCHAR(20), default="member", nullable=False)
+
+    joined_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+    project: Mapped["Project"] = relationship("Project", back_populates="members")
+    account: Mapped["Account"] = relationship("Account", backref="project_memberships")
+
+    __table_args__ = (
+        Index("idx_project_members_account_id", "account_id"),
+        Index("idx_project_members_project_id", "project_id"),
+        Index("uq_project_members", "project_id", "account_id", unique=True),
+        CheckConstraint(
+            "role IN ('owner', 'member')",
+            name="check_member_role",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return f"<ProjectMember(project_id={self.project_id}, account_id={self.account_id}, role={self.role})>"
+
+
+class ProjectInviteCode(database.Base):
+    __tablename__ = "project_invite_codes"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+
+    project_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    code_hash: Mapped[str] = mapped_column(CHAR(64), unique=True, nullable=False)
+    created_by: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("accounts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    expires_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+    used_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    used_by: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("accounts.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+    project: Mapped["Project"] = relationship("Project", back_populates="invite_codes")
+
+    __table_args__ = (
+        Index(
+            "idx_invite_codes_code_hash",
+            "code_hash",
+            postgresql_where=(used_at == None),  # noqa: E711
+        ),
+        Index("idx_invite_codes_project_expires", "project_id", "expires_at"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<ProjectInviteCode(project_id={self.project_id}, expires_at={self.expires_at})>"
 
 
 class UserDashboard(database.Base):

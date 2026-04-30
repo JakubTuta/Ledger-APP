@@ -15,6 +15,7 @@ from gateway_service.routes import (
     project_routes,
     query_routes,
     settings_routes,
+    sharing_routes,
 )
 from gateway_service.services import grpc_pool, redis_client
 
@@ -180,6 +181,10 @@ def custom_openapi():
             "description": "Project settings, quotas, and rate limits",
         },
         {
+            "name": "Sharing",
+            "description": "Project invite codes and team membership management",
+        },
+        {
             "name": "Health",
             "description": "Service health and monitoring endpoints",
         },
@@ -303,6 +308,7 @@ include_router(ingestion_routes.router, prefix="/api/v1")
 include_router(query_routes.router, prefix="/api/v1")
 include_router(notifications.router, prefix="/api/v1")
 include_router(settings_routes.router, prefix="/api/v1")
+include_router(sharing_routes.router, prefix="/api/v1")
 
 
 if __name__ == "__main__":

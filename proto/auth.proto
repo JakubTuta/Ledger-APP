@@ -18,6 +18,14 @@ service AuthService {
   rpc GetProjects(GetProjectsRequest) returns (GetProjectsResponse);
   rpc GetProjectById(GetProjectByIdRequest) returns (GetProjectByIdResponse);
 
+  // Project sharing operations
+  rpc GenerateInviteCode(GenerateInviteCodeRequest) returns (GenerateInviteCodeResponse);
+  rpc AcceptInviteCode(AcceptInviteCodeRequest) returns (AcceptInviteCodeResponse);
+  rpc ListProjectMembers(ListProjectMembersRequest) returns (ListProjectMembersResponse);
+  rpc RemoveProjectMember(RemoveProjectMemberRequest) returns (RemoveProjectMemberResponse);
+  rpc LeaveProject(LeaveProjectRequest) returns (LeaveProjectResponse);
+  rpc GetProjectRole(GetProjectRoleRequest) returns (GetProjectRoleResponse);
+
   // API key operations
   rpc CreateApiKey(CreateApiKeyRequest) returns (CreateApiKeyResponse);
   rpc ValidateApiKey(ValidateApiKeyRequest) returns (ValidateApiKeyResponse);
@@ -167,6 +175,7 @@ message ProjectInfo {
   int32 retention_days = 5;
   int64 daily_quota = 6;
   repeated string available_routes = 7;
+  string role = 8;
 }
 
 message GetProjectsResponse {
@@ -185,6 +194,76 @@ message GetProjectByIdResponse {
   int32 retention_days = 5;
   int64 daily_quota = 6;
   repeated string available_routes = 7;
+}
+
+// ==================== Project Sharing Messages ====================
+
+message GenerateInviteCodeRequest {
+  int64 project_id = 1;
+  int64 requester_account_id = 2;
+}
+
+message GenerateInviteCodeResponse {
+  string code = 1;
+  string expires_at = 2;
+}
+
+message AcceptInviteCodeRequest {
+  string code = 1;
+  int64 account_id = 2;
+}
+
+message AcceptInviteCodeResponse {
+  int64 project_id = 1;
+  string role = 2;
+  string project_name = 3;
+  string project_slug = 4;
+}
+
+message MemberInfo {
+  int64 account_id = 1;
+  string email = 2;
+  string name = 3;
+  string role = 4;
+  string joined_at = 5;
+}
+
+message ListProjectMembersRequest {
+  int64 project_id = 1;
+  int64 requester_account_id = 2;
+}
+
+message ListProjectMembersResponse {
+  repeated MemberInfo members = 1;
+}
+
+message RemoveProjectMemberRequest {
+  int64 project_id = 1;
+  int64 account_id = 2;
+  int64 requester_account_id = 3;
+}
+
+message RemoveProjectMemberResponse {
+  bool success = 1;
+}
+
+message LeaveProjectRequest {
+  int64 project_id = 1;
+  int64 account_id = 2;
+}
+
+message LeaveProjectResponse {
+  bool success = 1;
+}
+
+message GetProjectRoleRequest {
+  int64 project_id = 1;
+  int64 account_id = 2;
+}
+
+message GetProjectRoleResponse {
+  bool is_member = 1;
+  string role = 2;
 }
 
 // ==================== Usage Tracking Messages ====================

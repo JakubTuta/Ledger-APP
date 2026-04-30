@@ -1,5 +1,7 @@
+import base64
+import hashlib
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import auth_service.config as config
 import auth_service.models as models
@@ -250,7 +252,7 @@ class AuthService:
         slug: str,
         environment: str = "production",
     ) -> models.Project:
-        """Create new project."""
+        """Create new project and add creator as owner member."""
 
         result = await session.execute(
             select(models.Project).where(models.Project.slug == slug)
@@ -265,6 +267,14 @@ class AuthService:
             environment=environment,
         )
         session.add(project)
+        await session.flush()
+
+        member = models.ProjectMember(
+            project_id=project.id,
+            account_id=account_id,
+            role="owner",
+        )
+        session.add(member)
         await session.commit()
         await session.refresh(project)
 
@@ -274,13 +284,18 @@ class AuthService:
         self,
         session: AsyncSession,
         account_id: int,
-    ) -> list[models.Project]:
-        """Get all projects for account."""
+    ) -> list[tuple[models.Project, str]]:
+        """Get all projects account is a member of, with role per project."""
 
         result = await session.execute(
-            select(models.Project).where(models.Project.account_id == account_id)
+            select(models.Project, models.ProjectMember.role)
+            .join(
+                models.ProjectMember,
+                models.ProjectMember.project_id == models.Project.id,
+            )
+            .where(models.ProjectMember.account_id == account_id)
         )
-        return list(result.scalars().all())
+        return [(row[0], row[1]) for row in result.all()]
 
     async def get_project_by_id(
         self,
@@ -467,6 +482,195 @@ class AuthService:
         api_keys = result.scalars().all()
 
         return list(api_keys)
+
+    # ==================== Project Sharing ====================
+
+    def _generate_invite_code(self) -> tuple[str, str]:
+        """Generate invite code and its SHA-256 hash. Returns (raw_code, code_hash)."""
+        raw_bytes = secrets.token_bytes(9)
+        code = base64.b32encode(raw_bytes).decode()[:12].upper()
+        code_hash = hashlib.sha256(code.encode()).hexdigest()
+        return code, code_hash
+
+    def _hash_invite_code(self, code: str) -> str:
+        normalized = code.replace("-", "").upper()
+        return hashlib.sha256(normalized.encode()).hexdigest()
+
+    def _format_invite_code(self, code: str) -> str:
+        return f"{code[:4]}-{code[4:8]}-{code[8:12]}"
+
+    async def get_project_role(
+        self,
+        session: AsyncSession,
+        project_id: int,
+        account_id: int,
+    ) -> str | None:
+        """Return member's role or None if not a member."""
+        result = await session.execute(
+            select(models.ProjectMember.role).where(
+                models.ProjectMember.project_id == project_id,
+                models.ProjectMember.account_id == account_id,
+            )
+        )
+        row = result.scalar_one_or_none()
+        return row
+
+    async def generate_invite_code(
+        self,
+        session: AsyncSession,
+        project_id: int,
+        requester_account_id: int,
+    ) -> tuple[str, datetime]:
+        """Generate invite code for a project. Requester must be owner."""
+        role = await self.get_project_role(session, project_id, requester_account_id)
+        if role != "owner":
+            raise PermissionError("Only project owners can generate invite codes")
+
+        code, code_hash = self._generate_invite_code()
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+
+        invite = models.ProjectInviteCode(
+            project_id=project_id,
+            code_hash=code_hash,
+            created_by=requester_account_id,
+            expires_at=expires_at,
+        )
+        session.add(invite)
+        await session.commit()
+
+        return self._format_invite_code(code), expires_at
+
+    async def accept_invite_code(
+        self,
+        session: AsyncSession,
+        code: str,
+        account_id: int,
+    ) -> models.Project:
+        """Accept invite code and add account as project member."""
+        code_hash = self._hash_invite_code(code)
+
+        result = await session.execute(
+            select(models.ProjectInviteCode).where(
+                models.ProjectInviteCode.code_hash == code_hash,
+                models.ProjectInviteCode.used_at == None,  # noqa: E711
+                models.ProjectInviteCode.expires_at > datetime.now(timezone.utc),
+            )
+        )
+        invite = result.scalar_one_or_none()
+        if not invite:
+            raise ValueError("Invalid or expired invite code")
+
+        existing_role = await self.get_project_role(session, invite.project_id, account_id)
+        if existing_role is not None:
+            raise ValueError("Already a member of this project")
+
+        member = models.ProjectMember(
+            project_id=invite.project_id,
+            account_id=account_id,
+            role="member",
+        )
+        session.add(member)
+
+        invite.used_at = datetime.now(timezone.utc)
+        invite.used_by = account_id
+        await session.commit()
+
+        project = await self.get_project_by_id(session, invite.project_id)
+        return project
+
+    async def list_project_members(
+        self,
+        session: AsyncSession,
+        project_id: int,
+        requester_account_id: int,
+    ) -> list[dict]:
+        """List all members of a project. Requester must be a member."""
+        role = await self.get_project_role(session, project_id, requester_account_id)
+        if role is None:
+            raise PermissionError("Not a member of this project")
+
+        result = await session.execute(
+            select(models.ProjectMember, models.Account)
+            .join(models.Account, models.Account.id == models.ProjectMember.account_id)
+            .where(models.ProjectMember.project_id == project_id)
+            .order_by(models.ProjectMember.joined_at)
+        )
+        rows = result.all()
+
+        return [
+            {
+                "account_id": member.account_id,
+                "email": account.email,
+                "name": account.name,
+                "role": member.role,
+                "joined_at": member.joined_at.isoformat(),
+            }
+            for member, account in rows
+        ]
+
+    async def remove_project_member(
+        self,
+        session: AsyncSession,
+        project_id: int,
+        account_id: int,
+        requester_account_id: int,
+    ) -> None:
+        """Remove a member from a project. Requester must be owner."""
+        requester_role = await self.get_project_role(session, project_id, requester_account_id)
+        if requester_role != "owner":
+            raise PermissionError("Only project owners can remove members")
+
+        if account_id == requester_account_id:
+            raise ValueError("Owners cannot remove themselves — use leave_project or transfer ownership")
+
+        result = await session.execute(
+            select(models.ProjectMember).where(
+                models.ProjectMember.project_id == project_id,
+                models.ProjectMember.account_id == account_id,
+            )
+        )
+        member = result.scalar_one_or_none()
+        if not member:
+            raise ValueError("Member not found in project")
+
+        await session.delete(member)
+        await session.commit()
+
+        await self.redis.delete(f"member:{project_id}:{account_id}")
+
+    async def leave_project(
+        self,
+        session: AsyncSession,
+        project_id: int,
+        account_id: int,
+    ) -> None:
+        """Leave a project. Owners cannot leave if they are the sole owner."""
+        role = await self.get_project_role(session, project_id, account_id)
+        if role is None:
+            raise ValueError("Not a member of this project")
+
+        if role == "owner":
+            result = await session.execute(
+                select(models.ProjectMember).where(
+                    models.ProjectMember.project_id == project_id,
+                    models.ProjectMember.role == "owner",
+                )
+            )
+            owners = result.scalars().all()
+            if len(owners) <= 1:
+                raise ValueError("Cannot leave — you are the sole owner. Delete the project or transfer ownership first.")
+
+        result = await session.execute(
+            select(models.ProjectMember).where(
+                models.ProjectMember.project_id == project_id,
+                models.ProjectMember.account_id == account_id,
+            )
+        )
+        member = result.scalar_one_or_none()
+        await session.delete(member)
+        await session.commit()
+
+        await self.redis.delete(f"member:{project_id}:{account_id}")
 
     # ==================== Refresh Tokens ====================
 

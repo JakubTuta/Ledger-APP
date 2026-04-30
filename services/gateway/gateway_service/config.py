@@ -143,13 +143,28 @@ class Settings(pydantic_settings.BaseSettings):
     )
 
     GRPC_KEEPALIVE_TIME_MS: int = pydantic.Field(
-        default=30000,
+        default=60000,
         description="gRPC keepalive ping interval (ms)",
     )
 
     GRPC_KEEPALIVE_TIMEOUT_MS: int = pydantic.Field(
-        default=5000,
+        default=10000,
         description="gRPC keepalive timeout (ms)",
+    )
+
+    GRPC_HTTP2_MAX_PINGS_WITHOUT_DATA: int = pydantic.Field(
+        default=0,
+        description="Max pings without data (0 = unlimited)",
+    )
+
+    GRPC_HTTP2_MIN_TIME_BETWEEN_PINGS_MS: int = pydantic.Field(
+        default=30000,
+        description="Min time between pings when data is flowing (ms)",
+    )
+
+    GRPC_HTTP2_MIN_PING_INTERVAL_WITHOUT_DATA_MS: int = pydantic.Field(
+        default=30000,
+        description="Min ping interval when no data is flowing (ms)",
     )
 
     GRPC_TIMEOUT: float = pydantic.Field(

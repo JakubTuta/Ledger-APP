@@ -32,14 +32,16 @@ async def _get_project_routes() -> dict[int, list[str]]:
             """
             SELECT
                 project_id,
-                (attributes->'endpoint'->>'path') AS route
+                (attributes->'endpoint'->>'method') || ' ' || (attributes->'endpoint'->>'path') AS route
             FROM logs
             WHERE
                 log_type = 'endpoint'
                 AND attributes->'endpoint'->>'path' IS NOT NULL
+                AND attributes->'endpoint'->>'method' IS NOT NULL
                 AND timestamp > NOW() - INTERVAL '7 days'
             GROUP BY
                 project_id,
+                attributes->'endpoint'->>'method',
                 attributes->'endpoint'->>'path'
             ORDER BY
                 project_id,

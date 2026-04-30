@@ -214,7 +214,7 @@ class GetProjectsRequest(_message.Message):
     def __init__(self, account_id: _Optional[int] = ...) -> None: ...
 
 class ProjectInfo(_message.Message):
-    __slots__ = ("project_id", "name", "slug", "environment", "retention_days", "daily_quota", "available_routes")
+    __slots__ = ("project_id", "name", "slug", "environment", "retention_days", "daily_quota", "available_routes", "role")
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     SLUG_FIELD_NUMBER: _ClassVar[int]
@@ -222,6 +222,7 @@ class ProjectInfo(_message.Message):
     RETENTION_DAYS_FIELD_NUMBER: _ClassVar[int]
     DAILY_QUOTA_FIELD_NUMBER: _ClassVar[int]
     AVAILABLE_ROUTES_FIELD_NUMBER: _ClassVar[int]
+    ROLE_FIELD_NUMBER: _ClassVar[int]
     project_id: int
     name: str
     slug: str
@@ -229,7 +230,8 @@ class ProjectInfo(_message.Message):
     retention_days: int
     daily_quota: int
     available_routes: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, project_id: _Optional[int] = ..., name: _Optional[str] = ..., slug: _Optional[str] = ..., environment: _Optional[str] = ..., retention_days: _Optional[int] = ..., daily_quota: _Optional[int] = ..., available_routes: _Optional[_Iterable[str]] = ...) -> None: ...
+    role: str
+    def __init__(self, project_id: _Optional[int] = ..., name: _Optional[str] = ..., slug: _Optional[str] = ..., environment: _Optional[str] = ..., retention_days: _Optional[int] = ..., daily_quota: _Optional[int] = ..., available_routes: _Optional[_Iterable[str]] = ..., role: _Optional[str] = ...) -> None: ...
 
 class GetProjectsResponse(_message.Message):
     __slots__ = ("projects",)
@@ -260,6 +262,116 @@ class GetProjectByIdResponse(_message.Message):
     daily_quota: int
     available_routes: _containers.RepeatedScalarFieldContainer[str]
     def __init__(self, project_id: _Optional[int] = ..., name: _Optional[str] = ..., slug: _Optional[str] = ..., environment: _Optional[str] = ..., retention_days: _Optional[int] = ..., daily_quota: _Optional[int] = ..., available_routes: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class GenerateInviteCodeRequest(_message.Message):
+    __slots__ = ("project_id", "requester_account_id")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    REQUESTER_ACCOUNT_ID_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    requester_account_id: int
+    def __init__(self, project_id: _Optional[int] = ..., requester_account_id: _Optional[int] = ...) -> None: ...
+
+class GenerateInviteCodeResponse(_message.Message):
+    __slots__ = ("code", "expires_at")
+    CODE_FIELD_NUMBER: _ClassVar[int]
+    EXPIRES_AT_FIELD_NUMBER: _ClassVar[int]
+    code: str
+    expires_at: str
+    def __init__(self, code: _Optional[str] = ..., expires_at: _Optional[str] = ...) -> None: ...
+
+class AcceptInviteCodeRequest(_message.Message):
+    __slots__ = ("code", "account_id")
+    CODE_FIELD_NUMBER: _ClassVar[int]
+    ACCOUNT_ID_FIELD_NUMBER: _ClassVar[int]
+    code: str
+    account_id: int
+    def __init__(self, code: _Optional[str] = ..., account_id: _Optional[int] = ...) -> None: ...
+
+class AcceptInviteCodeResponse(_message.Message):
+    __slots__ = ("project_id", "role", "project_name", "project_slug")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    ROLE_FIELD_NUMBER: _ClassVar[int]
+    PROJECT_NAME_FIELD_NUMBER: _ClassVar[int]
+    PROJECT_SLUG_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    role: str
+    project_name: str
+    project_slug: str
+    def __init__(self, project_id: _Optional[int] = ..., role: _Optional[str] = ..., project_name: _Optional[str] = ..., project_slug: _Optional[str] = ...) -> None: ...
+
+class MemberInfo(_message.Message):
+    __slots__ = ("account_id", "email", "name", "role", "joined_at")
+    ACCOUNT_ID_FIELD_NUMBER: _ClassVar[int]
+    EMAIL_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    ROLE_FIELD_NUMBER: _ClassVar[int]
+    JOINED_AT_FIELD_NUMBER: _ClassVar[int]
+    account_id: int
+    email: str
+    name: str
+    role: str
+    joined_at: str
+    def __init__(self, account_id: _Optional[int] = ..., email: _Optional[str] = ..., name: _Optional[str] = ..., role: _Optional[str] = ..., joined_at: _Optional[str] = ...) -> None: ...
+
+class ListProjectMembersRequest(_message.Message):
+    __slots__ = ("project_id", "requester_account_id")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    REQUESTER_ACCOUNT_ID_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    requester_account_id: int
+    def __init__(self, project_id: _Optional[int] = ..., requester_account_id: _Optional[int] = ...) -> None: ...
+
+class ListProjectMembersResponse(_message.Message):
+    __slots__ = ("members",)
+    MEMBERS_FIELD_NUMBER: _ClassVar[int]
+    members: _containers.RepeatedCompositeFieldContainer[MemberInfo]
+    def __init__(self, members: _Optional[_Iterable[_Union[MemberInfo, _Mapping]]] = ...) -> None: ...
+
+class RemoveProjectMemberRequest(_message.Message):
+    __slots__ = ("project_id", "account_id", "requester_account_id")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    ACCOUNT_ID_FIELD_NUMBER: _ClassVar[int]
+    REQUESTER_ACCOUNT_ID_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    account_id: int
+    requester_account_id: int
+    def __init__(self, project_id: _Optional[int] = ..., account_id: _Optional[int] = ..., requester_account_id: _Optional[int] = ...) -> None: ...
+
+class RemoveProjectMemberResponse(_message.Message):
+    __slots__ = ("success",)
+    SUCCESS_FIELD_NUMBER: _ClassVar[int]
+    success: bool
+    def __init__(self, success: bool = ...) -> None: ...
+
+class LeaveProjectRequest(_message.Message):
+    __slots__ = ("project_id", "account_id")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    ACCOUNT_ID_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    account_id: int
+    def __init__(self, project_id: _Optional[int] = ..., account_id: _Optional[int] = ...) -> None: ...
+
+class LeaveProjectResponse(_message.Message):
+    __slots__ = ("success",)
+    SUCCESS_FIELD_NUMBER: _ClassVar[int]
+    success: bool
+    def __init__(self, success: bool = ...) -> None: ...
+
+class GetProjectRoleRequest(_message.Message):
+    __slots__ = ("project_id", "account_id")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    ACCOUNT_ID_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    account_id: int
+    def __init__(self, project_id: _Optional[int] = ..., account_id: _Optional[int] = ...) -> None: ...
+
+class GetProjectRoleResponse(_message.Message):
+    __slots__ = ("is_member", "role")
+    IS_MEMBER_FIELD_NUMBER: _ClassVar[int]
+    ROLE_FIELD_NUMBER: _ClassVar[int]
+    is_member: bool
+    role: str
+    def __init__(self, is_member: bool = ..., role: _Optional[str] = ...) -> None: ...
 
 class GetDailyUsageRequest(_message.Message):
     __slots__ = ("project_id", "date")

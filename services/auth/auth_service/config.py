@@ -44,6 +44,31 @@ class Settings(pydantic_settings.BaseSettings):
         description="gRPC server port",
     )
 
+    GRPC_KEEPALIVE_TIME_MS: int = pydantic.Field(
+        default=60000,
+        description="gRPC keepalive ping interval (ms)",
+    )
+
+    GRPC_KEEPALIVE_TIMEOUT_MS: int = pydantic.Field(
+        default=10000,
+        description="gRPC keepalive timeout (ms)",
+    )
+
+    GRPC_MAX_CONNECTION_IDLE_MS: int = pydantic.Field(
+        default=3600000,
+        description="Max connection idle time before server closes it (ms)",
+    )
+
+    GRPC_MAX_CONNECTION_AGE_MS: int = pydantic.Field(
+        default=86400000,
+        description="Max connection age before server forces reconnect (ms)",
+    )
+
+    GRPC_HTTP2_MIN_RECV_PING_INTERVAL_WITHOUT_DATA_MS: int = pydantic.Field(
+        default=20000,
+        description="Min interval between client pings server will accept when no data flows (ms)",
+    )
+
     # ==================== Database Configuration ====================
 
     AUTH_DB_HOST: str = pydantic.Field(

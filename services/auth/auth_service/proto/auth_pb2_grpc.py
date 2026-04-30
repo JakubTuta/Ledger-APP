@@ -89,6 +89,36 @@ class AuthServiceStub(object):
                 request_serializer=auth__pb2.GetProjectByIdRequest.SerializeToString,
                 response_deserializer=auth__pb2.GetProjectByIdResponse.FromString,
                 _registered_method=True)
+        self.GenerateInviteCode = channel.unary_unary(
+                '/auth.AuthService/GenerateInviteCode',
+                request_serializer=auth__pb2.GenerateInviteCodeRequest.SerializeToString,
+                response_deserializer=auth__pb2.GenerateInviteCodeResponse.FromString,
+                _registered_method=True)
+        self.AcceptInviteCode = channel.unary_unary(
+                '/auth.AuthService/AcceptInviteCode',
+                request_serializer=auth__pb2.AcceptInviteCodeRequest.SerializeToString,
+                response_deserializer=auth__pb2.AcceptInviteCodeResponse.FromString,
+                _registered_method=True)
+        self.ListProjectMembers = channel.unary_unary(
+                '/auth.AuthService/ListProjectMembers',
+                request_serializer=auth__pb2.ListProjectMembersRequest.SerializeToString,
+                response_deserializer=auth__pb2.ListProjectMembersResponse.FromString,
+                _registered_method=True)
+        self.RemoveProjectMember = channel.unary_unary(
+                '/auth.AuthService/RemoveProjectMember',
+                request_serializer=auth__pb2.RemoveProjectMemberRequest.SerializeToString,
+                response_deserializer=auth__pb2.RemoveProjectMemberResponse.FromString,
+                _registered_method=True)
+        self.LeaveProject = channel.unary_unary(
+                '/auth.AuthService/LeaveProject',
+                request_serializer=auth__pb2.LeaveProjectRequest.SerializeToString,
+                response_deserializer=auth__pb2.LeaveProjectResponse.FromString,
+                _registered_method=True)
+        self.GetProjectRole = channel.unary_unary(
+                '/auth.AuthService/GetProjectRole',
+                request_serializer=auth__pb2.GetProjectRoleRequest.SerializeToString,
+                response_deserializer=auth__pb2.GetProjectRoleResponse.FromString,
+                _registered_method=True)
         self.CreateApiKey = channel.unary_unary(
                 '/auth.AuthService/CreateApiKey',
                 request_serializer=auth__pb2.CreateApiKeyRequest.SerializeToString,
@@ -202,6 +232,43 @@ class AuthServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def GetProjectById(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GenerateInviteCode(self, request, context):
+        """Project sharing operations
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def AcceptInviteCode(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListProjectMembers(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RemoveProjectMember(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def LeaveProject(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetProjectRole(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -321,6 +388,36 @@ def add_AuthServiceServicer_to_server(servicer, server):
                     servicer.GetProjectById,
                     request_deserializer=auth__pb2.GetProjectByIdRequest.FromString,
                     response_serializer=auth__pb2.GetProjectByIdResponse.SerializeToString,
+            ),
+            'GenerateInviteCode': grpc.unary_unary_rpc_method_handler(
+                    servicer.GenerateInviteCode,
+                    request_deserializer=auth__pb2.GenerateInviteCodeRequest.FromString,
+                    response_serializer=auth__pb2.GenerateInviteCodeResponse.SerializeToString,
+            ),
+            'AcceptInviteCode': grpc.unary_unary_rpc_method_handler(
+                    servicer.AcceptInviteCode,
+                    request_deserializer=auth__pb2.AcceptInviteCodeRequest.FromString,
+                    response_serializer=auth__pb2.AcceptInviteCodeResponse.SerializeToString,
+            ),
+            'ListProjectMembers': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListProjectMembers,
+                    request_deserializer=auth__pb2.ListProjectMembersRequest.FromString,
+                    response_serializer=auth__pb2.ListProjectMembersResponse.SerializeToString,
+            ),
+            'RemoveProjectMember': grpc.unary_unary_rpc_method_handler(
+                    servicer.RemoveProjectMember,
+                    request_deserializer=auth__pb2.RemoveProjectMemberRequest.FromString,
+                    response_serializer=auth__pb2.RemoveProjectMemberResponse.SerializeToString,
+            ),
+            'LeaveProject': grpc.unary_unary_rpc_method_handler(
+                    servicer.LeaveProject,
+                    request_deserializer=auth__pb2.LeaveProjectRequest.FromString,
+                    response_serializer=auth__pb2.LeaveProjectResponse.SerializeToString,
+            ),
+            'GetProjectRole': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetProjectRole,
+                    request_deserializer=auth__pb2.GetProjectRoleRequest.FromString,
+                    response_serializer=auth__pb2.GetProjectRoleResponse.SerializeToString,
             ),
             'CreateApiKey': grpc.unary_unary_rpc_method_handler(
                     servicer.CreateApiKey,
@@ -665,6 +762,168 @@ class AuthService(object):
             '/auth.AuthService/GetProjectById',
             auth__pb2.GetProjectByIdRequest.SerializeToString,
             auth__pb2.GetProjectByIdResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GenerateInviteCode(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/GenerateInviteCode',
+            auth__pb2.GenerateInviteCodeRequest.SerializeToString,
+            auth__pb2.GenerateInviteCodeResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def AcceptInviteCode(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/AcceptInviteCode',
+            auth__pb2.AcceptInviteCodeRequest.SerializeToString,
+            auth__pb2.AcceptInviteCodeResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListProjectMembers(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/ListProjectMembers',
+            auth__pb2.ListProjectMembersRequest.SerializeToString,
+            auth__pb2.ListProjectMembersResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RemoveProjectMember(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/RemoveProjectMember',
+            auth__pb2.RemoveProjectMemberRequest.SerializeToString,
+            auth__pb2.RemoveProjectMemberResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def LeaveProject(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/LeaveProject',
+            auth__pb2.LeaveProjectRequest.SerializeToString,
+            auth__pb2.LeaveProjectResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetProjectRole(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/GetProjectRole',
+            auth__pb2.GetProjectRoleRequest.SerializeToString,
+            auth__pb2.GetProjectRoleResponse.FromString,
             options,
             channel_credentials,
             insecure,

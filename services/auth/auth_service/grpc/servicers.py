@@ -389,8 +389,9 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                         retention_days=p.retention_days,
                         daily_quota=p.daily_quota,
                         available_routes=p.available_routes or [],
+                        role=role,
                     )
-                    for p in projects
+                    for p, role in projects
                 ]
 
                 return auth_pb2.GetProjectsResponse(projects=project_infos)
@@ -558,6 +559,171 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f"Internal error: {str(e)}")
             return auth_pb2.ListApiKeysResponse()
+
+    # ==================== Project Sharing Operations ====================
+
+    async def GenerateInviteCode(
+        self,
+        request: auth_pb2.GenerateInviteCodeRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.GenerateInviteCodeResponse:
+        """Generate invite code for a project (owner only)."""
+        try:
+            async with database.get_session() as session:
+                code, expires_at = await self.auth_service.generate_invite_code(
+                    session=session,
+                    project_id=request.project_id,
+                    requester_account_id=request.requester_account_id,
+                )
+                return auth_pb2.GenerateInviteCodeResponse(
+                    code=code,
+                    expires_at=expires_at.isoformat(),
+                )
+        except PermissionError as e:
+            context.set_code(grpc.StatusCode.PERMISSION_DENIED)
+            context.set_details(str(e))
+            return auth_pb2.GenerateInviteCodeResponse()
+        except ValueError as e:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(str(e))
+            return auth_pb2.GenerateInviteCodeResponse()
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.GenerateInviteCodeResponse()
+
+    async def AcceptInviteCode(
+        self,
+        request: auth_pb2.AcceptInviteCodeRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.AcceptInviteCodeResponse:
+        """Accept invite code and join project as member."""
+        try:
+            async with database.get_session() as session:
+                project = await self.auth_service.accept_invite_code(
+                    session=session,
+                    code=request.code,
+                    account_id=request.account_id,
+                )
+                return auth_pb2.AcceptInviteCodeResponse(
+                    project_id=project.id,
+                    role="member",
+                    project_name=project.name,
+                    project_slug=project.slug,
+                )
+        except ValueError as e:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(str(e))
+            return auth_pb2.AcceptInviteCodeResponse()
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.AcceptInviteCodeResponse()
+
+    async def ListProjectMembers(
+        self,
+        request: auth_pb2.ListProjectMembersRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.ListProjectMembersResponse:
+        """List all members of a project."""
+        try:
+            async with database.get_session() as session:
+                members = await self.auth_service.list_project_members(
+                    session=session,
+                    project_id=request.project_id,
+                    requester_account_id=request.requester_account_id,
+                )
+                member_infos = [
+                    auth_pb2.MemberInfo(
+                        account_id=m["account_id"],
+                        email=m["email"],
+                        name=m["name"],
+                        role=m["role"],
+                        joined_at=m["joined_at"],
+                    )
+                    for m in members
+                ]
+                return auth_pb2.ListProjectMembersResponse(members=member_infos)
+        except PermissionError as e:
+            context.set_code(grpc.StatusCode.PERMISSION_DENIED)
+            context.set_details(str(e))
+            return auth_pb2.ListProjectMembersResponse()
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.ListProjectMembersResponse()
+
+    async def RemoveProjectMember(
+        self,
+        request: auth_pb2.RemoveProjectMemberRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.RemoveProjectMemberResponse:
+        """Remove a member from a project (owner only)."""
+        try:
+            async with database.get_session() as session:
+                await self.auth_service.remove_project_member(
+                    session=session,
+                    project_id=request.project_id,
+                    account_id=request.account_id,
+                    requester_account_id=request.requester_account_id,
+                )
+                return auth_pb2.RemoveProjectMemberResponse(success=True)
+        except PermissionError as e:
+            context.set_code(grpc.StatusCode.PERMISSION_DENIED)
+            context.set_details(str(e))
+            return auth_pb2.RemoveProjectMemberResponse(success=False)
+        except ValueError as e:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(str(e))
+            return auth_pb2.RemoveProjectMemberResponse(success=False)
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.RemoveProjectMemberResponse(success=False)
+
+    async def LeaveProject(
+        self,
+        request: auth_pb2.LeaveProjectRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.LeaveProjectResponse:
+        """Leave a project."""
+        try:
+            async with database.get_session() as session:
+                await self.auth_service.leave_project(
+                    session=session,
+                    project_id=request.project_id,
+                    account_id=request.account_id,
+                )
+                return auth_pb2.LeaveProjectResponse(success=True)
+        except ValueError as e:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(str(e))
+            return auth_pb2.LeaveProjectResponse(success=False)
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.LeaveProjectResponse(success=False)
+
+    async def GetProjectRole(
+        self,
+        request: auth_pb2.GetProjectRoleRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.GetProjectRoleResponse:
+        """Get a user's role in a project."""
+        try:
+            async with database.get_session() as session:
+                role = await self.auth_service.get_project_role(
+                    session=session,
+                    project_id=request.project_id,
+                    account_id=request.account_id,
+                )
+                if role is None:
+                    return auth_pb2.GetProjectRoleResponse(is_member=False, role="")
+                return auth_pb2.GetProjectRoleResponse(is_member=True, role=role)
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.GetProjectRoleResponse(is_member=False, role="")
 
     # ==================== Usage Tracking Operations ====================
 

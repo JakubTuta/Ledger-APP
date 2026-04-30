@@ -154,7 +154,7 @@ async def get_aggregated_metrics(
                 query = sa.text(f"""
                     SELECT
                         date,
-                        endpoint_method,
+                        NULL as endpoint_method,
                         endpoint_path,
                         NULL as log_level,
                         NULL as log_type,
@@ -167,8 +167,8 @@ async def get_aggregated_metrics(
                         AVG(p99_duration_ms) as p99_duration_ms
                     FROM aggregated_metrics
                     WHERE {where_clause}
-                    GROUP BY date, endpoint_method, endpoint_path
-                    ORDER BY date, endpoint_path, endpoint_method
+                    GROUP BY date, endpoint_path
+                    ORDER BY date, endpoint_path
                 """)
             elif metric_type == "log_volume":
                 query = sa.text("""
@@ -234,49 +234,98 @@ async def get_aggregated_metrics(
             result = await session.execute(query, params)
             rows = result.fetchall()
 
-            data_map = {row[0]: row for row in rows}
+            if metric_type == "endpoint":
+                data_map = {(row[0], row[2]): row for row in rows}
+                unique_paths = list(dict.fromkeys(row[2] for row in rows))
+                if not unique_paths and endpoint_path:
+                    unique_paths = [endpoint_path]
 
-            all_buckets = _generate_time_buckets(start_date, end_date, granularity)
+                all_buckets = _generate_time_buckets(start_date, end_date, granularity)
 
-            filled_data = []
-            for date_str, _ in all_buckets:
-                if date_str in data_map:
-                    row = data_map[date_str]
-                    filled_data.append(
-                        schemas.AggregatedMetricData(
-                            date=row[0],
-                            hour=None,
-                            endpoint_method=row[1],
-                            endpoint_path=row[2],
-                            log_level=row[3],
-                            log_type=row[4],
-                            log_count=row[5],
-                            error_count=row[6],
-                            avg_duration_ms=row[7],
-                            min_duration_ms=row[8],
-                            max_duration_ms=row[9],
-                            p95_duration_ms=row[10],
-                            p99_duration_ms=row[11],
+                filled_data = []
+                for date_str, _ in all_buckets:
+                    for path in unique_paths:
+                        key = (date_str, path)
+                        if key in data_map:
+                            row = data_map[key]
+                            filled_data.append(
+                                schemas.AggregatedMetricData(
+                                    date=row[0],
+                                    hour=None,
+                                    endpoint_method=row[1],
+                                    endpoint_path=row[2],
+                                    log_level=row[3],
+                                    log_type=row[4],
+                                    log_count=row[5],
+                                    error_count=row[6],
+                                    avg_duration_ms=row[7],
+                                    min_duration_ms=row[8],
+                                    max_duration_ms=row[9],
+                                    p95_duration_ms=row[10],
+                                    p99_duration_ms=row[11],
+                                )
+                            )
+                        else:
+                            filled_data.append(
+                                schemas.AggregatedMetricData(
+                                    date=date_str,
+                                    hour=None,
+                                    endpoint_method=None,
+                                    endpoint_path=path,
+                                    log_level=None,
+                                    log_type=None,
+                                    log_count=0,
+                                    error_count=0,
+                                    avg_duration_ms=None,
+                                    min_duration_ms=None,
+                                    max_duration_ms=None,
+                                    p95_duration_ms=None,
+                                    p99_duration_ms=None,
+                                )
+                            )
+            else:
+                data_map = {row[0]: row for row in rows}
+                all_buckets = _generate_time_buckets(start_date, end_date, granularity)
+
+                filled_data = []
+                for date_str, _ in all_buckets:
+                    if date_str in data_map:
+                        row = data_map[date_str]
+                        filled_data.append(
+                            schemas.AggregatedMetricData(
+                                date=row[0],
+                                hour=None,
+                                endpoint_method=row[1],
+                                endpoint_path=row[2],
+                                log_level=row[3],
+                                log_type=row[4],
+                                log_count=row[5],
+                                error_count=row[6],
+                                avg_duration_ms=row[7],
+                                min_duration_ms=row[8],
+                                max_duration_ms=row[9],
+                                p95_duration_ms=row[10],
+                                p99_duration_ms=row[11],
+                            )
                         )
-                    )
-                else:
-                    filled_data.append(
-                        schemas.AggregatedMetricData(
-                            date=date_str,
-                            hour=None,
-                            endpoint_method=None,
-                            endpoint_path=endpoint_path if endpoint_path else None,
-                            log_level=None,
-                            log_type=None,
-                            log_count=0,
-                            error_count=0,
-                            avg_duration_ms=None,
-                            min_duration_ms=None,
-                            max_duration_ms=None,
-                            p95_duration_ms=None,
-                            p99_duration_ms=None,
+                    else:
+                        filled_data.append(
+                            schemas.AggregatedMetricData(
+                                date=date_str,
+                                hour=None,
+                                endpoint_method=None,
+                                endpoint_path=endpoint_path if endpoint_path else None,
+                                log_level=None,
+                                log_type=None,
+                                log_count=0,
+                                error_count=0,
+                                avg_duration_ms=None,
+                                min_duration_ms=None,
+                                max_duration_ms=None,
+                                p95_duration_ms=None,
+                                p99_duration_ms=None,
+                            )
                         )
-                    )
 
             return filled_data
 

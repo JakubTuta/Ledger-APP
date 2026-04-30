@@ -25,10 +25,11 @@ async def serve():
 
     server = grpc.aio.server(
         options=[
-            ("grpc.keepalive_time_ms", 30000),
-            ("grpc.keepalive_timeout_ms", 10000),
-            ("grpc.max_connection_idle_ms", 3600000),
-            ("grpc.max_connection_age_ms", 86400000),
+            ("grpc.keepalive_time_ms", config.settings.GRPC_KEEPALIVE_TIME_MS),
+            ("grpc.keepalive_timeout_ms", config.settings.GRPC_KEEPALIVE_TIMEOUT_MS),
+            ("grpc.max_connection_idle_ms", config.settings.GRPC_MAX_CONNECTION_IDLE_MS),
+            ("grpc.max_connection_age_ms", config.settings.GRPC_MAX_CONNECTION_AGE_MS),
+            ("grpc.http2.min_recv_ping_interval_without_data_ms", config.settings.GRPC_HTTP2_MIN_RECV_PING_INTERVAL_WITHOUT_DATA_MS),
         ]
     )
     ingestion_pb2_grpc.add_IngestionServiceServicer_to_server(

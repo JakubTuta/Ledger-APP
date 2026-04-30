@@ -47,6 +47,15 @@ from gateway_service.schemas.query import (
     LogEntryResponse,
     LogsListResponse,
 )
+from gateway_service.schemas.sharing import (
+    AcceptInviteCodeRequest,
+    AcceptInviteCodeResponse,
+    GenerateInviteCodeResponse,
+    LeaveProjectResponse,
+    ListMembersResponse,
+    MemberInfo,
+    RemoveMemberResponse,
+)
 from gateway_service.schemas.settings import (
     Constraints,
     Features,
@@ -86,6 +95,14 @@ __all__ = [
     "PanelListResponse",
     "UpdatePanelRequest",
     "DeletePanelResponse",
+    # Sharing schemas
+    "GenerateInviteCodeResponse",
+    "AcceptInviteCodeRequest",
+    "AcceptInviteCodeResponse",
+    "MemberInfo",
+    "ListMembersResponse",
+    "RemoveMemberResponse",
+    "LeaveProjectResponse",
     # Settings schemas
     "RateLimits",
     "Quotas",
