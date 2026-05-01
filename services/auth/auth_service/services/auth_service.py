@@ -714,61 +714,46 @@ class AuthService:
         session: AsyncSession,
         raw_token: str,
     ) -> models.Account | None:
-        """
-        Validate refresh token and return associated account.
+        token_hash = jwt_utils.hash_refresh_token(raw_token)
 
-        Args:
-            session: Database session
-            raw_token: Raw refresh token from client
-
-        Returns:
-            Account if token is valid, None otherwise
-        """
         result = await session.execute(
             select(models.RefreshToken).where(
+                models.RefreshToken.token_hash == token_hash,
                 models.RefreshToken.revoked == False,
                 models.RefreshToken.expires_at > datetime.now(timezone.utc),
             )
         )
-        refresh_tokens = result.scalars().all()
+        token_record = result.scalars().first()
 
-        for token_record in refresh_tokens:
-            if jwt_utils.verify_refresh_token(raw_token, token_record.token_hash):
-                token_record.last_used_at = datetime.now(timezone.utc)
-                await session.commit()
+        if not token_record:
+            return None
 
-                account = await self.get_account_by_id(session, token_record.account_id)
-                return account
+        token_record.last_used_at = datetime.now(timezone.utc)
+        await session.commit()
 
-        return None
+        return await self.get_account_by_id(session, token_record.account_id)
 
     async def revoke_refresh_token(
         self,
         session: AsyncSession,
         raw_token: str,
     ) -> bool:
-        """
-        Revoke a specific refresh token.
+        token_hash = jwt_utils.hash_refresh_token(raw_token)
 
-        Args:
-            session: Database session
-            raw_token: Raw refresh token to revoke
-
-        Returns:
-            True if token was found and revoked, False otherwise
-        """
         result = await session.execute(
-            select(models.RefreshToken).where(models.RefreshToken.revoked == False)
+            select(models.RefreshToken).where(
+                models.RefreshToken.token_hash == token_hash,
+                models.RefreshToken.revoked == False,
+            )
         )
-        refresh_tokens = result.scalars().all()
+        token_record = result.scalars().first()
 
-        for token_record in refresh_tokens:
-            if jwt_utils.verify_refresh_token(raw_token, token_record.token_hash):
-                token_record.revoked = True
-                await session.commit()
-                return True
+        if not token_record:
+            return False
 
-        return False
+        token_record.revoked = True
+        await session.commit()
+        return True
 
     async def revoke_all_refresh_tokens(
         self,

@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import json
 import logging
 import typing
 
@@ -19,6 +20,21 @@ class GRPCChannelPool:
         self.current_index = 0
         self._lock = asyncio.Lock()
 
+    def _service_config(self) -> str:
+        return json.dumps({
+            "methodConfig": [{
+                "name": [{}],
+                "waitForReady": True,
+                "retryPolicy": {
+                    "maxAttempts": 3,
+                    "initialBackoff": "0.5s",
+                    "maxBackoff": "5s",
+                    "backoffMultiplier": 2,
+                    "retryableStatusCodes": ["UNAVAILABLE"],
+                },
+            }]
+        })
+
     def _channel_options(self) -> typing.List[typing.Tuple]:
         return [
             ("grpc.max_receive_message_length", 100 * 1024 * 1024),
@@ -30,6 +46,7 @@ class GRPCChannelPool:
             ("grpc.http2.max_pings_without_data", config.settings.GRPC_HTTP2_MAX_PINGS_WITHOUT_DATA),
             ("grpc.http2.min_time_between_pings_ms", config.settings.GRPC_HTTP2_MIN_TIME_BETWEEN_PINGS_MS),
             ("grpc.http2.min_ping_interval_without_data_ms", config.settings.GRPC_HTTP2_MIN_PING_INTERVAL_WITHOUT_DATA_MS),
+            ("grpc.service_config", self._service_config()),
         ]
 
     def _create_channel(self) -> grpc.aio.Channel:

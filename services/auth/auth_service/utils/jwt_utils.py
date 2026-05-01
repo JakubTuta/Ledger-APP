@@ -1,8 +1,9 @@
 import datetime
+import hashlib
+import hmac
 import secrets
 import typing
 
-import bcrypt
 import jwt
 
 import auth_service.config as config
@@ -38,19 +39,18 @@ def create_access_token(account_id: int, email: str) -> str:
     return token
 
 
+def hash_refresh_token(raw_token: str) -> str:
+    return hmac.new(
+        key=settings.JWT_SECRET.encode(),
+        msg=raw_token.encode(),
+        digestmod=hashlib.sha256,
+    ).hexdigest()
+
+
 def create_refresh_token() -> tuple[str, str]:
-    """
-    Generate cryptographically secure refresh token.
-
-    Returns:
-        Tuple of (raw_token, bcrypt_hash)
-        - raw_token: To send to client
-        - bcrypt_hash: To store in database
-    """
     raw_token = secrets.token_urlsafe(48)
-    token_hash = bcrypt.hashpw(raw_token.encode(), bcrypt.gensalt(settings.BCRYPT_ROUNDS))
-
-    return raw_token, token_hash.decode()
+    token_hash = hash_refresh_token(raw_token)
+    return raw_token, token_hash
 
 
 def verify_access_token(token: str) -> typing.Dict[str, typing.Any]:
@@ -76,18 +76,9 @@ def verify_access_token(token: str) -> typing.Dict[str, typing.Any]:
 
 
 def verify_refresh_token(raw_token: str, stored_hash: str) -> bool:
-    """
-    Verify refresh token against stored bcrypt hash.
-
-    Args:
-        raw_token: Raw token from client
-        stored_hash: Bcrypt hash from database
-
-    Returns:
-        True if token matches hash, False otherwise
-    """
     try:
-        return bcrypt.checkpw(raw_token.encode(), stored_hash.encode())
+        expected = hash_refresh_token(raw_token)
+        return hmac.compare_digest(expected, stored_hash)
     except Exception:
         return False
 
