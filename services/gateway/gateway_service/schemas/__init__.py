@@ -20,10 +20,16 @@ from gateway_service.schemas.auth import (
 )
 from gateway_service.schemas.dashboard import (
     DeletePanelResponse,
+    PanelLayout,
     PanelListResponse,
     PanelRequest,
     PanelResponse,
     UpdatePanelRequest,
+)
+from gateway_service.schemas.health import (
+    HealthSummary,
+    HealthSummaryResponse,
+    HealthThresholds,
 )
 from gateway_service.schemas.ingestion import (
     BatchLogRequest,
@@ -90,11 +96,16 @@ __all__ = [
     "ApiKeyInfo",
     "ListApiKeysResponse",
     # Dashboard schemas
+    "PanelLayout",
     "PanelRequest",
     "PanelResponse",
     "PanelListResponse",
     "UpdatePanelRequest",
     "DeletePanelResponse",
+    # Health schemas
+    "HealthThresholds",
+    "HealthSummary",
+    "HealthSummaryResponse",
     # Sharing schemas
     "GenerateInviteCodeResponse",
     "AcceptInviteCodeRequest",

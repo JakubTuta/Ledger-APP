@@ -335,6 +335,13 @@ message ListApiKeysResponse {
 
 // ==================== Dashboard Panel Messages ====================
 
+message PanelLayout {
+  int32 x = 1;
+  int32 y = 2;
+  int32 w = 3;
+  int32 h = 4;
+}
+
 message Panel {
   string id = 1;
   string name = 2;
@@ -347,6 +354,7 @@ message Panel {
   string endpoint = 9;
   repeated string routes = 10;
   string statistic = 11;
+  optional PanelLayout layout = 12;
 }
 
 message GetDashboardPanelsRequest {
@@ -369,6 +377,7 @@ message CreateDashboardPanelRequest {
   string endpoint = 9;
   repeated string routes = 10;
   string statistic = 11;
+  optional PanelLayout layout = 12;
 }
 
 message CreateDashboardPanelResponse {
@@ -388,6 +397,7 @@ message UpdateDashboardPanelRequest {
   string endpoint = 10;
   repeated string routes = 11;
   string statistic = 12;
+  optional PanelLayout layout = 13;
 }
 
 message UpdateDashboardPanelResponse {

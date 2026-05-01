@@ -8,6 +8,7 @@ import query_service.proto.query_pb2_grpc as query_pb2_grpc
 import query_service.schemas as schemas
 import query_service.services.aggregated_metrics as aggregated_metrics_service
 import query_service.services.bottleneck_metrics as bottleneck_metrics_service
+import query_service.services.health_summary as health_summary_service
 import query_service.services.log_query as log_query
 import query_service.services.metrics as metrics_service
 
@@ -533,4 +534,47 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
         except Exception as e:
             await context.abort(
                 grpc.StatusCode.INTERNAL, f"Get bottleneck metrics failed: {str(e)}"
+            )
+
+    async def GetHealthSummary(
+        self,
+        request: query_pb2.GetHealthSummaryRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> query_pb2.GetHealthSummaryResponse:
+        try:
+            project_ids = [int(pid) for pid in request.project_ids]
+            period = request.period if request.period else "today"
+
+            summaries = await health_summary_service.get_health_summaries(
+                project_ids=project_ids,
+                period=period,
+            )
+
+            summary_messages = [
+                query_pb2.HealthSummary(
+                    project_id=s["project_id"],
+                    error_rate=s["error_rate"],
+                    p95_ms=s["p95_ms"],
+                    rps=s["rps"],
+                    status=s["status"],
+                    sparkline=s["sparkline"],
+                    thresholds=query_pb2.HealthThresholds(
+                        error_rate_warn=s["thresholds"]["error_rate_warn"],
+                        error_rate_crit=s["thresholds"]["error_rate_crit"],
+                        p95_warn_ms=s["thresholds"]["p95_warn_ms"],
+                        p95_crit_ms=s["thresholds"]["p95_crit_ms"],
+                    ),
+                    generated_at=s["generated_at"],
+                )
+                for s in summaries
+            ]
+
+            return query_pb2.GetHealthSummaryResponse(summaries=summary_messages)
+
+        except ValueError as e:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
+
+        except Exception as e:
+            await context.abort(
+                grpc.StatusCode.INTERNAL, f"Get health summary failed: {str(e)}"
             )

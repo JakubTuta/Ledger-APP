@@ -56,6 +56,12 @@ async def get_dashboard_panels(
                 endpoint=panel.endpoint if panel.endpoint else None,
                 routes=list(panel.routes) if panel.routes else None,
                 statistic=panel.statistic if panel.statistic else None,
+                layout=schemas.PanelLayout(
+                    x=panel.layout.x,
+                    y=panel.layout.y,
+                    w=panel.layout.w,
+                    h=panel.layout.h,
+                ) if panel.HasField("layout") else None,
             )
             for panel in response.panels
         ]
@@ -133,6 +139,13 @@ async def create_dashboard_panel(
             grpc_request_kwargs["periodFrom"] = request_data.periodFrom
         if request_data.periodTo is not None:
             grpc_request_kwargs["periodTo"] = request_data.periodTo
+        if request_data.layout is not None:
+            grpc_request_kwargs["layout"] = auth_pb2.PanelLayout(
+                x=request_data.layout.x,
+                y=request_data.layout.y,
+                w=request_data.layout.w,
+                h=request_data.layout.h,
+            )
 
         grpc_request = auth_pb2.CreateDashboardPanelRequest(**grpc_request_kwargs)
 
@@ -144,6 +157,15 @@ async def create_dashboard_panel(
             raise fastapi.HTTPException(
                 status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to create panel",
+            )
+
+        panel_layout = None
+        if response.panel.HasField("layout"):
+            panel_layout = schemas.PanelLayout(
+                x=response.panel.layout.x,
+                y=response.panel.layout.y,
+                w=response.panel.layout.w,
+                h=response.panel.layout.h,
             )
 
         return schemas.PanelResponse(
@@ -158,6 +180,7 @@ async def create_dashboard_panel(
             endpoint=response.panel.endpoint if response.panel.endpoint else None,
             routes=list(response.panel.routes) if response.panel.routes else None,
             statistic=response.panel.statistic if response.panel.statistic else None,
+            layout=panel_layout,
         )
 
     except asyncio.TimeoutError:
@@ -233,6 +256,13 @@ async def update_dashboard_panel(
             grpc_request_kwargs["periodFrom"] = request_data.periodFrom
         if request_data.periodTo is not None:
             grpc_request_kwargs["periodTo"] = request_data.periodTo
+        if request_data.layout is not None:
+            grpc_request_kwargs["layout"] = auth_pb2.PanelLayout(
+                x=request_data.layout.x,
+                y=request_data.layout.y,
+                w=request_data.layout.w,
+                h=request_data.layout.h,
+            )
 
         grpc_request = auth_pb2.UpdateDashboardPanelRequest(**grpc_request_kwargs)
 
@@ -244,6 +274,15 @@ async def update_dashboard_panel(
             raise fastapi.HTTPException(
                 status_code=fastapi.status.HTTP_404_NOT_FOUND,
                 detail=f"Panel {panel_id} not found",
+            )
+
+        panel_layout = None
+        if response.panel.HasField("layout"):
+            panel_layout = schemas.PanelLayout(
+                x=response.panel.layout.x,
+                y=response.panel.layout.y,
+                w=response.panel.layout.w,
+                h=response.panel.layout.h,
             )
 
         return schemas.PanelResponse(
@@ -258,6 +297,7 @@ async def update_dashboard_panel(
             endpoint=response.panel.endpoint if response.panel.endpoint else None,
             routes=list(response.panel.routes) if response.panel.routes else None,
             statistic=response.panel.statistic if response.panel.statistic else None,
+            layout=panel_layout,
         )
 
     except asyncio.TimeoutError:

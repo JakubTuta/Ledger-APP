@@ -10,6 +10,7 @@ from gateway_service.routes import (
     api_key_routes,
     auth_routes,
     dashboard_routes,
+    health_routes,
     ingestion_routes,
     notifications,
     project_routes,
@@ -304,6 +305,7 @@ include_router(auth_routes.router, prefix="/api/v1")
 include_router(project_routes.router, prefix="/api/v1")
 include_router(api_key_routes.router, prefix="/api/v1")
 include_router(dashboard_routes.router, prefix="/api/v1")
+include_router(health_routes.router, prefix="/api/v1")
 include_router(ingestion_routes.router, prefix="/api/v1")
 include_router(query_routes.router, prefix="/api/v1")
 include_router(notifications.router, prefix="/api/v1")

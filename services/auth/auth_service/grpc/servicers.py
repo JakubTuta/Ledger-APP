@@ -785,6 +785,7 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                         endpoint=panel.get("endpoint", ""),
                         routes=panel.get("routes", []),
                         statistic=panel.get("statistic", ""),
+                        layout=auth_pb2.PanelLayout(**panel["layout"]) if panel.get("layout") else None,
                     )
                     for panel in panels
                 ]
@@ -804,6 +805,10 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
         """Create a new dashboard panel."""
         try:
             async with database.get_session() as session:
+                req_layout = None
+                if request.HasField("layout"):
+                    req_layout = {"x": request.layout.x, "y": request.layout.y, "w": request.layout.w, "h": request.layout.h}
+
                 panel = await self.dashboard_service.create_dashboard_panel(
                     session=session,
                     user_id=request.user_id,
@@ -817,6 +822,7 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     endpoint=request.endpoint if request.endpoint else None,
                     routes=list(request.routes) if request.routes else None,
                     statistic=request.statistic if request.statistic else None,
+                    layout=req_layout,
                 )
 
                 panel_message = auth_pb2.Panel(
@@ -831,6 +837,7 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     endpoint=panel.get("endpoint", ""),
                     routes=panel.get("routes", []),
                     statistic=panel.get("statistic", ""),
+                    layout=auth_pb2.PanelLayout(**panel["layout"]) if panel.get("layout") else None,
                 )
 
                 return auth_pb2.CreateDashboardPanelResponse(panel=panel_message)
@@ -853,6 +860,10 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
         """Update an existing dashboard panel."""
         try:
             async with database.get_session() as session:
+                req_layout = None
+                if request.HasField("layout"):
+                    req_layout = {"x": request.layout.x, "y": request.layout.y, "w": request.layout.w, "h": request.layout.h}
+
                 panel = await self.dashboard_service.update_dashboard_panel(
                     session=session,
                     user_id=request.user_id,
@@ -867,6 +878,7 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     endpoint=request.endpoint if request.endpoint else None,
                     routes=list(request.routes) if request.routes else None,
                     statistic=request.statistic if request.statistic else None,
+                    layout=req_layout,
                 )
 
                 panel_message = auth_pb2.Panel(
@@ -881,6 +893,7 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     endpoint=panel.get("endpoint", ""),
                     routes=panel.get("routes", []),
                     statistic=panel.get("statistic", ""),
+                    layout=auth_pb2.PanelLayout(**panel["layout"]) if panel.get("layout") else None,
                 )
 
                 return auth_pb2.UpdateDashboardPanelResponse(panel=panel_message)

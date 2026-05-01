@@ -427,3 +427,49 @@ class GetBottleneckMetricsResponse(_message.Message):
     end_date: str
     data: _containers.RepeatedCompositeFieldContainer[BottleneckMetricDataPoint]
     def __init__(self, project_id: _Optional[int] = ..., statistic: _Optional[str] = ..., granularity: _Optional[str] = ..., start_date: _Optional[str] = ..., end_date: _Optional[str] = ..., data: _Optional[_Iterable[_Union[BottleneckMetricDataPoint, _Mapping]]] = ...) -> None: ...
+
+class GetHealthSummaryRequest(_message.Message):
+    __slots__ = ("project_ids", "period")
+    PROJECT_IDS_FIELD_NUMBER: _ClassVar[int]
+    PERIOD_FIELD_NUMBER: _ClassVar[int]
+    project_ids: _containers.RepeatedScalarFieldContainer[str]
+    period: str
+    def __init__(self, project_ids: _Optional[_Iterable[str]] = ..., period: _Optional[str] = ...) -> None: ...
+
+class HealthThresholds(_message.Message):
+    __slots__ = ("error_rate_warn", "error_rate_crit", "p95_warn_ms", "p95_crit_ms")
+    ERROR_RATE_WARN_FIELD_NUMBER: _ClassVar[int]
+    ERROR_RATE_CRIT_FIELD_NUMBER: _ClassVar[int]
+    P95_WARN_MS_FIELD_NUMBER: _ClassVar[int]
+    P95_CRIT_MS_FIELD_NUMBER: _ClassVar[int]
+    error_rate_warn: float
+    error_rate_crit: float
+    p95_warn_ms: int
+    p95_crit_ms: int
+    def __init__(self, error_rate_warn: _Optional[float] = ..., error_rate_crit: _Optional[float] = ..., p95_warn_ms: _Optional[int] = ..., p95_crit_ms: _Optional[int] = ...) -> None: ...
+
+class HealthSummary(_message.Message):
+    __slots__ = ("project_id", "error_rate", "p95_ms", "rps", "status", "sparkline", "thresholds", "generated_at")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    ERROR_RATE_FIELD_NUMBER: _ClassVar[int]
+    P95_MS_FIELD_NUMBER: _ClassVar[int]
+    RPS_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    SPARKLINE_FIELD_NUMBER: _ClassVar[int]
+    THRESHOLDS_FIELD_NUMBER: _ClassVar[int]
+    GENERATED_AT_FIELD_NUMBER: _ClassVar[int]
+    project_id: str
+    error_rate: float
+    p95_ms: float
+    rps: float
+    status: str
+    sparkline: _containers.RepeatedScalarFieldContainer[int]
+    thresholds: HealthThresholds
+    generated_at: str
+    def __init__(self, project_id: _Optional[str] = ..., error_rate: _Optional[float] = ..., p95_ms: _Optional[float] = ..., rps: _Optional[float] = ..., status: _Optional[str] = ..., sparkline: _Optional[_Iterable[int]] = ..., thresholds: _Optional[_Union[HealthThresholds, _Mapping]] = ..., generated_at: _Optional[str] = ...) -> None: ...
+
+class GetHealthSummaryResponse(_message.Message):
+    __slots__ = ("summaries",)
+    SUMMARIES_FIELD_NUMBER: _ClassVar[int]
+    summaries: _containers.RepeatedCompositeFieldContainer[HealthSummary]
+    def __init__(self, summaries: _Optional[_Iterable[_Union[HealthSummary, _Mapping]]] = ...) -> None: ...

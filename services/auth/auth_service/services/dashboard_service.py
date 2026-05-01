@@ -82,6 +82,7 @@ class DashboardService:
         endpoint: str | None = None,
         routes: list[str] | None = None,
         statistic: str | None = None,
+        layout: dict | None = None,
     ) -> dict:
         """Create a new dashboard panel."""
 
@@ -117,6 +118,12 @@ class DashboardService:
 
         panel_id = self._generate_panel_id()
 
+        if layout is not None:
+            if layout.get("x", 0) < 0 or layout.get("y", 0) < 0:
+                raise ValueError("layout x and y must be >= 0")
+            if layout.get("w", 1) <= 0 or layout.get("h", 1) <= 0:
+                raise ValueError("layout w and h must be > 0")
+
         new_panel = {
             "id": panel_id,
             "name": name,
@@ -129,6 +136,7 @@ class DashboardService:
             "endpoint": endpoint,
             "routes": routes if routes else [],
             "statistic": statistic if statistic else "",
+            "layout": layout,
         }
 
         result = await session.execute(
@@ -171,6 +179,7 @@ class DashboardService:
         endpoint: str | None = None,
         routes: list[str] | None = None,
         statistic: str | None = None,
+        layout: dict | None = None,
     ) -> dict:
         """Update an existing dashboard panel."""
 
@@ -215,6 +224,12 @@ class DashboardService:
         panels = dashboard.panels.copy()
         panel_found = False
 
+        if layout is not None:
+            if layout.get("x", 0) < 0 or layout.get("y", 0) < 0:
+                raise ValueError("layout x and y must be >= 0")
+            if layout.get("w", 1) <= 0 or layout.get("h", 1) <= 0:
+                raise ValueError("layout w and h must be > 0")
+
         for i, panel in enumerate(panels):
             if panel["id"] == panel_id:
                 panels[i] = {
@@ -229,6 +244,7 @@ class DashboardService:
                     "endpoint": endpoint,
                     "routes": routes if routes else [],
                     "statistic": statistic if statistic else "",
+                    "layout": layout,
                 }
                 panel_found = True
                 break

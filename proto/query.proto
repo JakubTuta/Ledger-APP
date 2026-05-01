@@ -13,6 +13,7 @@ service QueryService {
     rpc GetAggregatedMetrics(GetAggregatedMetricsRequest) returns (GetAggregatedMetricsResponse);
     rpc GetErrorList(GetErrorListRequest) returns (GetErrorListResponse);
     rpc GetBottleneckMetrics(GetBottleneckMetricsRequest) returns (GetBottleneckMetricsResponse);
+    rpc GetHealthSummary(GetHealthSummaryRequest) returns (GetHealthSummaryResponse);
 }
 
 message QueryLogsRequest {
@@ -252,4 +253,31 @@ message GetBottleneckMetricsResponse {
     string start_date = 4;
     string end_date = 5;
     repeated BottleneckMetricDataPoint data = 6;
+}
+
+message GetHealthSummaryRequest {
+    repeated string project_ids = 1;
+    optional string period = 2;
+}
+
+message HealthThresholds {
+    double error_rate_warn = 1;
+    double error_rate_crit = 2;
+    int32 p95_warn_ms = 3;
+    int32 p95_crit_ms = 4;
+}
+
+message HealthSummary {
+    string project_id = 1;
+    double error_rate = 2;
+    double p95_ms = 3;
+    double rps = 4;
+    string status = 5;
+    repeated int32 sparkline = 6;
+    HealthThresholds thresholds = 7;
+    string generated_at = 8;
+}
+
+message GetHealthSummaryResponse {
+    repeated HealthSummary summaries = 1;
 }

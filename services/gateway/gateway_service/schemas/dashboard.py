@@ -1,6 +1,13 @@
 import pydantic
 
 
+class PanelLayout(pydantic.BaseModel):
+    x: int = pydantic.Field(..., ge=0, description="Grid column position (0-based)")
+    y: int = pydantic.Field(..., ge=0, description="Grid row position (0-based)")
+    w: int = pydantic.Field(..., gt=0, description="Width in grid columns")
+    h: int = pydantic.Field(..., gt=0, description="Height in grid rows")
+
+
 class PanelRequest(pydantic.BaseModel):
     """Request body for creating a dashboard panel."""
 
@@ -54,6 +61,10 @@ class PanelRequest(pydantic.BaseModel):
         pattern=r"^(min|max|avg|median|count)$",
         description="Statistic to display (required for bottleneck type panels): min/max/avg/median duration (ms) or request count",
         examples=["avg"],
+    )
+    layout: PanelLayout | None = pydantic.Field(
+        None,
+        description="Optional grid layout position. Omit to use default responsive layout.",
     )
 
     @pydantic.model_validator(mode="after")
@@ -125,6 +136,7 @@ class PanelResponse(pydantic.BaseModel):
     endpoint: str | None = pydantic.Field(None, description="Endpoint route (for metrics panels)")
     routes: list[str] | None = pydantic.Field(None, description="List of route paths (for bottleneck panels)")
     statistic: str | None = pydantic.Field(None, description="Statistic type (for bottleneck panels)")
+    layout: PanelLayout | None = pydantic.Field(None, description="Grid layout position (for resizable grid)")
 
     model_config = pydantic.ConfigDict(
         json_schema_extra={
@@ -259,6 +271,10 @@ class UpdatePanelRequest(pydantic.BaseModel):
         pattern=r"^(min|max|avg|median|count)$",
         description="Statistic to display (required for bottleneck type panels): min/max/avg/median duration (ms) or request count",
         examples=["avg"],
+    )
+    layout: PanelLayout | None = pydantic.Field(
+        None,
+        description="Optional grid layout position. Omit or set null to use default responsive layout.",
     )
 
     @pydantic.model_validator(mode="after")
