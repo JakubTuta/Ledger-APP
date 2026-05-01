@@ -113,7 +113,7 @@ class RefreshToken(database.Base):
     )
 
     token_hash: Mapped[str] = mapped_column(
-        CHAR(60), unique=True, nullable=False, index=True
+        CHAR(64), unique=True, nullable=False, index=True
     )
 
     device_info: Mapped[str | None] = mapped_column(VARCHAR(255), nullable=True)

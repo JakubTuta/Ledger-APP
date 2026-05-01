@@ -31,7 +31,7 @@ ON accounts USING GIN(notification_preferences);
 CREATE TABLE refresh_tokens (
     id BIGSERIAL PRIMARY KEY,
     account_id BIGINT NOT NULL,
-    token_hash CHAR(60) NOT NULL UNIQUE,
+    token_hash CHAR(64) NOT NULL UNIQUE,
     device_info VARCHAR(255),
     expires_at TIMESTAMPTZ NOT NULL,
     revoked BOOLEAN DEFAULT FALSE NOT NULL,
