@@ -156,6 +156,13 @@ class AggregatedMetricData(pydantic.BaseModel):
     p95_duration_ms: int | None = None
     p99_duration_ms: int | None = None
 
+    @pydantic.field_validator("p95_duration_ms", "p99_duration_ms", mode="before")
+    @classmethod
+    def coerce_to_int(cls, v: typing.Any) -> int | None:
+        if v is None:
+            return None
+        return int(round(float(v)))
+
 
 class AggregatedMetricsResponse(pydantic.BaseModel):
     project_id: int

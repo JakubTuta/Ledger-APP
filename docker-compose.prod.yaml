@@ -1,4 +1,29 @@
 services:
+  ledger-web-app:
+    image: container-registry.jtuta.cloud/ledger/web-app:latest
+    container_name: ledger-web-app
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3020:3000"
+    environment:
+      - NUXT_PUBLIC_SERVER_URL=https://ledger-server.jtuta.cloud
+      - PORT=3000
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+        reservations:
+          cpus: "0.05"
+          memory: 128M
+    networks:
+      - ledger-frontend-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
   ledger-postgres:
     image: postgres:15-alpine
     container_name: ledger-postgres
@@ -92,6 +117,7 @@ services:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
       RABBITMQ_DEFAULT_VHOST: "/"
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbit vm_memory_high_watermark 0.6 disk_free_limit 50000000"
     volumes:
       - ledger-rabbitmq-data:/var/lib/rabbitmq
     ports:
@@ -106,9 +132,9 @@ services:
           memory: 96M
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
+      interval: 120s
+      timeout: 30s
+      retries: 3
     networks:
       - ledger-server-network
     logging:
@@ -159,7 +185,7 @@ services:
         max-file: "2"
 
   ledger-auth-service:
-    image: container-repository.jtuta.cloud/ledger/auth:latest
+    image: container-registry.jtuta.cloud/ledger/auth:latest
     container_name: ledger-auth-service
     restart: unless-stopped
     env_file: ../secrets/.env.ledger
@@ -190,7 +216,7 @@ services:
           "import grpc; channel = grpc.insecure_channel('localhost:50051'); channel.close()",
         ]
       interval: 60s
-      timeout: 10s
+      timeout: 30s
       retries: 3
     logging:
       driver: "json-file"
@@ -199,7 +225,7 @@ services:
         max-file: "2"
 
   ledger-gateway:
-    image: container-repository.jtuta.cloud/ledger/gateway:latest
+    image: container-registry.jtuta.cloud/ledger/gateway:latest
     container_name: ledger-gateway
     restart: unless-stopped
     env_file: ../secrets/.env.ledger
@@ -242,7 +268,7 @@ services:
         max-file: "2"
 
   ledger-ingestion:
-    image: container-repository.jtuta.cloud/ledger/ingestion:latest
+    image: container-registry.jtuta.cloud/ledger/ingestion:latest
     container_name: ledger-ingestion
     restart: unless-stopped
     env_file: ../secrets/.env.ledger
@@ -286,7 +312,7 @@ services:
         max-file: "2"
 
   ledger-ingestion-worker:
-    image: container-repository.jtuta.cloud/ledger/ingestion:latest
+    image: container-registry.jtuta.cloud/ledger/ingestion:latest
     container_name: ledger-ingestion-worker
     restart: unless-stopped
     env_file: ../secrets/.env.ledger
@@ -321,7 +347,7 @@ services:
         max-file: "2"
 
   ledger-analytics-workers:
-    image: container-repository.jtuta.cloud/ledger/analytics:latest
+    image: container-registry.jtuta.cloud/ledger/analytics:latest
     container_name: ledger-analytics-workers
     restart: unless-stopped
     env_file: ../secrets/.env.ledger
@@ -354,7 +380,7 @@ services:
         max-file: "2"
 
   ledger-query:
-    image: container-repository.jtuta.cloud/ledger/query:latest
+    image: container-registry.jtuta.cloud/ledger/query:latest
     container_name: ledger-query
     restart: unless-stopped
     env_file: ../secrets/.env.ledger

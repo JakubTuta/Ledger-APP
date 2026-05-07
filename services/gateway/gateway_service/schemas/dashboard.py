@@ -42,8 +42,8 @@ class PanelRequest(pydantic.BaseModel):
     )
     type: str = pydantic.Field(
         ...,
-        pattern=r"^(logs|errors|metrics|error_list|bottleneck)$",
-        description="Panel type: logs (log viewer), errors (error tracking aggregated), error_list (individual error entries), metrics (charts/graphs), or bottleneck (route performance metrics)",
+        pattern=r"^(logs|errors|metrics|error_list|bottleneck|error_heatmap)$",
+        description="Panel type: logs (log viewer), errors (error tracking aggregated), error_list (individual error entries), metrics (charts/graphs), bottleneck (route performance metrics), or error_heatmap (hourly error heatmap)",
         examples=["errors"],
     )
     endpoint: str | None = pydantic.Field(
@@ -252,8 +252,8 @@ class UpdatePanelRequest(pydantic.BaseModel):
     )
     type: str = pydantic.Field(
         ...,
-        pattern=r"^(logs|errors|metrics|error_list|bottleneck)$",
-        description="Panel type (logs, errors, metrics, error_list, bottleneck)",
+        pattern=r"^(logs|errors|metrics|error_list|bottleneck|error_heatmap)$",
+        description="Panel type (logs, errors, metrics, error_list, bottleneck, error_heatmap)",
         examples=["errors"],
     )
     endpoint: str | None = pydantic.Field(

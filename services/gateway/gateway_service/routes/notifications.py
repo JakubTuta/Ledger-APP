@@ -459,17 +459,38 @@ async def stream_error_notifications(request: fastapi.Request):
     else:
         project_ids = await get_user_projects(grpc_pool, account_id)
 
-        if not project_ids:
-            logger.warning(f"No projects found for account {account_id}")
-            project_ids = set()
+    if not project_ids:
+        logger.warning(
+            f"No projects available for notification stream (account: {account_id}). "
+            "Stream will receive no events until projects are assigned."
+        )
 
     preferences = await get_notification_preferences(grpc_pool, account_id)
 
     stream = NotificationStream(config.settings.REDIS_URL, project_ids, preferences)
-    await stream.subscribe()
+    if project_ids:
+        await stream.subscribe()
 
     async def event_generator():
-        heartbeat_task = None
+        queue: asyncio.Queue = asyncio.Queue()
+        tasks: list[asyncio.Task] = []
+
+        async def pump_stream():
+            async for event in stream.listen():
+                await queue.put(event)
+
+        async def pump_heartbeat():
+            while True:
+                await asyncio.sleep(config.settings.NOTIFICATIONS_HEARTBEAT_INTERVAL)
+                await queue.put(
+                    {
+                        "event": "heartbeat",
+                        "data": json.dumps(
+                            {"timestamp": datetime.utcnow().isoformat() + "Z"}
+                        ),
+                    }
+                )
+
         try:
             yield {
                 "event": "connected",
@@ -477,25 +498,21 @@ async def stream_error_notifications(request: fastapi.Request):
                     {
                         "timestamp": datetime.utcnow().isoformat() + "Z",
                         "projects": list(project_ids),
+                        "warning": (
+                            "No projects available — stream idle"
+                            if not project_ids
+                            else None
+                        ),
                     }
                 ),
             }
 
-            async def heartbeat():
-                while True:
-                    await asyncio.sleep(
-                        config.settings.NOTIFICATIONS_HEARTBEAT_INTERVAL
-                    )
-                    yield {
-                        "event": "heartbeat",
-                        "data": json.dumps(
-                            {"timestamp": datetime.utcnow().isoformat() + "Z"}
-                        ),
-                    }
+            tasks.append(asyncio.create_task(pump_heartbeat()))
+            if project_ids:
+                tasks.append(asyncio.create_task(pump_stream()))
 
-            heartbeat_task = asyncio.create_task(_generate_heartbeats())
-
-            async for event in stream.listen():
+            while True:
+                event = await queue.get()
                 yield event
 
         except asyncio.CancelledError:
@@ -503,12 +520,14 @@ async def stream_error_notifications(request: fastapi.Request):
                 f"Client disconnected from notification stream (account: {account_id})"
             )
         finally:
-            if heartbeat_task:
-                heartbeat_task.cancel()
-            await stream.unsubscribe()
-
-    async def _generate_heartbeats():
-        while True:
-            await asyncio.sleep(config.settings.NOTIFICATIONS_HEARTBEAT_INTERVAL)
+            for task in tasks:
+                task.cancel()
+            for task in tasks:
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
+            if project_ids:
+                await stream.unsubscribe()
 
     return EventSourceResponse(event_generator())

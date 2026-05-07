@@ -88,7 +88,7 @@ class DashboardService:
 
         if not self._validate_panel_type(panel_type):
             raise ValueError(
-                f"Invalid panel type '{panel_type}'. Must be one of: logs, errors, metrics, error_list, bottleneck"
+                f"Invalid panel type '{panel_type}'. Must be one of: logs, errors, metrics, error_list, bottleneck, error_heatmap"
             )
 
         if panel_type == "bottleneck":
@@ -185,7 +185,7 @@ class DashboardService:
 
         if not self._validate_panel_type(panel_type):
             raise ValueError(
-                f"Invalid panel type '{panel_type}'. Must be one of: logs, errors, metrics, error_list, bottleneck"
+                f"Invalid panel type '{panel_type}'. Must be one of: logs, errors, metrics, error_list, bottleneck, error_heatmap"
             )
 
         if panel_type == "bottleneck":
@@ -299,7 +299,7 @@ class DashboardService:
 
     def _validate_panel_type(self, panel_type: str) -> bool:
         """Validate panel type."""
-        valid_types = {"logs", "errors", "metrics", "error_list", "bottleneck"}
+        valid_types = {"logs", "errors", "metrics", "error_list", "bottleneck", "error_heatmap"}
         return panel_type in valid_types
 
     def _generate_panel_id(self) -> str:
