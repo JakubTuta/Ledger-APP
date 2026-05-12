@@ -7,16 +7,23 @@ import gateway_service.config as config
 from fastapi.responses import JSONResponse
 from gateway_service.middleware import auth, circuit_breaker, rate_limit
 from gateway_service.routes import (
+    alert_routes,
     api_key_routes,
     auth_routes,
+    custom_metrics_routes,
     dashboard_routes,
+    feature_flag_routes,
     health_routes,
+    ingest_metrics_routes,
+    ingest_spans_routes,
     ingestion_routes,
+    notification_inbox_routes,
     notifications,
     project_routes,
     query_routes,
     settings_routes,
     sharing_routes,
+    tracing_routes,
 )
 from gateway_service.services import grpc_pool, redis_client
 
@@ -189,6 +196,26 @@ def custom_openapi():
             "name": "Health",
             "description": "Service health and monitoring endpoints",
         },
+        {
+            "name": "Tracing",
+            "description": "Distributed trace query endpoints",
+        },
+        {
+            "name": "Custom Metrics",
+            "description": "Custom metric time-series query endpoints",
+        },
+        {
+            "name": "Alerts",
+            "description": "Alert rules, channels, and notification preference management",
+        },
+        {
+            "name": "Notification Inbox",
+            "description": "In-app notification inbox endpoints",
+        },
+        {
+            "name": "Feature Flags",
+            "description": "Per-project feature flag management",
+        },
     ]
 
     app.openapi_schema = openapi_schema
@@ -305,10 +332,17 @@ include_router(auth_routes.router, prefix="/api/v1")
 include_router(project_routes.router, prefix="/api/v1")
 include_router(api_key_routes.router, prefix="/api/v1")
 include_router(dashboard_routes.router, prefix="/api/v1")
+include_router(feature_flag_routes.router, prefix="/api/v1")
 include_router(health_routes.router, prefix="/api/v1")
 include_router(ingestion_routes.router, prefix="/api/v1")
+include_router(ingest_spans_routes.router, prefix="/api/v1")
+include_router(ingest_metrics_routes.router, prefix="/api/v1")
 include_router(query_routes.router, prefix="/api/v1")
+include_router(tracing_routes.router, prefix="/api/v1")
+include_router(custom_metrics_routes.router, prefix="/api/v1")
 include_router(notifications.router, prefix="/api/v1")
+include_router(notification_inbox_routes.router, prefix="/api/v1")
+include_router(alert_routes.router, prefix="/api/v1")
 include_router(settings_routes.router, prefix="/api/v1")
 include_router(sharing_routes.router, prefix="/api/v1")
 

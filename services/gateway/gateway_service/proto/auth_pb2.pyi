@@ -612,3 +612,439 @@ class DeleteDashboardPanelResponse(_message.Message):
     SUCCESS_FIELD_NUMBER: _ClassVar[int]
     success: bool
     def __init__(self, success: bool = ...) -> None: ...
+
+class GetFeatureFlagsRequest(_message.Message):
+    __slots__ = ("project_id",)
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    def __init__(self, project_id: _Optional[int] = ...) -> None: ...
+
+class FeatureFlag(_message.Message):
+    __slots__ = ("key", "enabled")
+    KEY_FIELD_NUMBER: _ClassVar[int]
+    ENABLED_FIELD_NUMBER: _ClassVar[int]
+    key: str
+    enabled: bool
+    def __init__(self, key: _Optional[str] = ..., enabled: bool = ...) -> None: ...
+
+class GetFeatureFlagsResponse(_message.Message):
+    __slots__ = ("flags",)
+    FLAGS_FIELD_NUMBER: _ClassVar[int]
+    flags: _containers.RepeatedCompositeFieldContainer[FeatureFlag]
+    def __init__(self, flags: _Optional[_Iterable[_Union[FeatureFlag, _Mapping]]] = ...) -> None: ...
+
+class SetFeatureFlagRequest(_message.Message):
+    __slots__ = ("project_id", "key", "enabled")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    KEY_FIELD_NUMBER: _ClassVar[int]
+    ENABLED_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    key: str
+    enabled: bool
+    def __init__(self, project_id: _Optional[int] = ..., key: _Optional[str] = ..., enabled: bool = ...) -> None: ...
+
+class SetFeatureFlagResponse(_message.Message):
+    __slots__ = ("success", "flag")
+    SUCCESS_FIELD_NUMBER: _ClassVar[int]
+    FLAG_FIELD_NUMBER: _ClassVar[int]
+    success: bool
+    flag: FeatureFlag
+    def __init__(self, success: bool = ..., flag: _Optional[_Union[FeatureFlag, _Mapping]] = ...) -> None: ...
+
+class NotificationItem(_message.Message):
+    __slots__ = ("id", "user_id", "project_id", "kind", "severity", "payload", "created_at", "read_at", "expires_at")
+    ID_FIELD_NUMBER: _ClassVar[int]
+    USER_ID_FIELD_NUMBER: _ClassVar[int]
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    KIND_FIELD_NUMBER: _ClassVar[int]
+    SEVERITY_FIELD_NUMBER: _ClassVar[int]
+    PAYLOAD_FIELD_NUMBER: _ClassVar[int]
+    CREATED_AT_FIELD_NUMBER: _ClassVar[int]
+    READ_AT_FIELD_NUMBER: _ClassVar[int]
+    EXPIRES_AT_FIELD_NUMBER: _ClassVar[int]
+    id: int
+    user_id: int
+    project_id: int
+    kind: str
+    severity: int
+    payload: str
+    created_at: str
+    read_at: str
+    expires_at: str
+    def __init__(self, id: _Optional[int] = ..., user_id: _Optional[int] = ..., project_id: _Optional[int] = ..., kind: _Optional[str] = ..., severity: _Optional[int] = ..., payload: _Optional[str] = ..., created_at: _Optional[str] = ..., read_at: _Optional[str] = ..., expires_at: _Optional[str] = ...) -> None: ...
+
+class ListNotificationsRequest(_message.Message):
+    __slots__ = ("user_id", "unread_only", "limit", "before_id")
+    USER_ID_FIELD_NUMBER: _ClassVar[int]
+    UNREAD_ONLY_FIELD_NUMBER: _ClassVar[int]
+    LIMIT_FIELD_NUMBER: _ClassVar[int]
+    BEFORE_ID_FIELD_NUMBER: _ClassVar[int]
+    user_id: int
+    unread_only: bool
+    limit: int
+    before_id: int
+    def __init__(self, user_id: _Optional[int] = ..., unread_only: bool = ..., limit: _Optional[int] = ..., before_id: _Optional[int] = ...) -> None: ...
+
+class ListNotificationsResponse(_message.Message):
+    __slots__ = ("notifications", "has_more")
+    NOTIFICATIONS_FIELD_NUMBER: _ClassVar[int]
+    HAS_MORE_FIELD_NUMBER: _ClassVar[int]
+    notifications: _containers.RepeatedCompositeFieldContainer[NotificationItem]
+    has_more: bool
+    def __init__(self, notifications: _Optional[_Iterable[_Union[NotificationItem, _Mapping]]] = ..., has_more: bool = ...) -> None: ...
+
+class GetUnreadNotificationCountRequest(_message.Message):
+    __slots__ = ("user_id",)
+    USER_ID_FIELD_NUMBER: _ClassVar[int]
+    user_id: int
+    def __init__(self, user_id: _Optional[int] = ...) -> None: ...
+
+class GetUnreadNotificationCountResponse(_message.Message):
+    __slots__ = ("count",)
+    COUNT_FIELD_NUMBER: _ClassVar[int]
+    count: int
+    def __init__(self, count: _Optional[int] = ...) -> None: ...
+
+class MarkNotificationReadRequest(_message.Message):
+    __slots__ = ("notification_id", "user_id")
+    NOTIFICATION_ID_FIELD_NUMBER: _ClassVar[int]
+    USER_ID_FIELD_NUMBER: _ClassVar[int]
+    notification_id: int
+    user_id: int
+    def __init__(self, notification_id: _Optional[int] = ..., user_id: _Optional[int] = ...) -> None: ...
+
+class MarkNotificationReadResponse(_message.Message):
+    __slots__ = ("success",)
+    SUCCESS_FIELD_NUMBER: _ClassVar[int]
+    success: bool
+    def __init__(self, success: bool = ...) -> None: ...
+
+class MarkAllNotificationsReadRequest(_message.Message):
+    __slots__ = ("user_id",)
+    USER_ID_FIELD_NUMBER: _ClassVar[int]
+    user_id: int
+    def __init__(self, user_id: _Optional[int] = ...) -> None: ...
+
+class MarkAllNotificationsReadResponse(_message.Message):
+    __slots__ = ("updated_count",)
+    UPDATED_COUNT_FIELD_NUMBER: _ClassVar[int]
+    updated_count: int
+    def __init__(self, updated_count: _Optional[int] = ...) -> None: ...
+
+class DeleteNotificationRequest(_message.Message):
+    __slots__ = ("notification_id", "user_id")
+    NOTIFICATION_ID_FIELD_NUMBER: _ClassVar[int]
+    USER_ID_FIELD_NUMBER: _ClassVar[int]
+    notification_id: int
+    user_id: int
+    def __init__(self, notification_id: _Optional[int] = ..., user_id: _Optional[int] = ...) -> None: ...
+
+class DeleteNotificationResponse(_message.Message):
+    __slots__ = ("success",)
+    SUCCESS_FIELD_NUMBER: _ClassVar[int]
+    success: bool
+    def __init__(self, success: bool = ...) -> None: ...
+
+class CreateNotificationRequest(_message.Message):
+    __slots__ = ("user_id", "project_id", "kind", "severity", "payload")
+    USER_ID_FIELD_NUMBER: _ClassVar[int]
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    KIND_FIELD_NUMBER: _ClassVar[int]
+    SEVERITY_FIELD_NUMBER: _ClassVar[int]
+    PAYLOAD_FIELD_NUMBER: _ClassVar[int]
+    user_id: int
+    project_id: int
+    kind: str
+    severity: int
+    payload: str
+    def __init__(self, user_id: _Optional[int] = ..., project_id: _Optional[int] = ..., kind: _Optional[str] = ..., severity: _Optional[int] = ..., payload: _Optional[str] = ...) -> None: ...
+
+class CreateNotificationResponse(_message.Message):
+    __slots__ = ("notification",)
+    NOTIFICATION_FIELD_NUMBER: _ClassVar[int]
+    notification: NotificationItem
+    def __init__(self, notification: _Optional[_Union[NotificationItem, _Mapping]] = ...) -> None: ...
+
+class AlertRule(_message.Message):
+    __slots__ = ("id", "project_id", "name", "enabled", "metric", "tag_filter", "comparator", "threshold", "window_seconds", "cooldown_seconds", "severity", "channels", "last_fired_at", "last_state", "created_at", "updated_at")
+    ID_FIELD_NUMBER: _ClassVar[int]
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    ENABLED_FIELD_NUMBER: _ClassVar[int]
+    METRIC_FIELD_NUMBER: _ClassVar[int]
+    TAG_FILTER_FIELD_NUMBER: _ClassVar[int]
+    COMPARATOR_FIELD_NUMBER: _ClassVar[int]
+    THRESHOLD_FIELD_NUMBER: _ClassVar[int]
+    WINDOW_SECONDS_FIELD_NUMBER: _ClassVar[int]
+    COOLDOWN_SECONDS_FIELD_NUMBER: _ClassVar[int]
+    SEVERITY_FIELD_NUMBER: _ClassVar[int]
+    CHANNELS_FIELD_NUMBER: _ClassVar[int]
+    LAST_FIRED_AT_FIELD_NUMBER: _ClassVar[int]
+    LAST_STATE_FIELD_NUMBER: _ClassVar[int]
+    CREATED_AT_FIELD_NUMBER: _ClassVar[int]
+    UPDATED_AT_FIELD_NUMBER: _ClassVar[int]
+    id: int
+    project_id: int
+    name: str
+    enabled: bool
+    metric: str
+    tag_filter: str
+    comparator: str
+    threshold: float
+    window_seconds: int
+    cooldown_seconds: int
+    severity: int
+    channels: str
+    last_fired_at: str
+    last_state: str
+    created_at: str
+    updated_at: str
+    def __init__(self, id: _Optional[int] = ..., project_id: _Optional[int] = ..., name: _Optional[str] = ..., enabled: bool = ..., metric: _Optional[str] = ..., tag_filter: _Optional[str] = ..., comparator: _Optional[str] = ..., threshold: _Optional[float] = ..., window_seconds: _Optional[int] = ..., cooldown_seconds: _Optional[int] = ..., severity: _Optional[int] = ..., channels: _Optional[str] = ..., last_fired_at: _Optional[str] = ..., last_state: _Optional[str] = ..., created_at: _Optional[str] = ..., updated_at: _Optional[str] = ...) -> None: ...
+
+class ListAlertRulesRequest(_message.Message):
+    __slots__ = ("project_id",)
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    def __init__(self, project_id: _Optional[int] = ...) -> None: ...
+
+class ListAlertRulesResponse(_message.Message):
+    __slots__ = ("rules",)
+    RULES_FIELD_NUMBER: _ClassVar[int]
+    rules: _containers.RepeatedCompositeFieldContainer[AlertRule]
+    def __init__(self, rules: _Optional[_Iterable[_Union[AlertRule, _Mapping]]] = ...) -> None: ...
+
+class GetAlertRuleRequest(_message.Message):
+    __slots__ = ("rule_id", "project_id")
+    RULE_ID_FIELD_NUMBER: _ClassVar[int]
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    rule_id: int
+    project_id: int
+    def __init__(self, rule_id: _Optional[int] = ..., project_id: _Optional[int] = ...) -> None: ...
+
+class GetAlertRuleResponse(_message.Message):
+    __slots__ = ("rule", "found")
+    RULE_FIELD_NUMBER: _ClassVar[int]
+    FOUND_FIELD_NUMBER: _ClassVar[int]
+    rule: AlertRule
+    found: bool
+    def __init__(self, rule: _Optional[_Union[AlertRule, _Mapping]] = ..., found: bool = ...) -> None: ...
+
+class CreateAlertRuleRequest(_message.Message):
+    __slots__ = ("project_id", "name", "metric", "tag_filter", "comparator", "threshold", "window_seconds", "cooldown_seconds", "severity")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    METRIC_FIELD_NUMBER: _ClassVar[int]
+    TAG_FILTER_FIELD_NUMBER: _ClassVar[int]
+    COMPARATOR_FIELD_NUMBER: _ClassVar[int]
+    THRESHOLD_FIELD_NUMBER: _ClassVar[int]
+    WINDOW_SECONDS_FIELD_NUMBER: _ClassVar[int]
+    COOLDOWN_SECONDS_FIELD_NUMBER: _ClassVar[int]
+    SEVERITY_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    name: str
+    metric: str
+    tag_filter: str
+    comparator: str
+    threshold: float
+    window_seconds: int
+    cooldown_seconds: int
+    severity: int
+    def __init__(self, project_id: _Optional[int] = ..., name: _Optional[str] = ..., metric: _Optional[str] = ..., tag_filter: _Optional[str] = ..., comparator: _Optional[str] = ..., threshold: _Optional[float] = ..., window_seconds: _Optional[int] = ..., cooldown_seconds: _Optional[int] = ..., severity: _Optional[int] = ...) -> None: ...
+
+class CreateAlertRuleResponse(_message.Message):
+    __slots__ = ("rule",)
+    RULE_FIELD_NUMBER: _ClassVar[int]
+    rule: AlertRule
+    def __init__(self, rule: _Optional[_Union[AlertRule, _Mapping]] = ...) -> None: ...
+
+class UpdateAlertRuleRequest(_message.Message):
+    __slots__ = ("rule_id", "project_id", "name", "enabled", "threshold", "cooldown_seconds", "channels")
+    RULE_ID_FIELD_NUMBER: _ClassVar[int]
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    ENABLED_FIELD_NUMBER: _ClassVar[int]
+    THRESHOLD_FIELD_NUMBER: _ClassVar[int]
+    COOLDOWN_SECONDS_FIELD_NUMBER: _ClassVar[int]
+    CHANNELS_FIELD_NUMBER: _ClassVar[int]
+    rule_id: int
+    project_id: int
+    name: str
+    enabled: bool
+    threshold: float
+    cooldown_seconds: int
+    channels: str
+    def __init__(self, rule_id: _Optional[int] = ..., project_id: _Optional[int] = ..., name: _Optional[str] = ..., enabled: bool = ..., threshold: _Optional[float] = ..., cooldown_seconds: _Optional[int] = ..., channels: _Optional[str] = ...) -> None: ...
+
+class UpdateAlertRuleResponse(_message.Message):
+    __slots__ = ("rule",)
+    RULE_FIELD_NUMBER: _ClassVar[int]
+    rule: AlertRule
+    def __init__(self, rule: _Optional[_Union[AlertRule, _Mapping]] = ...) -> None: ...
+
+class DeleteAlertRuleRequest(_message.Message):
+    __slots__ = ("rule_id", "project_id")
+    RULE_ID_FIELD_NUMBER: _ClassVar[int]
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    rule_id: int
+    project_id: int
+    def __init__(self, rule_id: _Optional[int] = ..., project_id: _Optional[int] = ...) -> None: ...
+
+class DeleteAlertRuleResponse(_message.Message):
+    __slots__ = ("success",)
+    SUCCESS_FIELD_NUMBER: _ClassVar[int]
+    success: bool
+    def __init__(self, success: bool = ...) -> None: ...
+
+class AlertChannel(_message.Message):
+    __slots__ = ("id", "project_id", "user_id", "kind", "name", "config", "enabled", "created_at")
+    ID_FIELD_NUMBER: _ClassVar[int]
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    USER_ID_FIELD_NUMBER: _ClassVar[int]
+    KIND_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    CONFIG_FIELD_NUMBER: _ClassVar[int]
+    ENABLED_FIELD_NUMBER: _ClassVar[int]
+    CREATED_AT_FIELD_NUMBER: _ClassVar[int]
+    id: int
+    project_id: int
+    user_id: int
+    kind: str
+    name: str
+    config: str
+    enabled: bool
+    created_at: str
+    def __init__(self, id: _Optional[int] = ..., project_id: _Optional[int] = ..., user_id: _Optional[int] = ..., kind: _Optional[str] = ..., name: _Optional[str] = ..., config: _Optional[str] = ..., enabled: bool = ..., created_at: _Optional[str] = ...) -> None: ...
+
+class ListAlertChannelsRequest(_message.Message):
+    __slots__ = ("project_id",)
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    def __init__(self, project_id: _Optional[int] = ...) -> None: ...
+
+class ListAlertChannelsResponse(_message.Message):
+    __slots__ = ("channels",)
+    CHANNELS_FIELD_NUMBER: _ClassVar[int]
+    channels: _containers.RepeatedCompositeFieldContainer[AlertChannel]
+    def __init__(self, channels: _Optional[_Iterable[_Union[AlertChannel, _Mapping]]] = ...) -> None: ...
+
+class GetAlertChannelRequest(_message.Message):
+    __slots__ = ("channel_id", "project_id")
+    CHANNEL_ID_FIELD_NUMBER: _ClassVar[int]
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    channel_id: int
+    project_id: int
+    def __init__(self, channel_id: _Optional[int] = ..., project_id: _Optional[int] = ...) -> None: ...
+
+class GetAlertChannelResponse(_message.Message):
+    __slots__ = ("channel", "found")
+    CHANNEL_FIELD_NUMBER: _ClassVar[int]
+    FOUND_FIELD_NUMBER: _ClassVar[int]
+    channel: AlertChannel
+    found: bool
+    def __init__(self, channel: _Optional[_Union[AlertChannel, _Mapping]] = ..., found: bool = ...) -> None: ...
+
+class CreateAlertChannelRequest(_message.Message):
+    __slots__ = ("project_id", "user_id", "kind", "name", "config")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    USER_ID_FIELD_NUMBER: _ClassVar[int]
+    KIND_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    CONFIG_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    user_id: int
+    kind: str
+    name: str
+    config: str
+    def __init__(self, project_id: _Optional[int] = ..., user_id: _Optional[int] = ..., kind: _Optional[str] = ..., name: _Optional[str] = ..., config: _Optional[str] = ...) -> None: ...
+
+class CreateAlertChannelResponse(_message.Message):
+    __slots__ = ("channel",)
+    CHANNEL_FIELD_NUMBER: _ClassVar[int]
+    channel: AlertChannel
+    def __init__(self, channel: _Optional[_Union[AlertChannel, _Mapping]] = ...) -> None: ...
+
+class UpdateAlertChannelRequest(_message.Message):
+    __slots__ = ("channel_id", "project_id", "name", "enabled", "config")
+    CHANNEL_ID_FIELD_NUMBER: _ClassVar[int]
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    ENABLED_FIELD_NUMBER: _ClassVar[int]
+    CONFIG_FIELD_NUMBER: _ClassVar[int]
+    channel_id: int
+    project_id: int
+    name: str
+    enabled: bool
+    config: str
+    def __init__(self, channel_id: _Optional[int] = ..., project_id: _Optional[int] = ..., name: _Optional[str] = ..., enabled: bool = ..., config: _Optional[str] = ...) -> None: ...
+
+class UpdateAlertChannelResponse(_message.Message):
+    __slots__ = ("channel",)
+    CHANNEL_FIELD_NUMBER: _ClassVar[int]
+    channel: AlertChannel
+    def __init__(self, channel: _Optional[_Union[AlertChannel, _Mapping]] = ...) -> None: ...
+
+class DeleteAlertChannelRequest(_message.Message):
+    __slots__ = ("channel_id", "project_id")
+    CHANNEL_ID_FIELD_NUMBER: _ClassVar[int]
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    channel_id: int
+    project_id: int
+    def __init__(self, channel_id: _Optional[int] = ..., project_id: _Optional[int] = ...) -> None: ...
+
+class DeleteAlertChannelResponse(_message.Message):
+    __slots__ = ("success",)
+    SUCCESS_FIELD_NUMBER: _ClassVar[int]
+    success: bool
+    def __init__(self, success: bool = ...) -> None: ...
+
+class AlertNotificationPreference(_message.Message):
+    __slots__ = ("user_id", "project_id", "rule_id", "severity", "muted", "channels")
+    USER_ID_FIELD_NUMBER: _ClassVar[int]
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    RULE_ID_FIELD_NUMBER: _ClassVar[int]
+    SEVERITY_FIELD_NUMBER: _ClassVar[int]
+    MUTED_FIELD_NUMBER: _ClassVar[int]
+    CHANNELS_FIELD_NUMBER: _ClassVar[int]
+    user_id: int
+    project_id: int
+    rule_id: int
+    severity: int
+    muted: bool
+    channels: str
+    def __init__(self, user_id: _Optional[int] = ..., project_id: _Optional[int] = ..., rule_id: _Optional[int] = ..., severity: _Optional[int] = ..., muted: bool = ..., channels: _Optional[str] = ...) -> None: ...
+
+class GetAlertNotificationPreferencesRequest(_message.Message):
+    __slots__ = ("user_id", "project_id")
+    USER_ID_FIELD_NUMBER: _ClassVar[int]
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    user_id: int
+    project_id: int
+    def __init__(self, user_id: _Optional[int] = ..., project_id: _Optional[int] = ...) -> None: ...
+
+class GetAlertNotificationPreferencesResponse(_message.Message):
+    __slots__ = ("preferences",)
+    PREFERENCES_FIELD_NUMBER: _ClassVar[int]
+    preferences: _containers.RepeatedCompositeFieldContainer[AlertNotificationPreference]
+    def __init__(self, preferences: _Optional[_Iterable[_Union[AlertNotificationPreference, _Mapping]]] = ...) -> None: ...
+
+class UpsertAlertNotificationPreferenceRequest(_message.Message):
+    __slots__ = ("user_id", "project_id", "rule_id", "severity", "muted", "channels")
+    USER_ID_FIELD_NUMBER: _ClassVar[int]
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    RULE_ID_FIELD_NUMBER: _ClassVar[int]
+    SEVERITY_FIELD_NUMBER: _ClassVar[int]
+    MUTED_FIELD_NUMBER: _ClassVar[int]
+    CHANNELS_FIELD_NUMBER: _ClassVar[int]
+    user_id: int
+    project_id: int
+    rule_id: int
+    severity: int
+    muted: bool
+    channels: str
+    def __init__(self, user_id: _Optional[int] = ..., project_id: _Optional[int] = ..., rule_id: _Optional[int] = ..., severity: _Optional[int] = ..., muted: bool = ..., channels: _Optional[str] = ...) -> None: ...
+
+class UpsertAlertNotificationPreferenceResponse(_message.Message):
+    __slots__ = ("preference",)
+    PREFERENCE_FIELD_NUMBER: _ClassVar[int]
+    preference: AlertNotificationPreference
+    def __init__(self, preference: _Optional[_Union[AlertNotificationPreference, _Mapping]] = ...) -> None: ...

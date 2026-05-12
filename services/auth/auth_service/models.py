@@ -5,12 +5,14 @@ from sqlalchemy import (
     CHAR,
     VARCHAR,
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
     Integer,
     SmallInteger,
+    Text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy import String
@@ -553,3 +555,243 @@ class UserDashboard(database.Base):
 
     def __repr__(self) -> str:
         return f"<UserDashboard(id={self.id}, user_id={self.user_id}, panels={len(self.panels)})>"
+
+
+class FeatureFlag(database.Base):
+    __tablename__ = "feature_flags"
+
+    project_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        primary_key=True,
+        nullable=False,
+    )
+    key: Mapped[str] = mapped_column(VARCHAR(50), primary_key=True, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.datetime.now(datetime.timezone.utc),
+        onupdate=datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        Index("idx_feature_flags_project_id", "project_id"),
+        CheckConstraint(
+            "key IN ('tracing', 'custom_metrics', 'alert_rules')",
+            name="check_feature_flag_key",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return f"<FeatureFlag(project_id={self.project_id}, key={self.key}, enabled={self.enabled})>"
+
+
+class Notification(database.Base):
+    __tablename__ = "notifications"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("accounts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    project_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(VARCHAR(30), nullable=False)
+    severity: Mapped[str] = mapped_column(VARCHAR(20), default="info", nullable=False)
+    payload: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+    read_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    expires_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    account: Mapped["Account"] = relationship("Account", backref="notifications")
+
+    __table_args__ = (
+        Index("idx_notifications_user_unread", "user_id", "read_at"),
+        Index("idx_notifications_project_id", "project_id"),
+        Index("idx_notifications_expires_at", "expires_at"),
+        CheckConstraint(
+            "kind IN ('error', 'alert_firing', 'alert_resolved', 'quota_warning')",
+            name="check_notification_kind",
+        ),
+        CheckConstraint(
+            "severity IN ('critical', 'warning', 'info')",
+            name="check_notification_severity",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return f"<Notification(id={self.id}, user_id={self.user_id}, kind={self.kind})>"
+
+
+class AlertRule(database.Base):
+    __tablename__ = "alert_rules"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+
+    project_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(VARCHAR(255), nullable=False)
+    metric_type: Mapped[str] = mapped_column(VARCHAR(50), nullable=False)
+    comparator: Mapped[str] = mapped_column(VARCHAR(4), nullable=False)
+    threshold: Mapped[float] = mapped_column(nullable=False)
+    window_minutes: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
+    severity: Mapped[str] = mapped_column(VARCHAR(20), default="warning", nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    cooldown_minutes: Mapped[int] = mapped_column(Integer, default=60, nullable=False)
+    state: Mapped[str] = mapped_column(VARCHAR(10), default="ok", nullable=False)
+    last_fired_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    fired_value: Mapped[float | None] = mapped_column(nullable=True)
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.datetime.now(datetime.timezone.utc),
+        onupdate=datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+    channels: Mapped[list["AlertChannel"]] = relationship(
+        "AlertChannel",
+        back_populates="rule",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        Index("idx_alert_rules_project_id", "project_id"),
+        Index(
+            "idx_alert_rules_enabled",
+            "project_id",
+            "enabled",
+            postgresql_where=(enabled == True),  # noqa: E712
+        ),
+        CheckConstraint(
+            "comparator IN ('>', '<', '>=', '<=')",
+            name="check_alert_comparator",
+        ),
+        CheckConstraint(
+            "severity IN ('critical', 'warning', 'info')",
+            name="check_alert_severity",
+        ),
+        CheckConstraint(
+            "state IN ('ok', 'firing')",
+            name="check_alert_state",
+        ),
+        CheckConstraint(
+            "window_minutes >= 1",
+            name="check_alert_window_minutes",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return f"<AlertRule(id={self.id}, project_id={self.project_id}, name={self.name}, state={self.state})>"
+
+
+class AlertChannel(database.Base):
+    __tablename__ = "alert_channels"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+
+    rule_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("alert_rules.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    kind: Mapped[str] = mapped_column(VARCHAR(20), nullable=False)
+    config: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+    rule: Mapped["AlertRule"] = relationship("AlertRule", back_populates="channels")
+
+    __table_args__ = (
+        Index("idx_alert_channels_rule_id", "rule_id"),
+        CheckConstraint(
+            "kind IN ('in_app', 'email', 'webhook')",
+            name="check_alert_channel_kind",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return f"<AlertChannel(id={self.id}, rule_id={self.rule_id}, kind={self.kind})>"
+
+
+class NotificationPreference(database.Base):
+    __tablename__ = "notification_preferences"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("accounts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    project_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    rule_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("alert_rules.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    severity: Mapped[str | None] = mapped_column(VARCHAR(20), nullable=True)
+    muted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    channel_overrides: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.datetime.now(datetime.timezone.utc),
+        onupdate=datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        Index("idx_notif_prefs_user_project", "user_id", "project_id"),
+        Index(
+            "uq_notif_prefs",
+            "user_id",
+            "project_id",
+            "rule_id",
+            "severity",
+            unique=True,
+        ),
+        CheckConstraint(
+            "severity IS NULL OR severity IN ('critical', 'warning', 'info')",
+            name="check_notif_pref_severity",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return f"<NotificationPreference(user_id={self.user_id}, project_id={self.project_id}, muted={self.muted})>"

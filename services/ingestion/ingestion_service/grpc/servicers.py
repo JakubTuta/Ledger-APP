@@ -1,18 +1,25 @@
 import datetime
+import hashlib
 import json
 import logging
+import re
 
 import grpc
+import sqlalchemy as sa
 
+import ingestion_service.config as config
+import ingestion_service.database as database
+import ingestion_service.notifications as notifications
 import ingestion_service.proto.ingestion_pb2 as ingestion_pb2
 import ingestion_service.proto.ingestion_pb2_grpc as ingestion_pb2_grpc
 import ingestion_service.schemas as schemas
 import ingestion_service.services.enricher as enricher
 import ingestion_service.services.queue_service as queue_service
-import ingestion_service.notifications as notifications
-import ingestion_service.config as config
 
 logger = logging.getLogger(__name__)
+
+_HEX32_RE = re.compile(r"^[0-9a-f]{32}$")
+_HEX16_RE = re.compile(r"^[0-9a-f]{16}$")
 
 
 class IngestionServicer(ingestion_pb2_grpc.IngestionServiceServicer):
@@ -186,6 +193,152 @@ class IngestionServicer(ingestion_pb2_grpc.IngestionServiceServicer):
                 grpc.StatusCode.INTERNAL,
                 "Failed to get queue depth",
             )
+
+    async def IngestSpansBatch(
+        self,
+        request: ingestion_pb2.IngestSpansBatchRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> ingestion_pb2.IngestSpansBatchResponse:
+        accepted = 0
+        rejected = 0
+        rows = []
+
+        for span in request.spans:
+            trace_id = span.trace_id.lower()
+            span_id = span.span_id.lower()
+            if not _HEX32_RE.match(trace_id) or not _HEX16_RE.match(span_id):
+                rejected += 1
+                continue
+
+            start_dt = datetime.datetime.fromtimestamp(
+                span.start_unix_nano / 1e9, tz=datetime.timezone.utc
+            )
+            end_dt = datetime.datetime.fromtimestamp(
+                span.end_unix_nano / 1e9, tz=datetime.timezone.utc
+            )
+            duration_ns = span.end_unix_nano - span.start_unix_nano
+
+            status_code = int(span.status)
+            attrs_json = json.dumps(dict(span.attributes))
+            events_json = json.dumps(
+                [
+                    {
+                        "name": e.name,
+                        "ts": e.ts_unix_nano,
+                        "attrs": dict(e.attrs),
+                    }
+                    for e in span.events
+                ]
+            )
+
+            error_fingerprint = None
+            if status_code == 2:
+                raw = f"{request.project_id}:{span.service_name}:{span.name}"
+                error_fingerprint = hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+            rows.append(
+                {
+                    "span_id": span_id,
+                    "trace_id": trace_id,
+                    "parent_span_id": span.parent_span_id or None,
+                    "project_id": request.project_id,
+                    "service_name": span.service_name[:255],
+                    "name": span.name[:255],
+                    "kind": int(span.kind),
+                    "start_time": start_dt,
+                    "duration_ns": duration_ns,
+                    "status_code": status_code,
+                    "status_message": span.status_message[:500],
+                    "attributes": attrs_json,
+                    "events": events_json,
+                    "error_fingerprint": error_fingerprint,
+                }
+            )
+            accepted += 1
+
+        if rows:
+            try:
+                async with database.get_session() as session:
+                    await session.execute(
+                        sa.text("""
+                            INSERT INTO spans (
+                                span_id, trace_id, parent_span_id, project_id,
+                                service_name, name, kind, start_time, duration_ns,
+                                status_code, status_message, attributes, events, error_fingerprint
+                            ) VALUES (
+                                :span_id, :trace_id, :parent_span_id, :project_id,
+                                :service_name, :name, :kind, :start_time, :duration_ns,
+                                :status_code, :status_message, :attributes, :events, :error_fingerprint
+                            )
+                            ON CONFLICT (span_id, start_time) DO NOTHING
+                        """),
+                        rows,
+                    )
+                    await session.commit()
+            except Exception as e:
+                logger.error(f"Failed to insert spans batch: {e}", exc_info=True)
+                await context.abort(grpc.StatusCode.INTERNAL, "Failed to store spans")
+                return
+
+        return ingestion_pb2.IngestSpansBatchResponse(
+            success=True, accepted=accepted, rejected=rejected
+        )
+
+    async def IngestMetricsBatch(
+        self,
+        request: ingestion_pb2.IngestMetricsBatchRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> ingestion_pb2.IngestMetricsBatchResponse:
+        accepted = 0
+        rejected = 0
+        rows = []
+
+        for m in request.metrics:
+            if not m.name:
+                rejected += 1
+                continue
+
+            ts_dt = datetime.datetime.fromtimestamp(
+                m.ts_unix_nano / 1e9, tz=datetime.timezone.utc
+            )
+            rows.append(
+                {
+                    "project_id": request.project_id,
+                    "name": m.name[:255],
+                    "tags": m.tags or "{}",
+                    "ts": ts_dt,
+                    "type": m.type,
+                    "count": m.count,
+                    "sum": m.sum,
+                    "min_v": m.min_v,
+                    "max_v": m.max_v,
+                    "buckets": m.buckets or "{}",
+                }
+            )
+            accepted += 1
+
+        if rows:
+            try:
+                async with database.get_session() as session:
+                    await session.execute(
+                        sa.text("""
+                            INSERT INTO custom_metrics (
+                                project_id, name, tags, ts, type, count, sum, min_v, max_v, buckets
+                            ) VALUES (
+                                :project_id, :name, :tags, :ts, :type, :count, :sum, :min_v, :max_v, :buckets
+                            )
+                        """),
+                        rows,
+                    )
+                    await session.commit()
+            except Exception as e:
+                logger.error(f"Failed to insert metrics batch: {e}", exc_info=True)
+                await context.abort(grpc.StatusCode.INTERNAL, "Failed to store metrics")
+                return
+
+        return ingestion_pb2.IngestMetricsBatchResponse(
+            success=True, accepted=accepted, rejected=rejected
+        )
 
 
 def _proto_to_log_entry(proto_log: ingestion_pb2.LogEntry) -> schemas.LogEntry:

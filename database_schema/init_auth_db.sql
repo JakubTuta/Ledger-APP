@@ -157,3 +157,117 @@ ALTER TABLE user_dashboards
 ADD CONSTRAINT fk_user_dashboards_account
 FOREIGN KEY (user_id) REFERENCES accounts(id)
 ON DELETE CASCADE;
+
+-- ============================================
+-- 6. FEATURE FLAGS (per-project)
+-- ============================================
+
+CREATE TABLE feature_flags (
+    project_id  BIGINT NOT NULL,
+    key         TEXT NOT NULL,
+    enabled     BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (project_id, key)
+);
+
+CREATE INDEX CONCURRENTLY idx_feature_flags_project ON feature_flags (project_id);
+
+ALTER TABLE feature_flags
+    ADD CONSTRAINT check_feature_flag_key
+    CHECK (key IN ('tracing', 'custom_metrics', 'alert_rules'));
+
+-- ============================================
+-- 7. PERSISTED NOTIFICATIONS
+-- ============================================
+
+CREATE TABLE notifications (
+    id          BIGSERIAL PRIMARY KEY,
+    user_id     BIGINT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    project_id  BIGINT NOT NULL,
+    kind        TEXT NOT NULL,
+    severity    SMALLINT NOT NULL DEFAULT 1,
+    payload     JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    read_at     TIMESTAMPTZ,
+    expires_at  TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '30 days'
+);
+
+CREATE INDEX idx_notif_unread ON notifications (user_id, created_at DESC)
+WHERE read_at IS NULL;
+CREATE INDEX idx_notif_expires ON notifications (expires_at);
+CREATE INDEX idx_notif_user_project ON notifications (user_id, project_id, created_at DESC);
+
+ALTER TABLE notifications
+    ADD CONSTRAINT check_notification_kind
+    CHECK (kind IN ('error', 'alert_firing', 'alert_resolved', 'quota_warning'));
+ALTER TABLE notifications
+    ADD CONSTRAINT check_notification_severity
+    CHECK (severity IN (1, 2, 3));
+
+-- ============================================
+-- 8. ALERT RULES ENGINE
+-- ============================================
+
+CREATE TABLE alert_rules (
+    id               BIGSERIAL PRIMARY KEY,
+    project_id       BIGINT NOT NULL,
+    name             TEXT NOT NULL,
+    enabled          BOOLEAN NOT NULL DEFAULT TRUE,
+    metric           TEXT NOT NULL,
+    tag_filter       JSONB DEFAULT '{}'::jsonb,
+    comparator       TEXT NOT NULL,
+    threshold        DOUBLE PRECISION NOT NULL,
+    window_seconds   INTEGER NOT NULL,
+    cooldown_seconds INTEGER NOT NULL DEFAULT 600,
+    severity         SMALLINT NOT NULL DEFAULT 2,
+    channels         JSONB NOT NULL DEFAULT '[]'::jsonb,
+    last_fired_at    TIMESTAMPTZ,
+    last_state       TEXT NOT NULL DEFAULT 'ok',
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_alert_rules_project ON alert_rules (project_id);
+CREATE INDEX idx_alert_rules_enabled ON alert_rules (enabled) WHERE enabled = TRUE;
+
+ALTER TABLE alert_rules
+    ADD CONSTRAINT check_alert_comparator
+    CHECK (comparator IN ('>', '<', '>=', '<='));
+ALTER TABLE alert_rules
+    ADD CONSTRAINT check_alert_severity
+    CHECK (severity IN (1, 2, 3));
+ALTER TABLE alert_rules
+    ADD CONSTRAINT check_alert_state
+    CHECK (last_state IN ('ok', 'firing'));
+
+CREATE TABLE alert_channels (
+    id          BIGSERIAL PRIMARY KEY,
+    project_id  BIGINT NOT NULL,
+    user_id     BIGINT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    kind        TEXT NOT NULL,
+    name        TEXT NOT NULL,
+    config      JSONB NOT NULL DEFAULT '{}'::jsonb,
+    enabled     BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_alert_channels_project ON alert_channels (project_id);
+CREATE INDEX idx_alert_channels_user ON alert_channels (user_id);
+
+ALTER TABLE alert_channels
+    ADD CONSTRAINT check_channel_kind
+    CHECK (kind IN ('in_app', 'email', 'webhook'));
+
+CREATE TABLE notification_preferences (
+    user_id     BIGINT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    project_id  BIGINT NOT NULL,
+    rule_id     BIGINT,
+    severity    SMALLINT,
+    muted       BOOLEAN NOT NULL DEFAULT FALSE,
+    channels    JSONB,
+    PRIMARY KEY (user_id, project_id, COALESCE(rule_id, 0), COALESCE(severity, 0))
+);
+
+CREATE INDEX idx_notif_prefs_user_project ON notification_preferences (user_id, project_id);

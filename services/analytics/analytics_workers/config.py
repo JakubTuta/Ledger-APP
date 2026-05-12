@@ -181,6 +181,58 @@ class Settings(pydantic_settings.BaseSettings):
         description="Bottleneck metrics aggregation cron schedule (runs at 30 minutes past each hour)",
     )
 
+    ANALYTICS_LOG_VOLUME_1H_ROLLUP_CRON: str = pydantic.Field(
+        default="*/5 * * * *",
+        description="log_volume_1h rollup cron schedule",
+    )
+
+    ANALYTICS_LOG_VOLUME_1D_ROLLUP_CRON: str = pydantic.Field(
+        default="0 * * * *",
+        description="log_volume_1d rollup cron schedule",
+    )
+
+    ANALYTICS_PARTITION_MANAGER_CRON: str = pydantic.Field(
+        default="0 * * * *",
+        description="Partition manager cron schedule",
+    )
+
+    ANALYTICS_SPAN_LATENCY_1H_CRON: str = pydantic.Field(
+        default="*/5 * * * *",
+        description="span_latency_1h rollup cron schedule",
+    )
+
+    ANALYTICS_CUSTOM_METRICS_5M_CRON: str = pydantic.Field(
+        default="*/1 * * * *",
+        description="custom_metrics_5m rollup cron schedule",
+    )
+
+    ANALYTICS_CUSTOM_METRICS_1H_CRON: str = pydantic.Field(
+        default="*/5 * * * *",
+        description="custom_metrics_1h rollup cron schedule",
+    )
+
+    ANALYTICS_CUSTOM_METRICS_1D_CRON: str = pydantic.Field(
+        default="0 * * * *",
+        description="custom_metrics_1d rollup cron schedule",
+    )
+
+    ANALYTICS_ALERT_EVALUATOR_CRON: str = pydantic.Field(
+        default="*/1 * * * *",
+        description="Alert rule evaluator cron schedule",
+    )
+
+    ANALYTICS_CARDINALITY_CHECK_CRON: str = pydantic.Field(
+        default="0 * * * *",
+        description="Custom metrics cardinality check cron schedule",
+    )
+
+    ANALYTICS_MAX_SERIES_PER_PROJECT: int = pydantic.Field(
+        default=500,
+        ge=10,
+        le=10000,
+        description="Max distinct (name, tags) series per project",
+    )
+
     ANALYTICS_ERROR_RATE_TTL: int = pydantic.Field(
         default=600,
         ge=300,

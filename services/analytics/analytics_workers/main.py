@@ -63,6 +63,14 @@ def setup_jobs() -> None:
     bottleneck_metrics_cron = _parse_cron_expression(
         settings.ANALYTICS_BOTTLENECK_METRICS_CRON
     )
+    lv1h_rollup_cron = _parse_cron_expression(settings.ANALYTICS_LOG_VOLUME_1H_ROLLUP_CRON)
+    lv1d_rollup_cron = _parse_cron_expression(settings.ANALYTICS_LOG_VOLUME_1D_ROLLUP_CRON)
+    partition_cron = _parse_cron_expression(settings.ANALYTICS_PARTITION_MANAGER_CRON)
+    span_latency_cron = _parse_cron_expression(settings.ANALYTICS_SPAN_LATENCY_1H_CRON)
+    cm5m_cron = _parse_cron_expression(settings.ANALYTICS_CUSTOM_METRICS_5M_CRON)
+    cm1h_cron = _parse_cron_expression(settings.ANALYTICS_CUSTOM_METRICS_1H_CRON)
+    cm1d_cron = _parse_cron_expression(settings.ANALYTICS_CUSTOM_METRICS_1D_CRON)
+    alert_cron = _parse_cron_expression(settings.ANALYTICS_ALERT_EVALUATOR_CRON)
 
     scheduler.add_job(
         jobs.aggregate_error_rates,
@@ -120,28 +128,86 @@ def setup_jobs() -> None:
         replace_existing=True,
     )
 
+    scheduler.add_job(
+        jobs.rollup_log_volume_1h,
+        trigger=cron_trigger.CronTrigger(**lv1h_rollup_cron),
+        id="rollup_log_volume_1h",
+        name="Rollup Log Volume 1h",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        jobs.rollup_log_volume_1d,
+        trigger=cron_trigger.CronTrigger(**lv1d_rollup_cron),
+        id="rollup_log_volume_1d",
+        name="Rollup Log Volume 1d",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        jobs.manage_partitions,
+        trigger=cron_trigger.CronTrigger(**partition_cron),
+        id="manage_partitions",
+        name="Manage Partitions",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        jobs.rollup_span_latency_1h,
+        trigger=cron_trigger.CronTrigger(**span_latency_cron),
+        id="rollup_span_latency_1h",
+        name="Rollup Span Latency 1h",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        jobs.rollup_custom_metrics_5m,
+        trigger=cron_trigger.CronTrigger(**cm5m_cron),
+        id="rollup_custom_metrics_5m",
+        name="Rollup Custom Metrics 5m",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        jobs.rollup_custom_metrics_1h,
+        trigger=cron_trigger.CronTrigger(**cm1h_cron),
+        id="rollup_custom_metrics_1h",
+        name="Rollup Custom Metrics 1h",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        jobs.rollup_custom_metrics_1d,
+        trigger=cron_trigger.CronTrigger(**cm1d_cron),
+        id="rollup_custom_metrics_1d",
+        name="Rollup Custom Metrics 1d",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        jobs.evaluate_alert_rules,
+        trigger=cron_trigger.CronTrigger(**alert_cron),
+        id="evaluate_alert_rules",
+        name="Evaluate Alert Rules",
+        replace_existing=True,
+    )
+
     logger.info("Scheduled jobs with cron expressions:")
-    logger.info(
-        f"  - Aggregate Error Rates: {settings.ANALYTICS_ERROR_RATE_CRON}"
-    )
-    logger.info(
-        f"  - Aggregate Log Volumes: {settings.ANALYTICS_LOG_VOLUME_CRON}"
-    )
-    logger.info(
-        f"  - Compute Top Errors: {settings.ANALYTICS_TOP_ERRORS_CRON}"
-    )
-    logger.info(
-        f"  - Generate Usage Stats: {settings.ANALYTICS_USAGE_STATS_CRON}"
-    )
-    logger.info(
-        f"  - Aggregate Hourly Metrics: {settings.ANALYTICS_HOURLY_METRICS_CRON}"
-    )
-    logger.info(
-        f"  - Update Available Routes: {settings.ANALYTICS_AVAILABLE_ROUTES_CRON}"
-    )
-    logger.info(
-        f"  - Aggregate Bottleneck Metrics: {settings.ANALYTICS_BOTTLENECK_METRICS_CRON}"
-    )
+    logger.info(f"  - Aggregate Error Rates: {settings.ANALYTICS_ERROR_RATE_CRON}")
+    logger.info(f"  - Aggregate Log Volumes: {settings.ANALYTICS_LOG_VOLUME_CRON}")
+    logger.info(f"  - Compute Top Errors: {settings.ANALYTICS_TOP_ERRORS_CRON}")
+    logger.info(f"  - Generate Usage Stats: {settings.ANALYTICS_USAGE_STATS_CRON}")
+    logger.info(f"  - Aggregate Hourly Metrics: {settings.ANALYTICS_HOURLY_METRICS_CRON}")
+    logger.info(f"  - Update Available Routes: {settings.ANALYTICS_AVAILABLE_ROUTES_CRON}")
+    logger.info(f"  - Aggregate Bottleneck Metrics: {settings.ANALYTICS_BOTTLENECK_METRICS_CRON}")
+    logger.info(f"  - Rollup Log Volume 1h: {settings.ANALYTICS_LOG_VOLUME_1H_ROLLUP_CRON}")
+    logger.info(f"  - Rollup Log Volume 1d: {settings.ANALYTICS_LOG_VOLUME_1D_ROLLUP_CRON}")
+    logger.info(f"  - Manage Partitions: {settings.ANALYTICS_PARTITION_MANAGER_CRON}")
+    logger.info(f"  - Rollup Span Latency 1h: {settings.ANALYTICS_SPAN_LATENCY_1H_CRON}")
+    logger.info(f"  - Rollup Custom Metrics 5m: {settings.ANALYTICS_CUSTOM_METRICS_5M_CRON}")
+    logger.info(f"  - Rollup Custom Metrics 1h: {settings.ANALYTICS_CUSTOM_METRICS_1H_CRON}")
+    logger.info(f"  - Rollup Custom Metrics 1d: {settings.ANALYTICS_CUSTOM_METRICS_1D_CRON}")
+    logger.info(f"  - Evaluate Alert Rules: {settings.ANALYTICS_ALERT_EVALUATOR_CRON}")
 
 
 def _parse_cron_expression(cron_expr: str) -> dict:

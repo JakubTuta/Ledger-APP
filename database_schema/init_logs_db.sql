@@ -323,3 +323,179 @@ ON bottleneck_metrics(project_id, date, hour, route);
 ALTER TABLE bottleneck_metrics ADD CONSTRAINT check_bottleneck_hour_range
 CHECK (hour >= 0 AND hour <= 23);
 
+-- ============================================
+-- 5. ROLLUP TABLES (APScheduler-populated aggregations)
+-- ============================================
+
+CREATE TABLE log_volume_5m (
+    project_id  BIGINT NOT NULL,
+    level       VARCHAR(20) NOT NULL,
+    bucket      TIMESTAMPTZ NOT NULL,
+    count       BIGINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (project_id, level, bucket)
+);
+CREATE INDEX idx_lv5m_project_bucket ON log_volume_5m (project_id, bucket DESC);
+
+CREATE TABLE log_volume_1h (
+    project_id  BIGINT NOT NULL,
+    level       VARCHAR(20) NOT NULL,
+    bucket      TIMESTAMPTZ NOT NULL,
+    count       BIGINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (project_id, level, bucket)
+);
+CREATE INDEX idx_lv1h_project_bucket ON log_volume_1h (project_id, bucket DESC);
+
+CREATE TABLE log_volume_1d (
+    project_id  BIGINT NOT NULL,
+    level       VARCHAR(20) NOT NULL,
+    bucket      DATE NOT NULL,
+    count       BIGINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (project_id, level, bucket)
+);
+CREATE INDEX idx_lv1d_project_bucket ON log_volume_1d (project_id, bucket DESC);
+
+CREATE TABLE error_rate_5m (
+    project_id  BIGINT NOT NULL,
+    bucket      TIMESTAMPTZ NOT NULL,
+    errors      BIGINT NOT NULL DEFAULT 0,
+    total       BIGINT NOT NULL DEFAULT 0,
+    ratio       DOUBLE PRECISION NOT NULL DEFAULT 0,
+    PRIMARY KEY (project_id, bucket)
+);
+CREATE INDEX idx_er5m_project_bucket ON error_rate_5m (project_id, bucket DESC);
+
+CREATE TABLE endpoint_latency_1h (
+    project_id  BIGINT NOT NULL,
+    route       TEXT NOT NULL,
+    bucket      TIMESTAMPTZ NOT NULL,
+    count       BIGINT NOT NULL DEFAULT 0,
+    p50_ms      DOUBLE PRECISION,
+    p95_ms      DOUBLE PRECISION,
+    p99_ms      DOUBLE PRECISION,
+    PRIMARY KEY (project_id, route, bucket)
+);
+CREATE INDEX idx_el1h_project_bucket ON endpoint_latency_1h (project_id, bucket DESC);
+
+CREATE TABLE rollup_job_state (
+    job_name    TEXT NOT NULL PRIMARY KEY,
+    last_bucket TIMESTAMPTZ NOT NULL
+);
+
+-- ============================================
+-- 6. SPANS TABLE (Distributed Tracing)
+-- Daily range-partitioned
+-- ============================================
+
+CREATE TABLE spans (
+    span_id           CHAR(16) NOT NULL,
+    trace_id          CHAR(32) NOT NULL,
+    parent_span_id    CHAR(16),
+    project_id        BIGINT NOT NULL,
+    service_name      TEXT NOT NULL,
+    name              TEXT NOT NULL,
+    kind              SMALLINT NOT NULL DEFAULT 0,
+    start_time        TIMESTAMPTZ NOT NULL,
+    duration_ns       BIGINT NOT NULL DEFAULT 0,
+    status_code       SMALLINT NOT NULL DEFAULT 0,
+    status_message    TEXT,
+    attributes        JSONB NOT NULL DEFAULT '{}'::jsonb,
+    events            JSONB,
+    error_fingerprint CHAR(64),
+    PRIMARY KEY (span_id, start_time)
+) PARTITION BY RANGE (start_time);
+
+CREATE INDEX brin_spans_project_time ON spans USING BRIN (project_id, start_time);
+CREATE INDEX idx_spans_trace ON spans (trace_id);
+CREATE INDEX idx_spans_op ON spans (project_id, service_name, name, start_time DESC);
+CREATE INDEX idx_spans_errors ON spans (project_id, start_time DESC) WHERE status_code = 2;
+
+CREATE TABLE span_latency_1h (
+    project_id   BIGINT NOT NULL,
+    service_name TEXT NOT NULL,
+    name         TEXT NOT NULL,
+    bucket       TIMESTAMPTZ NOT NULL,
+    calls        BIGINT NOT NULL DEFAULT 0,
+    p50_ns       BIGINT,
+    p95_ns       BIGINT,
+    p99_ns       BIGINT,
+    errors       BIGINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (project_id, service_name, name, bucket)
+);
+CREATE INDEX idx_sl1h_project_bucket ON span_latency_1h (project_id, bucket DESC);
+
+-- Add trace correlation columns to logs
+ALTER TABLE logs
+    ADD COLUMN trace_id CHAR(32),
+    ADD COLUMN span_id  CHAR(16);
+CREATE INDEX idx_log_trace ON logs (trace_id) WHERE trace_id IS NOT NULL;
+
+-- ============================================
+-- 7. CUSTOM METRICS TABLE
+-- Daily range-partitioned
+-- ============================================
+
+CREATE TABLE custom_metrics (
+    project_id  BIGINT NOT NULL,
+    name        TEXT NOT NULL,
+    tags        JSONB NOT NULL DEFAULT '{}'::jsonb,
+    ts          TIMESTAMPTZ NOT NULL,
+    type        SMALLINT NOT NULL,
+    count       BIGINT NOT NULL DEFAULT 0,
+    sum         DOUBLE PRECISION NOT NULL DEFAULT 0,
+    min_v       DOUBLE PRECISION,
+    max_v       DOUBLE PRECISION,
+    buckets     JSONB,
+    PRIMARY KEY (project_id, name, tags, ts)
+) PARTITION BY RANGE (ts);
+
+CREATE INDEX idx_cm_lookup ON custom_metrics (project_id, name, ts DESC);
+CREATE INDEX idx_cm_tags ON custom_metrics USING GIN (tags);
+
+CREATE TABLE metric_series_count (
+    project_id   BIGINT NOT NULL PRIMARY KEY,
+    series_count BIGINT NOT NULL DEFAULT 0,
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE custom_metrics_5m (
+    project_id  BIGINT NOT NULL,
+    name        TEXT NOT NULL,
+    tags        JSONB NOT NULL DEFAULT '{}'::jsonb,
+    bucket      TIMESTAMPTZ NOT NULL,
+    type        SMALLINT NOT NULL,
+    count       BIGINT NOT NULL DEFAULT 0,
+    sum         DOUBLE PRECISION NOT NULL DEFAULT 0,
+    min_v       DOUBLE PRECISION,
+    max_v       DOUBLE PRECISION,
+    PRIMARY KEY (project_id, name, tags, bucket)
+);
+CREATE INDEX idx_cm5m_lookup ON custom_metrics_5m (project_id, name, bucket DESC);
+
+CREATE TABLE custom_metrics_1h (
+    project_id  BIGINT NOT NULL,
+    name        TEXT NOT NULL,
+    tags        JSONB NOT NULL DEFAULT '{}'::jsonb,
+    bucket      TIMESTAMPTZ NOT NULL,
+    type        SMALLINT NOT NULL,
+    count       BIGINT NOT NULL DEFAULT 0,
+    sum         DOUBLE PRECISION NOT NULL DEFAULT 0,
+    min_v       DOUBLE PRECISION,
+    max_v       DOUBLE PRECISION,
+    PRIMARY KEY (project_id, name, tags, bucket)
+);
+CREATE INDEX idx_cm1h_lookup ON custom_metrics_1h (project_id, name, bucket DESC);
+
+CREATE TABLE custom_metrics_1d (
+    project_id  BIGINT NOT NULL,
+    name        TEXT NOT NULL,
+    tags        JSONB NOT NULL DEFAULT '{}'::jsonb,
+    bucket      DATE NOT NULL,
+    type        SMALLINT NOT NULL,
+    count       BIGINT NOT NULL DEFAULT 0,
+    sum         DOUBLE PRECISION NOT NULL DEFAULT 0,
+    min_v       DOUBLE PRECISION,
+    max_v       DOUBLE PRECISION,
+    PRIMARY KEY (project_id, name, tags, bucket)
+);
+CREATE INDEX idx_cm1d_lookup ON custom_metrics_1d (project_id, name, bucket DESC);
+

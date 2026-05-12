@@ -39,6 +39,7 @@ async def aggregate_log_volumes() -> None:
             rows = result.fetchall()
 
             aggregated: dict[tuple[int, datetime.datetime], dict] = {}
+            rollup_rows: list[dict] = []
 
             for row in rows:
                 project_id = row[0]
@@ -60,6 +61,15 @@ async def aggregate_log_volumes() -> None:
                 if level in _VALID_LEVELS:
                     aggregated[key][level] = count
 
+                rollup_rows.append(
+                    {
+                        "project_id": project_id,
+                        "level": level,
+                        "bucket": bucket,
+                        "count": count,
+                    }
+                )
+
             by_project: dict[int, list] = {}
             for (project_id, _bucket), data in aggregated.items():
                 if project_id not in by_project:
@@ -75,6 +85,50 @@ async def aggregate_log_volumes() -> None:
                     settings.ANALYTICS_LOG_VOLUME_TTL,
                     cache_value,
                 )
+
+            if rollup_rows:
+                upsert_query = sa.text(
+                    """
+                    INSERT INTO log_volume_5m (project_id, level, bucket, count)
+                    SELECT
+                        project_id,
+                        level,
+                        date_trunc('hour', bucket) +
+                            (EXTRACT(minute FROM bucket)::int / 5) * INTERVAL '5 minutes',
+                        SUM(count)
+                    FROM (
+                        SELECT
+                            :project_id AS project_id,
+                            :level AS level,
+                            :bucket AS bucket,
+                            :count AS count
+                    ) sub
+                    GROUP BY project_id, level,
+                        date_trunc('hour', bucket) +
+                            (EXTRACT(minute FROM bucket)::int / 5) * INTERVAL '5 minutes'
+                    ON CONFLICT (project_id, level, bucket)
+                    DO UPDATE SET count = EXCLUDED.count
+                    """
+                )
+                for row_data in rollup_rows:
+                    await session.execute(
+                        sa.text(
+                            """
+                            INSERT INTO log_volume_5m (project_id, level, bucket, count)
+                            VALUES (
+                                :project_id,
+                                :level,
+                                date_trunc('hour', :bucket::timestamptz) +
+                                    (EXTRACT(minute FROM :bucket::timestamptz)::int / 5) * INTERVAL '5 minutes',
+                                :count
+                            )
+                            ON CONFLICT (project_id, level, bucket)
+                            DO UPDATE SET count = EXCLUDED.count
+                            """
+                        ),
+                        row_data,
+                    )
+                await session.commit()
 
         elapsed = time.perf_counter() - start
         logger.info(

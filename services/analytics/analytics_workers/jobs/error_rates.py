@@ -23,8 +23,10 @@ async def aggregate_error_rates() -> None:
                     project_id,
                     date_trunc('hour', timestamp) +
                         (EXTRACT(minute FROM timestamp)::int / 5) * INTERVAL '5 minutes' as bucket,
-                    COUNT(*) FILTER (WHERE level = 'error') as error_count,
-                    COUNT(*) FILTER (WHERE level = 'critical') as critical_count
+                    COUNT(*) FILTER (WHERE level IN ('error', 'critical')) as error_count,
+                    COUNT(*) FILTER (WHERE level = 'error') as error_only_count,
+                    COUNT(*) FILTER (WHERE level = 'critical') as critical_count,
+                    COUNT(*) as total_count
                 FROM logs
                 WHERE timestamp > NOW() - INTERVAL '24 hours'
                 GROUP BY project_id, bucket
@@ -36,11 +38,16 @@ async def aggregate_error_rates() -> None:
             rows = result.fetchall()
 
             by_project: dict[int, list] = {}
+            rollup_rows = []
+
             for row in rows:
                 project_id = row[0]
                 bucket = row[1]
                 error_count = row[2]
-                critical_count = row[3]
+                error_only_count = row[3]
+                critical_count = row[4]
+                total_count = row[5]
+                ratio = error_count / total_count if total_count > 0 else 0.0
 
                 if project_id not in by_project:
                     by_project[project_id] = []
@@ -48,8 +55,18 @@ async def aggregate_error_rates() -> None:
                 by_project[project_id].append(
                     {
                         "timestamp": bucket.isoformat(),
-                        "error_count": error_count,
+                        "error_count": error_only_count,
                         "critical_count": critical_count,
+                    }
+                )
+
+                rollup_rows.append(
+                    {
+                        "project_id": project_id,
+                        "bucket": bucket,
+                        "errors": error_count,
+                        "total": total_count,
+                        "ratio": ratio,
                     }
                 )
 
@@ -62,6 +79,21 @@ async def aggregate_error_rates() -> None:
                     settings.ANALYTICS_ERROR_RATE_TTL,
                     cache_value,
                 )
+
+            if rollup_rows:
+                upsert_query = sa.text(
+                    """
+                    INSERT INTO error_rate_5m (project_id, bucket, errors, total, ratio)
+                    VALUES (:project_id, :bucket, :errors, :total, :ratio)
+                    ON CONFLICT (project_id, bucket)
+                    DO UPDATE SET
+                        errors = EXCLUDED.errors,
+                        total  = EXCLUDED.total,
+                        ratio  = EXCLUDED.ratio
+                    """
+                )
+                await session.execute(upsert_query, rollup_rows)
+                await session.commit()
 
         elapsed = time.perf_counter() - start
         logger.info(

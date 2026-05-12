@@ -9,7 +9,6 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Docker](https://img.shields.io/badge/docker-required-blue.svg)](https://www.docker.com/)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/JakubTuta/Ledger-APP/pulls)
 
 [Live Demo](https://ledger.jtuta.cloud) • [API Docs](https://bump.sh/tuta-corp/doc/ledger-api/) • [Python SDK](https://github.com/JakubTuta/Ledger-SDK) • [Report Bug](https://github.com/JakubTuta/Ledger-APP/issues)
 
@@ -17,18 +16,7 @@
 
 ---
 
-## The Problem
-
-You're running a backend service. Things break. Users complain. You need to know what happened, but:
-
-- **Datadog costs $31/host/month** (plus usage charges)
-- **New Relic wants $0.30/GB** after your free tier runs out
-- **Sentry charges $26/month** for error tracking alone
-- **DIY solutions** take weeks to build and maintain
-
-**What if you could have enterprise-grade logging without the enterprise price tag?**
-
-## The Solution
+## What is Ledger
 
 Ledger is a self-hosted log analytics platform that gives you everything you need:
 
@@ -48,6 +36,9 @@ Then watch your logs in real-time on a beautiful web dashboard. Search through m
 
 - **Lightning Fast** - Query 10,000+ logs/second, get results in <50ms
 - **Automatic Error Grouping** - Like Sentry, but free (no per-error pricing)
+- **Distributed Tracing** - End-to-end trace visibility across services
+- **Custom Metrics** - Track any numeric metric with tags and time-series queries
+- **Alert Rules** - Threshold-based alerts delivered via in-app, email, or webhook
 - **Beautiful Web Dashboard** - Real-time streaming, charts, and analytics
 - **Easy Integration** - One pip install, three lines of code
 - **Production Ready** - Multi-tenant, rate-limited, horizontally scalable
@@ -295,14 +286,14 @@ Want the technical details? Check out [ARCHITECTURE.md](documentation/ARCHITECTU
 
 Ledger is built to handle production workloads:
 
-| Metric                | Performance | Notes                       |
-| --------------------- | ----------- | --------------------------- |
-| Log ingestion         | 10,000/sec  | Per Gateway instance        |
-| Query response time   | <50ms       | P99, with cache             |
-| Search millions       | <200ms      | Full-text search            |
-| Error grouping        | Real-time   | Background workers          |
-| Horizontal scaling    | Yes         | Add more Gateway instances  |
-| Storage efficiency    | High        | Optimized PostgreSQL schema |
+| Metric              | Performance | Notes                       |
+| ------------------- | ----------- | --------------------------- |
+| Log ingestion       | 10,000/sec  | Per Gateway instance        |
+| Query response time | <50ms       | P99, with cache             |
+| Search millions     | <200ms      | Full-text search            |
+| Error grouping      | Real-time   | Background workers          |
+| Horizontal scaling  | Yes         | Add more Gateway instances  |
+| Storage efficiency  | High        | Optimized PostgreSQL schema |
 
 ## Configuration
 
@@ -339,7 +330,6 @@ Ledger is more than just the server:
 - Go SDK
 - Java SDK
 - Slack/Discord integrations
-- Webhook alerts
 
 ## Documentation
 

@@ -40,6 +40,36 @@ service AuthService {
   rpc CreateDashboardPanel(CreateDashboardPanelRequest) returns (CreateDashboardPanelResponse);
   rpc UpdateDashboardPanel(UpdateDashboardPanelRequest) returns (UpdateDashboardPanelResponse);
   rpc DeleteDashboardPanel(DeleteDashboardPanelRequest) returns (DeleteDashboardPanelResponse);
+
+  // Feature flag operations
+  rpc GetFeatureFlags(GetFeatureFlagsRequest) returns (GetFeatureFlagsResponse);
+  rpc SetFeatureFlag(SetFeatureFlagRequest) returns (SetFeatureFlagResponse);
+
+  // Notification inbox operations
+  rpc ListNotifications(ListNotificationsRequest) returns (ListNotificationsResponse);
+  rpc GetUnreadNotificationCount(GetUnreadNotificationCountRequest) returns (GetUnreadNotificationCountResponse);
+  rpc MarkNotificationRead(MarkNotificationReadRequest) returns (MarkNotificationReadResponse);
+  rpc MarkAllNotificationsRead(MarkAllNotificationsReadRequest) returns (MarkAllNotificationsReadResponse);
+  rpc DeleteNotification(DeleteNotificationRequest) returns (DeleteNotificationResponse);
+  rpc CreateNotification(CreateNotificationRequest) returns (CreateNotificationResponse);
+
+  // Alert rule operations
+  rpc ListAlertRules(ListAlertRulesRequest) returns (ListAlertRulesResponse);
+  rpc GetAlertRule(GetAlertRuleRequest) returns (GetAlertRuleResponse);
+  rpc CreateAlertRule(CreateAlertRuleRequest) returns (CreateAlertRuleResponse);
+  rpc UpdateAlertRule(UpdateAlertRuleRequest) returns (UpdateAlertRuleResponse);
+  rpc DeleteAlertRule(DeleteAlertRuleRequest) returns (DeleteAlertRuleResponse);
+
+  // Alert channel operations
+  rpc ListAlertChannels(ListAlertChannelsRequest) returns (ListAlertChannelsResponse);
+  rpc GetAlertChannel(GetAlertChannelRequest) returns (GetAlertChannelResponse);
+  rpc CreateAlertChannel(CreateAlertChannelRequest) returns (CreateAlertChannelResponse);
+  rpc UpdateAlertChannel(UpdateAlertChannelRequest) returns (UpdateAlertChannelResponse);
+  rpc DeleteAlertChannel(DeleteAlertChannelRequest) returns (DeleteAlertChannelResponse);
+
+  // Notification preferences (alert-specific)
+  rpc GetAlertNotificationPreferences(GetAlertNotificationPreferencesRequest) returns (GetAlertNotificationPreferencesResponse);
+  rpc UpsertAlertNotificationPreference(UpsertAlertNotificationPreferenceRequest) returns (UpsertAlertNotificationPreferenceResponse);
 }
 
 // ==================== Account Messages ====================
@@ -411,4 +441,277 @@ message DeleteDashboardPanelRequest {
 
 message DeleteDashboardPanelResponse {
   bool success = 1;
+}
+
+// ==================== Feature Flag Messages ====================
+
+message GetFeatureFlagsRequest {
+  int64 project_id = 1;
+}
+
+message FeatureFlag {
+  string key = 1;
+  bool enabled = 2;
+}
+
+message GetFeatureFlagsResponse {
+  repeated FeatureFlag flags = 1;
+}
+
+message SetFeatureFlagRequest {
+  int64 project_id = 1;
+  string key = 2;
+  bool enabled = 3;
+}
+
+message SetFeatureFlagResponse {
+  bool success = 1;
+  FeatureFlag flag = 2;
+}
+
+// ==================== Notification Inbox Messages ====================
+
+message NotificationItem {
+  int64 id = 1;
+  int64 user_id = 2;
+  int64 project_id = 3;
+  string kind = 4;
+  int32 severity = 5;
+  string payload = 6;  // JSON string
+  string created_at = 7;
+  optional string read_at = 8;
+  string expires_at = 9;
+}
+
+message ListNotificationsRequest {
+  int64 user_id = 1;
+  optional bool unread_only = 2;
+  optional int32 limit = 3;
+  optional int64 before_id = 4;
+}
+
+message ListNotificationsResponse {
+  repeated NotificationItem notifications = 1;
+  bool has_more = 2;
+}
+
+message GetUnreadNotificationCountRequest {
+  int64 user_id = 1;
+}
+
+message GetUnreadNotificationCountResponse {
+  int64 count = 1;
+}
+
+message MarkNotificationReadRequest {
+  int64 notification_id = 1;
+  int64 user_id = 2;
+}
+
+message MarkNotificationReadResponse {
+  bool success = 1;
+}
+
+message MarkAllNotificationsReadRequest {
+  int64 user_id = 1;
+}
+
+message MarkAllNotificationsReadResponse {
+  int64 updated_count = 1;
+}
+
+message DeleteNotificationRequest {
+  int64 notification_id = 1;
+  int64 user_id = 2;
+}
+
+message DeleteNotificationResponse {
+  bool success = 1;
+}
+
+message CreateNotificationRequest {
+  int64 user_id = 1;
+  int64 project_id = 2;
+  string kind = 3;
+  int32 severity = 4;
+  string payload = 5;  // JSON string
+}
+
+message CreateNotificationResponse {
+  NotificationItem notification = 1;
+}
+
+// ==================== Alert Rule Messages ====================
+
+message AlertRule {
+  int64 id = 1;
+  int64 project_id = 2;
+  string name = 3;
+  bool enabled = 4;
+  string metric = 5;
+  string tag_filter = 6;  // JSON string
+  string comparator = 7;
+  double threshold = 8;
+  int32 window_seconds = 9;
+  int32 cooldown_seconds = 10;
+  int32 severity = 11;
+  string channels = 12;  // JSON array of channel ids
+  optional string last_fired_at = 13;
+  string last_state = 14;
+  string created_at = 15;
+  string updated_at = 16;
+}
+
+message ListAlertRulesRequest {
+  int64 project_id = 1;
+}
+
+message ListAlertRulesResponse {
+  repeated AlertRule rules = 1;
+}
+
+message GetAlertRuleRequest {
+  int64 rule_id = 1;
+  int64 project_id = 2;
+}
+
+message GetAlertRuleResponse {
+  AlertRule rule = 1;
+  bool found = 2;
+}
+
+message CreateAlertRuleRequest {
+  int64 project_id = 1;
+  string name = 2;
+  string metric = 3;
+  string tag_filter = 4;   // JSON string
+  string comparator = 5;
+  double threshold = 6;
+  int32 window_seconds = 7;
+  int32 cooldown_seconds = 8;
+  int32 severity = 9;
+}
+
+message CreateAlertRuleResponse {
+  AlertRule rule = 1;
+}
+
+message UpdateAlertRuleRequest {
+  int64 rule_id = 1;
+  int64 project_id = 2;
+  optional string name = 3;
+  optional bool enabled = 4;
+  optional double threshold = 5;
+  optional int32 cooldown_seconds = 6;
+  optional string channels = 7;  // JSON array
+}
+
+message UpdateAlertRuleResponse {
+  AlertRule rule = 1;
+}
+
+message DeleteAlertRuleRequest {
+  int64 rule_id = 1;
+  int64 project_id = 2;
+}
+
+message DeleteAlertRuleResponse {
+  bool success = 1;
+}
+
+// ==================== Alert Channel Messages ====================
+
+message AlertChannel {
+  int64 id = 1;
+  int64 project_id = 2;
+  int64 user_id = 3;
+  string kind = 4;
+  string name = 5;
+  string config = 6;  // JSON string (without hmac_secret in responses)
+  bool enabled = 7;
+  string created_at = 8;
+}
+
+message ListAlertChannelsRequest {
+  int64 project_id = 1;
+}
+
+message ListAlertChannelsResponse {
+  repeated AlertChannel channels = 1;
+}
+
+message GetAlertChannelRequest {
+  int64 channel_id = 1;
+  int64 project_id = 2;
+}
+
+message GetAlertChannelResponse {
+  AlertChannel channel = 1;
+  bool found = 2;
+}
+
+message CreateAlertChannelRequest {
+  int64 project_id = 1;
+  int64 user_id = 2;
+  string kind = 3;
+  string name = 4;
+  string config = 5;  // JSON string
+}
+
+message CreateAlertChannelResponse {
+  AlertChannel channel = 1;
+}
+
+message UpdateAlertChannelRequest {
+  int64 channel_id = 1;
+  int64 project_id = 2;
+  optional string name = 3;
+  optional bool enabled = 4;
+  optional string config = 5;  // JSON string
+}
+
+message UpdateAlertChannelResponse {
+  AlertChannel channel = 1;
+}
+
+message DeleteAlertChannelRequest {
+  int64 channel_id = 1;
+  int64 project_id = 2;
+}
+
+message DeleteAlertChannelResponse {
+  bool success = 1;
+}
+
+// ==================== Alert Notification Preferences Messages ====================
+
+message AlertNotificationPreference {
+  int64 user_id = 1;
+  int64 project_id = 2;
+  optional int64 rule_id = 3;
+  optional int32 severity = 4;
+  bool muted = 5;
+  optional string channels = 6;  // JSON array
+}
+
+message GetAlertNotificationPreferencesRequest {
+  int64 user_id = 1;
+  int64 project_id = 2;
+}
+
+message GetAlertNotificationPreferencesResponse {
+  repeated AlertNotificationPreference preferences = 1;
+}
+
+message UpsertAlertNotificationPreferenceRequest {
+  int64 user_id = 1;
+  int64 project_id = 2;
+  optional int64 rule_id = 3;
+  optional int32 severity = 4;
+  bool muted = 5;
+  optional string channels = 6;  // JSON array
+}
+
+message UpsertAlertNotificationPreferenceResponse {
+  AlertNotificationPreference preference = 1;
 }

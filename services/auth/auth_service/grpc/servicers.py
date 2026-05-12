@@ -1,9 +1,12 @@
+import json
+
 import grpc
-from auth_service import database
+import sqlalchemy as sa
+from auth_service import config, database
+from auth_service import models
 from auth_service.proto import auth_pb2, auth_pb2_grpc
 from auth_service.services import auth_service, dashboard_service
 from auth_service.utils import jwt_utils
-from auth_service import config
 from redis.asyncio import Redis
 
 
@@ -933,3 +936,667 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f"Internal error: {str(e)}")
             return auth_pb2.DeleteDashboardPanelResponse(success=False)
+
+    # ==================== Feature Flag Operations ====================
+
+    async def GetFeatureFlags(
+        self,
+        request: auth_pb2.GetFeatureFlagsRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.GetFeatureFlagsResponse:
+        try:
+            async with database.get_session() as session:
+                result = await session.execute(
+                    sa.select(models.FeatureFlag).where(
+                        models.FeatureFlag.project_id == request.project_id
+                    )
+                )
+                rows = result.scalars().all()
+                flags = [
+                    auth_pb2.FeatureFlag(key=r.key, enabled=r.enabled) for r in rows
+                ]
+                return auth_pb2.GetFeatureFlagsResponse(flags=flags)
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.GetFeatureFlagsResponse()
+
+    async def SetFeatureFlag(
+        self,
+        request: auth_pb2.SetFeatureFlagRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.SetFeatureFlagResponse:
+        try:
+            async with database.get_session() as session:
+                await session.execute(
+                    sa.text("""
+                        INSERT INTO feature_flags (project_id, key, enabled, created_at, updated_at)
+                        VALUES (:project_id, :key, :enabled, NOW(), NOW())
+                        ON CONFLICT (project_id, key) DO UPDATE
+                        SET enabled = EXCLUDED.enabled, updated_at = NOW()
+                    """),
+                    {
+                        "project_id": request.project_id,
+                        "key": request.key,
+                        "enabled": request.enabled,
+                    },
+                )
+                await session.commit()
+                return auth_pb2.SetFeatureFlagResponse(
+                    success=True,
+                    flag=auth_pb2.FeatureFlag(key=request.key, enabled=request.enabled),
+                )
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.SetFeatureFlagResponse(success=False)
+
+    # ==================== Notification Inbox Operations ====================
+
+    async def ListNotifications(
+        self,
+        request: auth_pb2.ListNotificationsRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.ListNotificationsResponse:
+        try:
+            async with database.get_session() as session:
+                limit = request.limit if request.HasField("limit") else 50
+                query = sa.select(models.Notification).where(
+                    models.Notification.user_id == request.user_id
+                )
+                if request.HasField("unread_only") and request.unread_only:
+                    query = query.where(models.Notification.read_at == None)  # noqa: E711
+                if request.HasField("before_id"):
+                    query = query.where(models.Notification.id < request.before_id)
+                query = query.order_by(models.Notification.id.desc()).limit(limit + 1)
+                result = await session.execute(query)
+                rows = result.scalars().all()
+                has_more = len(rows) > limit
+                rows = rows[:limit]
+                items = [_notification_to_proto(n) for n in rows]
+                return auth_pb2.ListNotificationsResponse(
+                    notifications=items, has_more=has_more
+                )
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.ListNotificationsResponse()
+
+    async def GetUnreadNotificationCount(
+        self,
+        request: auth_pb2.GetUnreadNotificationCountRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.GetUnreadNotificationCountResponse:
+        try:
+            async with database.get_session() as session:
+                result = await session.execute(
+                    sa.select(sa.func.count(models.Notification.id)).where(
+                        models.Notification.user_id == request.user_id,
+                        models.Notification.read_at == None,  # noqa: E711
+                    )
+                )
+                count = result.scalar() or 0
+                return auth_pb2.GetUnreadNotificationCountResponse(count=count)
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.GetUnreadNotificationCountResponse(count=0)
+
+    async def MarkNotificationRead(
+        self,
+        request: auth_pb2.MarkNotificationReadRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.MarkNotificationReadResponse:
+        try:
+            async with database.get_session() as session:
+                await session.execute(
+                    sa.update(models.Notification)
+                    .where(
+                        models.Notification.id == request.notification_id,
+                        models.Notification.user_id == request.user_id,
+                        models.Notification.read_at == None,  # noqa: E711
+                    )
+                    .values(read_at=sa.func.now())
+                )
+                await session.commit()
+                return auth_pb2.MarkNotificationReadResponse(success=True)
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.MarkNotificationReadResponse(success=False)
+
+    async def MarkAllNotificationsRead(
+        self,
+        request: auth_pb2.MarkAllNotificationsReadRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.MarkAllNotificationsReadResponse:
+        try:
+            async with database.get_session() as session:
+                result = await session.execute(
+                    sa.update(models.Notification)
+                    .where(
+                        models.Notification.user_id == request.user_id,
+                        models.Notification.read_at == None,  # noqa: E711
+                    )
+                    .values(read_at=sa.func.now())
+                )
+                await session.commit()
+                return auth_pb2.MarkAllNotificationsReadResponse(
+                    updated_count=result.rowcount
+                )
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.MarkAllNotificationsReadResponse(updated_count=0)
+
+    async def DeleteNotification(
+        self,
+        request: auth_pb2.DeleteNotificationRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.DeleteNotificationResponse:
+        try:
+            async with database.get_session() as session:
+                await session.execute(
+                    sa.delete(models.Notification).where(
+                        models.Notification.id == request.notification_id,
+                        models.Notification.user_id == request.user_id,
+                    )
+                )
+                await session.commit()
+                return auth_pb2.DeleteNotificationResponse(success=True)
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.DeleteNotificationResponse(success=False)
+
+    async def CreateNotification(
+        self,
+        request: auth_pb2.CreateNotificationRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.CreateNotificationResponse:
+        try:
+            async with database.get_session() as session:
+                severity_map = {0: "info", 1: "warning", 2: "critical"}
+                severity_str = severity_map.get(request.severity, "info")
+                payload = json.loads(request.payload) if request.payload else {}
+                notif = models.Notification(
+                    user_id=request.user_id,
+                    project_id=request.project_id,
+                    kind=request.kind,
+                    severity=severity_str,
+                    payload=payload,
+                )
+                session.add(notif)
+                await session.commit()
+                await session.refresh(notif)
+                return auth_pb2.CreateNotificationResponse(
+                    notification=_notification_to_proto(notif)
+                )
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.CreateNotificationResponse()
+
+    # ==================== Alert Rule Operations ====================
+
+    async def ListAlertRules(
+        self,
+        request: auth_pb2.ListAlertRulesRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.ListAlertRulesResponse:
+        try:
+            async with database.get_session() as session:
+                result = await session.execute(
+                    sa.select(models.AlertRule).where(
+                        models.AlertRule.project_id == request.project_id
+                    )
+                )
+                rules = result.scalars().all()
+                return auth_pb2.ListAlertRulesResponse(
+                    rules=[_alert_rule_to_proto(r) for r in rules]
+                )
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.ListAlertRulesResponse()
+
+    async def GetAlertRule(
+        self,
+        request: auth_pb2.GetAlertRuleRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.GetAlertRuleResponse:
+        try:
+            async with database.get_session() as session:
+                result = await session.execute(
+                    sa.select(models.AlertRule).where(
+                        models.AlertRule.id == request.rule_id,
+                        models.AlertRule.project_id == request.project_id,
+                    )
+                )
+                rule = result.scalar_one_or_none()
+                if not rule:
+                    return auth_pb2.GetAlertRuleResponse(found=False)
+                return auth_pb2.GetAlertRuleResponse(
+                    rule=_alert_rule_to_proto(rule), found=True
+                )
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.GetAlertRuleResponse(found=False)
+
+    async def CreateAlertRule(
+        self,
+        request: auth_pb2.CreateAlertRuleRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.CreateAlertRuleResponse:
+        try:
+            async with database.get_session() as session:
+                severity_map = {0: "info", 1: "warning", 2: "critical"}
+                rule = models.AlertRule(
+                    project_id=request.project_id,
+                    name=request.name,
+                    metric_type=request.metric,
+                    comparator=request.comparator,
+                    threshold=request.threshold,
+                    window_minutes=max(1, request.window_seconds // 60),
+                    cooldown_minutes=max(1, request.cooldown_seconds // 60),
+                    severity=severity_map.get(request.severity, "warning"),
+                    enabled=True,
+                    state="ok",
+                )
+                session.add(rule)
+                await session.commit()
+                await session.refresh(rule)
+                return auth_pb2.CreateAlertRuleResponse(rule=_alert_rule_to_proto(rule))
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.CreateAlertRuleResponse()
+
+    async def UpdateAlertRule(
+        self,
+        request: auth_pb2.UpdateAlertRuleRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.UpdateAlertRuleResponse:
+        try:
+            async with database.get_session() as session:
+                result = await session.execute(
+                    sa.select(models.AlertRule).where(
+                        models.AlertRule.id == request.rule_id,
+                        models.AlertRule.project_id == request.project_id,
+                    )
+                )
+                rule = result.scalar_one_or_none()
+                if not rule:
+                    context.set_code(grpc.StatusCode.NOT_FOUND)
+                    context.set_details("Alert rule not found")
+                    return auth_pb2.UpdateAlertRuleResponse()
+                if request.HasField("name"):
+                    rule.name = request.name
+                if request.HasField("enabled"):
+                    rule.enabled = request.enabled
+                if request.HasField("threshold"):
+                    rule.threshold = request.threshold
+                if request.HasField("cooldown_seconds"):
+                    rule.cooldown_minutes = max(1, request.cooldown_seconds // 60)
+                await session.commit()
+                await session.refresh(rule)
+                return auth_pb2.UpdateAlertRuleResponse(rule=_alert_rule_to_proto(rule))
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.UpdateAlertRuleResponse()
+
+    async def DeleteAlertRule(
+        self,
+        request: auth_pb2.DeleteAlertRuleRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.DeleteAlertRuleResponse:
+        try:
+            async with database.get_session() as session:
+                await session.execute(
+                    sa.delete(models.AlertRule).where(
+                        models.AlertRule.id == request.rule_id,
+                        models.AlertRule.project_id == request.project_id,
+                    )
+                )
+                await session.commit()
+                return auth_pb2.DeleteAlertRuleResponse(success=True)
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.DeleteAlertRuleResponse(success=False)
+
+    # ==================== Alert Channel Operations ====================
+
+    async def ListAlertChannels(
+        self,
+        request: auth_pb2.ListAlertChannelsRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.ListAlertChannelsResponse:
+        try:
+            async with database.get_session() as session:
+                result = await session.execute(
+                    sa.select(models.AlertChannel, models.AlertRule.project_id)
+                    .join(
+                        models.AlertRule,
+                        models.AlertChannel.rule_id == models.AlertRule.id,
+                    )
+                    .where(models.AlertRule.project_id == request.project_id)
+                )
+                rows = result.all()
+                channels = [
+                    _alert_channel_to_proto(ch, proj_id) for ch, proj_id in rows
+                ]
+                return auth_pb2.ListAlertChannelsResponse(channels=channels)
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.ListAlertChannelsResponse()
+
+    async def GetAlertChannel(
+        self,
+        request: auth_pb2.GetAlertChannelRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.GetAlertChannelResponse:
+        try:
+            async with database.get_session() as session:
+                result = await session.execute(
+                    sa.select(models.AlertChannel, models.AlertRule.project_id)
+                    .join(
+                        models.AlertRule,
+                        models.AlertChannel.rule_id == models.AlertRule.id,
+                    )
+                    .where(
+                        models.AlertChannel.id == request.channel_id,
+                        models.AlertRule.project_id == request.project_id,
+                    )
+                )
+                row = result.first()
+                if not row:
+                    return auth_pb2.GetAlertChannelResponse(found=False)
+                ch, proj_id = row
+                return auth_pb2.GetAlertChannelResponse(
+                    channel=_alert_channel_to_proto(ch, proj_id), found=True
+                )
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.GetAlertChannelResponse(found=False)
+
+    async def CreateAlertChannel(
+        self,
+        request: auth_pb2.CreateAlertChannelRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.CreateAlertChannelResponse:
+        try:
+            async with database.get_session() as session:
+                result = await session.execute(
+                    sa.select(models.AlertRule.id).where(
+                        models.AlertRule.project_id == request.project_id
+                    ).limit(1)
+                )
+                rule_id = result.scalar_one_or_none()
+                if rule_id is None:
+                    context.set_code(grpc.StatusCode.FAILED_PRECONDITION)
+                    context.set_details("No alert rules exist for this project")
+                    return auth_pb2.CreateAlertChannelResponse()
+                config_dict = json.loads(request.config) if request.config else {}
+                channel = models.AlertChannel(
+                    rule_id=rule_id,
+                    kind=request.kind,
+                    config=config_dict,
+                )
+                session.add(channel)
+                await session.commit()
+                await session.refresh(channel)
+                return auth_pb2.CreateAlertChannelResponse(
+                    channel=_alert_channel_to_proto(channel, request.project_id)
+                )
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.CreateAlertChannelResponse()
+
+    async def UpdateAlertChannel(
+        self,
+        request: auth_pb2.UpdateAlertChannelRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.UpdateAlertChannelResponse:
+        try:
+            async with database.get_session() as session:
+                result = await session.execute(
+                    sa.select(models.AlertChannel, models.AlertRule.project_id)
+                    .join(
+                        models.AlertRule,
+                        models.AlertChannel.rule_id == models.AlertRule.id,
+                    )
+                    .where(
+                        models.AlertChannel.id == request.channel_id,
+                        models.AlertRule.project_id == request.project_id,
+                    )
+                )
+                row = result.first()
+                if not row:
+                    context.set_code(grpc.StatusCode.NOT_FOUND)
+                    context.set_details("Alert channel not found")
+                    return auth_pb2.UpdateAlertChannelResponse()
+                ch, proj_id = row
+                if request.HasField("config"):
+                    ch.config = json.loads(request.config)
+                await session.commit()
+                await session.refresh(ch)
+                return auth_pb2.UpdateAlertChannelResponse(
+                    channel=_alert_channel_to_proto(ch, proj_id)
+                )
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.UpdateAlertChannelResponse()
+
+    async def DeleteAlertChannel(
+        self,
+        request: auth_pb2.DeleteAlertChannelRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.DeleteAlertChannelResponse:
+        try:
+            async with database.get_session() as session:
+                subq = (
+                    sa.select(models.AlertChannel.id)
+                    .join(
+                        models.AlertRule,
+                        models.AlertChannel.rule_id == models.AlertRule.id,
+                    )
+                    .where(
+                        models.AlertChannel.id == request.channel_id,
+                        models.AlertRule.project_id == request.project_id,
+                    )
+                    .scalar_subquery()
+                )
+                await session.execute(
+                    sa.delete(models.AlertChannel).where(
+                        models.AlertChannel.id == subq
+                    )
+                )
+                await session.commit()
+                return auth_pb2.DeleteAlertChannelResponse(success=True)
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.DeleteAlertChannelResponse(success=False)
+
+    # ==================== Alert Notification Preference Operations ====================
+
+    async def GetAlertNotificationPreferences(
+        self,
+        request: auth_pb2.GetAlertNotificationPreferencesRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.GetAlertNotificationPreferencesResponse:
+        try:
+            async with database.get_session() as session:
+                result = await session.execute(
+                    sa.select(models.NotificationPreference).where(
+                        models.NotificationPreference.user_id == request.user_id,
+                        models.NotificationPreference.project_id == request.project_id,
+                    )
+                )
+                prefs = result.scalars().all()
+                return auth_pb2.GetAlertNotificationPreferencesResponse(
+                    preferences=[_notif_pref_to_proto(p) for p in prefs]
+                )
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.GetAlertNotificationPreferencesResponse()
+
+    async def UpsertAlertNotificationPreference(
+        self,
+        request: auth_pb2.UpsertAlertNotificationPreferenceRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.UpsertAlertNotificationPreferenceResponse:
+        try:
+            async with database.get_session() as session:
+                severity_map = {0: None, 1: "info", 2: "warning", 3: "critical"}
+                severity_str = (
+                    severity_map.get(request.severity)
+                    if request.HasField("severity")
+                    else None
+                )
+                rule_id = request.rule_id if request.HasField("rule_id") else None
+                channels_dict = (
+                    json.loads(request.channels)
+                    if request.HasField("channels") and request.channels
+                    else {}
+                )
+                delete_cond = (
+                    models.NotificationPreference.user_id == request.user_id,
+                    models.NotificationPreference.project_id == request.project_id,
+                    (
+                        models.NotificationPreference.rule_id == rule_id
+                        if rule_id is not None
+                        else models.NotificationPreference.rule_id == None  # noqa: E711
+                    ),
+                    (
+                        models.NotificationPreference.severity == severity_str
+                        if severity_str is not None
+                        else models.NotificationPreference.severity == None  # noqa: E711
+                    ),
+                )
+                await session.execute(
+                    sa.delete(models.NotificationPreference).where(*delete_cond)
+                )
+                session.add(
+                    models.NotificationPreference(
+                        user_id=request.user_id,
+                        project_id=request.project_id,
+                        rule_id=rule_id,
+                        severity=severity_str,
+                        muted=request.muted,
+                        channel_overrides=channels_dict,
+                    )
+                )
+                await session.commit()
+                rule_filter = (
+                    models.NotificationPreference.rule_id == rule_id
+                    if rule_id is not None
+                    else models.NotificationPreference.rule_id.is_(None)
+                )
+                sev_filter = (
+                    models.NotificationPreference.severity == severity_str
+                    if severity_str is not None
+                    else models.NotificationPreference.severity.is_(None)
+                )
+                result = await session.execute(
+                    sa.select(models.NotificationPreference).where(
+                        models.NotificationPreference.user_id == request.user_id,
+                        models.NotificationPreference.project_id == request.project_id,
+                        rule_filter,
+                        sev_filter,
+                    )
+                )
+                pref = result.scalar_one()
+                return auth_pb2.UpsertAlertNotificationPreferenceResponse(
+                    preference=_notif_pref_to_proto(pref)
+                )
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.UpsertAlertNotificationPreferenceResponse()
+
+
+# ==================== Proto conversion helpers ====================
+
+def _severity_str_to_int(s: str) -> int:
+    return {"info": 0, "warning": 1, "critical": 2}.get(s, 0)
+
+
+def _notification_to_proto(n: models.Notification) -> auth_pb2.NotificationItem:
+    item = auth_pb2.NotificationItem(
+        id=n.id,
+        user_id=n.user_id,
+        project_id=n.project_id,
+        kind=n.kind,
+        severity=_severity_str_to_int(n.severity),
+        payload=json.dumps(n.payload) if n.payload else "{}",
+        created_at=n.created_at.isoformat(),
+        expires_at=n.expires_at.isoformat() if n.expires_at else "",
+    )
+    if n.read_at:
+        item.read_at = n.read_at.isoformat()
+    return item
+
+
+def _alert_rule_to_proto(r: models.AlertRule) -> auth_pb2.AlertRule:
+    rule = auth_pb2.AlertRule(
+        id=r.id,
+        project_id=r.project_id,
+        name=r.name,
+        enabled=r.enabled,
+        metric=r.metric_type,
+        tag_filter="{}",
+        comparator=r.comparator,
+        threshold=r.threshold,
+        window_seconds=r.window_minutes * 60,
+        cooldown_seconds=r.cooldown_minutes * 60,
+        severity=_severity_str_to_int(r.severity),
+        channels="[]",
+        last_state=r.state,
+        created_at=r.created_at.isoformat(),
+        updated_at=r.updated_at.isoformat(),
+    )
+    if r.last_fired_at:
+        rule.last_fired_at = r.last_fired_at.isoformat()
+    return rule
+
+
+def _alert_channel_to_proto(
+    ch: models.AlertChannel, project_id: int
+) -> auth_pb2.AlertChannel:
+    config_safe = dict(ch.config or {})
+    config_safe.pop("hmac_secret", None)
+    return auth_pb2.AlertChannel(
+        id=ch.id,
+        project_id=project_id,
+        user_id=0,
+        kind=ch.kind,
+        name=ch.kind,
+        config=json.dumps(config_safe),
+        enabled=True,
+        created_at=ch.created_at.isoformat(),
+    )
+
+
+def _notif_pref_to_proto(
+    p: models.NotificationPreference,
+) -> auth_pb2.AlertNotificationPreference:
+    pref = auth_pb2.AlertNotificationPreference(
+        user_id=p.user_id,
+        project_id=p.project_id,
+        muted=p.muted,
+        channels=json.dumps(p.channel_overrides) if p.channel_overrides else "[]",
+    )
+    if p.rule_id is not None:
+        pref.rule_id = p.rule_id
+    if p.severity is not None:
+        pref.severity = _severity_str_to_int(p.severity)
+    return pref

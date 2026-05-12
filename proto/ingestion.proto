@@ -13,6 +13,12 @@ service IngestionService {
 
     // Get queue depth for a project
     rpc GetQueueDepth(QueueDepthRequest) returns (QueueDepthResponse);
+
+    // Ingest a batch of distributed trace spans
+    rpc IngestSpansBatch(IngestSpansBatchRequest) returns (IngestSpansBatchResponse);
+
+    // Ingest a batch of custom metrics
+    rpc IngestMetricsBatch(IngestMetricsBatchRequest) returns (IngestMetricsBatchResponse);
 }
 
 // ==================== Messages ====================
@@ -72,4 +78,79 @@ message QueueDepthRequest {
 
 message QueueDepthResponse {
     int64 depth = 1;
+}
+
+// ==================== Span Ingestion Messages ====================
+
+enum SpanKind {
+    SERVER   = 0;
+    CLIENT   = 1;
+    INTERNAL = 2;
+    PRODUCER = 3;
+    CONSUMER = 4;
+}
+
+enum SpanStatus {
+    UNSET = 0;
+    OK    = 1;
+    ERROR = 2;
+}
+
+message SpanEvent {
+    string name           = 1;
+    int64  ts_unix_nano   = 2;
+    map<string, string> attrs = 3;
+}
+
+message Span {
+    string trace_id        = 1;   // 32 hex chars
+    string span_id         = 2;   // 16 hex chars
+    string parent_span_id  = 3;   // optional, 16 hex chars
+    string name            = 4;
+    SpanKind kind          = 5;
+    int64 start_unix_nano  = 6;
+    int64 end_unix_nano    = 7;
+    SpanStatus status      = 8;
+    string status_message  = 9;
+    map<string, string> attributes = 10;
+    repeated SpanEvent events      = 11;
+    string service_name    = 12;
+}
+
+message IngestSpansBatchRequest {
+    int64 project_id    = 1;
+    repeated Span spans = 2;
+}
+
+message IngestSpansBatchResponse {
+    bool success   = 1;
+    int32 accepted = 2;
+    int32 rejected = 3;
+    optional string error = 4;
+}
+
+// ==================== Custom Metrics Ingestion Messages ====================
+
+message MetricDataPoint {
+    string name   = 1;
+    string tags   = 2;   // JSON string: {"key": "value"}
+    int64  ts_unix_nano = 3;
+    int32  type   = 4;   // 1=counter 2=gauge 3=histogram
+    int64  count  = 5;
+    double sum    = 6;
+    double min_v  = 7;
+    double max_v  = 8;
+    string buckets = 9;  // JSON string for histograms
+}
+
+message IngestMetricsBatchRequest {
+    int64 project_id              = 1;
+    repeated MetricDataPoint metrics = 2;
+}
+
+message IngestMetricsBatchResponse {
+    bool success   = 1;
+    int32 accepted = 2;
+    int32 rejected = 3;
+    optional string error = 4;
 }

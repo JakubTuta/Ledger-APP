@@ -8,9 +8,11 @@ import query_service.proto.query_pb2_grpc as query_pb2_grpc
 import query_service.schemas as schemas
 import query_service.services.aggregated_metrics as aggregated_metrics_service
 import query_service.services.bottleneck_metrics as bottleneck_metrics_service
+import query_service.services.custom_metrics as custom_metrics_service
 import query_service.services.health_summary as health_summary_service
 import query_service.services.log_query as log_query
 import query_service.services.metrics as metrics_service
+import query_service.services.tracing as tracing_service
 
 
 class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
@@ -577,4 +579,190 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
         except Exception as e:
             await context.abort(
                 grpc.StatusCode.INTERNAL, f"Get health summary failed: {str(e)}"
+            )
+
+    # ==================== Distributed Tracing ====================
+
+    async def GetTrace(
+        self,
+        request: query_pb2.GetTraceRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> query_pb2.GetTraceResponse:
+        try:
+            trace = await tracing_service.get_trace(
+                project_id=request.project_id, trace_id=request.trace_id
+            )
+            if not trace:
+                return query_pb2.GetTraceResponse(found=False)
+            spans = [
+                query_pb2.SpanData(
+                    span_id=s["span_id"],
+                    trace_id=s["trace_id"],
+                    parent_span_id=s["parent_span_id"],
+                    project_id=s["project_id"],
+                    service_name=s["service_name"],
+                    name=s["name"],
+                    kind=s["kind"],
+                    start_time=s["start_time"],
+                    duration_ns=s["duration_ns"],
+                    status_code=s["status_code"],
+                    status_message=s["status_message"],
+                    attributes=s["attributes"],
+                    events=s["events"],
+                    error_fingerprint=s["error_fingerprint"],
+                )
+                for s in trace["spans"]
+            ]
+            return query_pb2.GetTraceResponse(
+                trace_id=trace["trace_id"],
+                spans=spans,
+                duration_ms=trace["duration_ms"],
+                services=trace["services"],
+                root_span_id=trace["root_span_id"],
+                found=True,
+            )
+        except Exception as e:
+            await context.abort(grpc.StatusCode.INTERNAL, f"GetTrace failed: {str(e)}")
+
+    async def ListTraces(
+        self,
+        request: query_pb2.ListTracesRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> query_pb2.ListTracesResponse:
+        try:
+            result = await tracing_service.list_traces(
+                project_id=request.project_id,
+                service=request.service if request.HasField("service") else None,
+                name=request.name if request.HasField("name") else None,
+                min_duration_ms=request.min_duration_ms
+                if request.HasField("min_duration_ms")
+                else None,
+                has_error=request.has_error if request.HasField("has_error") else None,
+                from_time=request.from_time if request.HasField("from_time") else None,
+                to_time=request.to_time if request.HasField("to_time") else None,
+                limit=request.limit if request.limit > 0 else 50,
+                offset=request.offset if request.offset >= 0 else 0,
+            )
+            traces = [
+                query_pb2.TraceSummary(
+                    trace_id=t["trace_id"],
+                    root_span_id=t["root_span_id"],
+                    root_name=t["root_name"],
+                    service_name=t["service_name"],
+                    start_time=t["start_time"],
+                    duration_ms=t["duration_ms"],
+                    span_count=t["span_count"],
+                    has_error=t["has_error"],
+                )
+                for t in result["traces"]
+            ]
+            return query_pb2.ListTracesResponse(
+                traces=traces, total=result["total"], has_more=result["has_more"]
+            )
+        except Exception as e:
+            await context.abort(
+                grpc.StatusCode.INTERNAL, f"ListTraces failed: {str(e)}"
+            )
+
+    async def GetSpanLatency(
+        self,
+        request: query_pb2.GetSpanLatencyRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> query_pb2.GetSpanLatencyResponse:
+        try:
+            buckets = await tracing_service.get_span_latency(
+                project_id=request.project_id,
+                service=request.service if request.HasField("service") else None,
+                name=request.name if request.HasField("name") else None,
+                from_time=request.from_time if request.HasField("from_time") else None,
+                to_time=request.to_time if request.HasField("to_time") else None,
+            )
+            data = [
+                query_pb2.SpanLatencyBucket(
+                    service_name=b["service_name"],
+                    name=b["name"],
+                    bucket=b["bucket"],
+                    calls=b["calls"],
+                    p50_ns=b["p50_ns"],
+                    p95_ns=b["p95_ns"],
+                    p99_ns=b["p99_ns"],
+                    errors=b["errors"],
+                )
+                for b in buckets
+            ]
+            return query_pb2.GetSpanLatencyResponse(
+                project_id=request.project_id, data=data
+            )
+        except Exception as e:
+            await context.abort(
+                grpc.StatusCode.INTERNAL, f"GetSpanLatency failed: {str(e)}"
+            )
+
+    # ==================== Custom Metrics ====================
+
+    async def QueryCustomMetrics(
+        self,
+        request: query_pb2.QueryCustomMetricsRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> query_pb2.QueryCustomMetricsResponse:
+        try:
+            agg = request.agg if request.HasField("agg") else "sum"
+            step = request.step_seconds if request.HasField("step_seconds") else 300
+            points = await custom_metrics_service.query_custom_metrics(
+                project_id=request.project_id,
+                name=request.name,
+                tags=request.tags,
+                from_time=request.from_time if request.HasField("from_time") else None,
+                to_time=request.to_time if request.HasField("to_time") else None,
+                agg=agg,
+                step_seconds=step,
+            )
+            data = [
+                query_pb2.CustomMetricDataPoint(bucket=p["bucket"], value=p["value"])
+                for p in points
+            ]
+            return query_pb2.QueryCustomMetricsResponse(
+                project_id=request.project_id,
+                name=request.name,
+                agg=agg,
+                data=data,
+            )
+        except Exception as e:
+            await context.abort(
+                grpc.StatusCode.INTERNAL, f"QueryCustomMetrics failed: {str(e)}"
+            )
+
+    async def ListCustomMetricNames(
+        self,
+        request: query_pb2.ListCustomMetricNamesRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> query_pb2.ListCustomMetricNamesResponse:
+        try:
+            names = await custom_metrics_service.list_metric_names(
+                project_id=request.project_id,
+                prefix=request.prefix if request.HasField("prefix") else None,
+            )
+            return query_pb2.ListCustomMetricNamesResponse(names=names)
+        except Exception as e:
+            await context.abort(
+                grpc.StatusCode.INTERNAL, f"ListCustomMetricNames failed: {str(e)}"
+            )
+
+    async def ListCustomMetricTags(
+        self,
+        request: query_pb2.ListCustomMetricTagsRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> query_pb2.ListCustomMetricTagsResponse:
+        try:
+            tag_entries = await custom_metrics_service.list_metric_tags(
+                project_id=request.project_id, name=request.name
+            )
+            tags = [
+                query_pb2.CustomMetricTagEntry(key=t["key"], values=t["values"])
+                for t in tag_entries
+            ]
+            return query_pb2.ListCustomMetricTagsResponse(tags=tags)
+        except Exception as e:
+            await context.abort(
+                grpc.StatusCode.INTERNAL, f"ListCustomMetricTags failed: {str(e)}"
             )

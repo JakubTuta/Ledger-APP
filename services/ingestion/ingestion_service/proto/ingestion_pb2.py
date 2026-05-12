@@ -24,13 +24,21 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0fingestion.proto\x12\tingestion\"\xea\x03\n\x08LogEntry\x12\x11\n\ttimestamp\x18\x01 \x01(\t\x12\r\n\x05level\x18\x02 \x01(\t\x12\x10\n\x08log_type\x18\x03 \x01(\t\x12\x12\n\nimportance\x18\x04 \x01(\t\x12\x14\n\x07message\x18\x05 \x01(\tH\x00\x88\x01\x01\x12\x17\n\nerror_type\x18\x06 \x01(\tH\x01\x88\x01\x01\x12\x1a\n\rerror_message\x18\x07 \x01(\tH\x02\x88\x01\x01\x12\x18\n\x0bstack_trace\x18\x08 \x01(\tH\x03\x88\x01\x01\x12\x18\n\x0b\x65nvironment\x18\t \x01(\tH\x04\x88\x01\x01\x12\x14\n\x07release\x18\n \x01(\tH\x05\x88\x01\x01\x12\x18\n\x0bsdk_version\x18\x0b \x01(\tH\x06\x88\x01\x01\x12\x15\n\x08platform\x18\x0c \x01(\tH\x07\x88\x01\x01\x12\x1d\n\x10platform_version\x18\r \x01(\tH\x08\x88\x01\x01\x12\x17\n\nattributes\x18\x0e \x01(\tH\t\x88\x01\x01\x42\n\n\x08_messageB\r\n\x0b_error_typeB\x10\n\x0e_error_messageB\x0e\n\x0c_stack_traceB\x0e\n\x0c_environmentB\n\n\x08_releaseB\x0e\n\x0c_sdk_versionB\x0b\n\t_platformB\x13\n\x11_platform_versionB\r\n\x0b_attributes\"H\n\x10IngestLogRequest\x12\x12\n\nproject_id\x18\x01 \x01(\x03\x12 \n\x03log\x18\x02 \x01(\x0b\x32\x13.ingestion.LogEntry\"S\n\x11IngestLogResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x12\n\x05\x65rror\x18\x03 \x01(\tH\x00\x88\x01\x01\x42\x08\n\x06_error\"N\n\x15IngestLogBatchRequest\x12\x12\n\nproject_id\x18\x01 \x01(\x03\x12!\n\x04logs\x18\x02 \x03(\x0b\x32\x13.ingestion.LogEntry\"g\n\x16IngestLogBatchResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0e\n\x06queued\x18\x02 \x01(\x05\x12\x0e\n\x06\x66\x61iled\x18\x03 \x01(\x05\x12\x12\n\x05\x65rror\x18\x04 \x01(\tH\x00\x88\x01\x01\x42\x08\n\x06_error\"\'\n\x11QueueDepthRequest\x12\x12\n\nproject_id\x18\x01 \x01(\x03\"#\n\x12QueueDepthResponse\x12\r\n\x05\x64\x65pth\x18\x01 \x01(\x03\x32\xff\x01\n\x10IngestionService\x12\x46\n\tIngestLog\x12\x1b.ingestion.IngestLogRequest\x1a\x1c.ingestion.IngestLogResponse\x12U\n\x0eIngestLogBatch\x12 .ingestion.IngestLogBatchRequest\x1a!.ingestion.IngestLogBatchResponse\x12L\n\rGetQueueDepth\x12\x1c.ingestion.QueueDepthRequest\x1a\x1d.ingestion.QueueDepthResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0fingestion.proto\x12\tingestion\"\xea\x03\n\x08LogEntry\x12\x11\n\ttimestamp\x18\x01 \x01(\t\x12\r\n\x05level\x18\x02 \x01(\t\x12\x10\n\x08log_type\x18\x03 \x01(\t\x12\x12\n\nimportance\x18\x04 \x01(\t\x12\x14\n\x07message\x18\x05 \x01(\tH\x00\x88\x01\x01\x12\x17\n\nerror_type\x18\x06 \x01(\tH\x01\x88\x01\x01\x12\x1a\n\rerror_message\x18\x07 \x01(\tH\x02\x88\x01\x01\x12\x18\n\x0bstack_trace\x18\x08 \x01(\tH\x03\x88\x01\x01\x12\x18\n\x0b\x65nvironment\x18\t \x01(\tH\x04\x88\x01\x01\x12\x14\n\x07release\x18\n \x01(\tH\x05\x88\x01\x01\x12\x18\n\x0bsdk_version\x18\x0b \x01(\tH\x06\x88\x01\x01\x12\x15\n\x08platform\x18\x0c \x01(\tH\x07\x88\x01\x01\x12\x1d\n\x10platform_version\x18\r \x01(\tH\x08\x88\x01\x01\x12\x17\n\nattributes\x18\x0e \x01(\tH\t\x88\x01\x01\x42\n\n\x08_messageB\r\n\x0b_error_typeB\x10\n\x0e_error_messageB\x0e\n\x0c_stack_traceB\x0e\n\x0c_environmentB\n\n\x08_releaseB\x0e\n\x0c_sdk_versionB\x0b\n\t_platformB\x13\n\x11_platform_versionB\r\n\x0b_attributes\"H\n\x10IngestLogRequest\x12\x12\n\nproject_id\x18\x01 \x01(\x03\x12 \n\x03log\x18\x02 \x01(\x0b\x32\x13.ingestion.LogEntry\"S\n\x11IngestLogResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x12\n\x05\x65rror\x18\x03 \x01(\tH\x00\x88\x01\x01\x42\x08\n\x06_error\"N\n\x15IngestLogBatchRequest\x12\x12\n\nproject_id\x18\x01 \x01(\x03\x12!\n\x04logs\x18\x02 \x03(\x0b\x32\x13.ingestion.LogEntry\"g\n\x16IngestLogBatchResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0e\n\x06queued\x18\x02 \x01(\x05\x12\x0e\n\x06\x66\x61iled\x18\x03 \x01(\x05\x12\x12\n\x05\x65rror\x18\x04 \x01(\tH\x00\x88\x01\x01\x42\x08\n\x06_error\"\'\n\x11QueueDepthRequest\x12\x12\n\nproject_id\x18\x01 \x01(\x03\"#\n\x12QueueDepthResponse\x12\r\n\x05\x64\x65pth\x18\x01 \x01(\x03\"\x8d\x01\n\tSpanEvent\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x14\n\x0cts_unix_nano\x18\x02 \x01(\x03\x12.\n\x05\x61ttrs\x18\x03 \x03(\x0b\x32\x1f.ingestion.SpanEvent.AttrsEntry\x1a,\n\nAttrsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\x85\x03\n\x04Span\x12\x10\n\x08trace_id\x18\x01 \x01(\t\x12\x0f\n\x07span_id\x18\x02 \x01(\t\x12\x16\n\x0eparent_span_id\x18\x03 \x01(\t\x12\x0c\n\x04name\x18\x04 \x01(\t\x12!\n\x04kind\x18\x05 \x01(\x0e\x32\x13.ingestion.SpanKind\x12\x17\n\x0fstart_unix_nano\x18\x06 \x01(\x03\x12\x15\n\rend_unix_nano\x18\x07 \x01(\x03\x12%\n\x06status\x18\x08 \x01(\x0e\x32\x15.ingestion.SpanStatus\x12\x16\n\x0estatus_message\x18\t \x01(\t\x12\x33\n\nattributes\x18\n \x03(\x0b\x32\x1f.ingestion.Span.AttributesEntry\x12$\n\x06\x65vents\x18\x0b \x03(\x0b\x32\x14.ingestion.SpanEvent\x12\x14\n\x0cservice_name\x18\x0c \x01(\t\x1a\x31\n\x0f\x41ttributesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"M\n\x17IngestSpansBatchRequest\x12\x12\n\nproject_id\x18\x01 \x01(\x03\x12\x1e\n\x05spans\x18\x02 \x03(\x0b\x32\x0f.ingestion.Span\"m\n\x18IngestSpansBatchResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x10\n\x08\x61\x63\x63\x65pted\x18\x02 \x01(\x05\x12\x10\n\x08rejected\x18\x03 \x01(\x05\x12\x12\n\x05\x65rror\x18\x04 \x01(\tH\x00\x88\x01\x01\x42\x08\n\x06_error\"\x9c\x01\n\x0fMetricDataPoint\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0c\n\x04tags\x18\x02 \x01(\t\x12\x14\n\x0cts_unix_nano\x18\x03 \x01(\x03\x12\x0c\n\x04type\x18\x04 \x01(\x05\x12\r\n\x05\x63ount\x18\x05 \x01(\x03\x12\x0b\n\x03sum\x18\x06 \x01(\x01\x12\r\n\x05min_v\x18\x07 \x01(\x01\x12\r\n\x05max_v\x18\x08 \x01(\x01\x12\x0f\n\x07\x62uckets\x18\t \x01(\t\"\\\n\x19IngestMetricsBatchRequest\x12\x12\n\nproject_id\x18\x01 \x01(\x03\x12+\n\x07metrics\x18\x02 \x03(\x0b\x32\x1a.ingestion.MetricDataPoint\"o\n\x1aIngestMetricsBatchResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x10\n\x08\x61\x63\x63\x65pted\x18\x02 \x01(\x05\x12\x10\n\x08rejected\x18\x03 \x01(\x05\x12\x12\n\x05\x65rror\x18\x04 \x01(\tH\x00\x88\x01\x01\x42\x08\n\x06_error*L\n\x08SpanKind\x12\n\n\x06SERVER\x10\x00\x12\n\n\x06\x43LIENT\x10\x01\x12\x0c\n\x08INTERNAL\x10\x02\x12\x0c\n\x08PRODUCER\x10\x03\x12\x0c\n\x08\x43ONSUMER\x10\x04**\n\nSpanStatus\x12\t\n\x05UNSET\x10\x00\x12\x06\n\x02OK\x10\x01\x12\t\n\x05\x45RROR\x10\x02\x32\xbf\x03\n\x10IngestionService\x12\x46\n\tIngestLog\x12\x1b.ingestion.IngestLogRequest\x1a\x1c.ingestion.IngestLogResponse\x12U\n\x0eIngestLogBatch\x12 .ingestion.IngestLogBatchRequest\x1a!.ingestion.IngestLogBatchResponse\x12L\n\rGetQueueDepth\x12\x1c.ingestion.QueueDepthRequest\x1a\x1d.ingestion.QueueDepthResponse\x12[\n\x10IngestSpansBatch\x12\".ingestion.IngestSpansBatchRequest\x1a#.ingestion.IngestSpansBatchResponse\x12\x61\n\x12IngestMetricsBatch\x12$.ingestion.IngestMetricsBatchRequest\x1a%.ingestion.IngestMetricsBatchResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'ingestion_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
+  _globals['_SPANEVENT_ATTRSENTRY']._loaded_options = None
+  _globals['_SPANEVENT_ATTRSENTRY']._serialized_options = b'8\001'
+  _globals['_SPAN_ATTRIBUTESENTRY']._loaded_options = None
+  _globals['_SPAN_ATTRIBUTESENTRY']._serialized_options = b'8\001'
+  _globals['_SPANKIND']._serialized_start=2037
+  _globals['_SPANKIND']._serialized_end=2113
+  _globals['_SPANSTATUS']._serialized_start=2115
+  _globals['_SPANSTATUS']._serialized_end=2157
   _globals['_LOGENTRY']._serialized_start=31
   _globals['_LOGENTRY']._serialized_end=521
   _globals['_INGESTLOGREQUEST']._serialized_start=523
@@ -45,6 +53,24 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_QUEUEDEPTHREQUEST']._serialized_end=906
   _globals['_QUEUEDEPTHRESPONSE']._serialized_start=908
   _globals['_QUEUEDEPTHRESPONSE']._serialized_end=943
-  _globals['_INGESTIONSERVICE']._serialized_start=946
-  _globals['_INGESTIONSERVICE']._serialized_end=1201
+  _globals['_SPANEVENT']._serialized_start=946
+  _globals['_SPANEVENT']._serialized_end=1087
+  _globals['_SPANEVENT_ATTRSENTRY']._serialized_start=1043
+  _globals['_SPANEVENT_ATTRSENTRY']._serialized_end=1087
+  _globals['_SPAN']._serialized_start=1090
+  _globals['_SPAN']._serialized_end=1479
+  _globals['_SPAN_ATTRIBUTESENTRY']._serialized_start=1430
+  _globals['_SPAN_ATTRIBUTESENTRY']._serialized_end=1479
+  _globals['_INGESTSPANSBATCHREQUEST']._serialized_start=1481
+  _globals['_INGESTSPANSBATCHREQUEST']._serialized_end=1558
+  _globals['_INGESTSPANSBATCHRESPONSE']._serialized_start=1560
+  _globals['_INGESTSPANSBATCHRESPONSE']._serialized_end=1669
+  _globals['_METRICDATAPOINT']._serialized_start=1672
+  _globals['_METRICDATAPOINT']._serialized_end=1828
+  _globals['_INGESTMETRICSBATCHREQUEST']._serialized_start=1830
+  _globals['_INGESTMETRICSBATCHREQUEST']._serialized_end=1922
+  _globals['_INGESTMETRICSBATCHRESPONSE']._serialized_start=1924
+  _globals['_INGESTMETRICSBATCHRESPONSE']._serialized_end=2035
+  _globals['_INGESTIONSERVICE']._serialized_start=2160
+  _globals['_INGESTIONSERVICE']._serialized_end=2607
 # @@protoc_insertion_point(module_scope)

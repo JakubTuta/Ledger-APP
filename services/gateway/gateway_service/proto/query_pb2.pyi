@@ -473,3 +473,227 @@ class GetHealthSummaryResponse(_message.Message):
     SUMMARIES_FIELD_NUMBER: _ClassVar[int]
     summaries: _containers.RepeatedCompositeFieldContainer[HealthSummary]
     def __init__(self, summaries: _Optional[_Iterable[_Union[HealthSummary, _Mapping]]] = ...) -> None: ...
+
+class SpanData(_message.Message):
+    __slots__ = ("span_id", "trace_id", "parent_span_id", "project_id", "service_name", "name", "kind", "start_time", "duration_ns", "status_code", "status_message", "attributes", "events", "error_fingerprint")
+    SPAN_ID_FIELD_NUMBER: _ClassVar[int]
+    TRACE_ID_FIELD_NUMBER: _ClassVar[int]
+    PARENT_SPAN_ID_FIELD_NUMBER: _ClassVar[int]
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    SERVICE_NAME_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    KIND_FIELD_NUMBER: _ClassVar[int]
+    START_TIME_FIELD_NUMBER: _ClassVar[int]
+    DURATION_NS_FIELD_NUMBER: _ClassVar[int]
+    STATUS_CODE_FIELD_NUMBER: _ClassVar[int]
+    STATUS_MESSAGE_FIELD_NUMBER: _ClassVar[int]
+    ATTRIBUTES_FIELD_NUMBER: _ClassVar[int]
+    EVENTS_FIELD_NUMBER: _ClassVar[int]
+    ERROR_FINGERPRINT_FIELD_NUMBER: _ClassVar[int]
+    span_id: str
+    trace_id: str
+    parent_span_id: str
+    project_id: int
+    service_name: str
+    name: str
+    kind: int
+    start_time: str
+    duration_ns: int
+    status_code: int
+    status_message: str
+    attributes: str
+    events: str
+    error_fingerprint: str
+    def __init__(self, span_id: _Optional[str] = ..., trace_id: _Optional[str] = ..., parent_span_id: _Optional[str] = ..., project_id: _Optional[int] = ..., service_name: _Optional[str] = ..., name: _Optional[str] = ..., kind: _Optional[int] = ..., start_time: _Optional[str] = ..., duration_ns: _Optional[int] = ..., status_code: _Optional[int] = ..., status_message: _Optional[str] = ..., attributes: _Optional[str] = ..., events: _Optional[str] = ..., error_fingerprint: _Optional[str] = ...) -> None: ...
+
+class GetTraceRequest(_message.Message):
+    __slots__ = ("trace_id", "project_id")
+    TRACE_ID_FIELD_NUMBER: _ClassVar[int]
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    trace_id: str
+    project_id: int
+    def __init__(self, trace_id: _Optional[str] = ..., project_id: _Optional[int] = ...) -> None: ...
+
+class GetTraceResponse(_message.Message):
+    __slots__ = ("trace_id", "spans", "duration_ms", "services", "root_span_id", "found")
+    TRACE_ID_FIELD_NUMBER: _ClassVar[int]
+    SPANS_FIELD_NUMBER: _ClassVar[int]
+    DURATION_MS_FIELD_NUMBER: _ClassVar[int]
+    SERVICES_FIELD_NUMBER: _ClassVar[int]
+    ROOT_SPAN_ID_FIELD_NUMBER: _ClassVar[int]
+    FOUND_FIELD_NUMBER: _ClassVar[int]
+    trace_id: str
+    spans: _containers.RepeatedCompositeFieldContainer[SpanData]
+    duration_ms: int
+    services: _containers.RepeatedScalarFieldContainer[str]
+    root_span_id: str
+    found: bool
+    def __init__(self, trace_id: _Optional[str] = ..., spans: _Optional[_Iterable[_Union[SpanData, _Mapping]]] = ..., duration_ms: _Optional[int] = ..., services: _Optional[_Iterable[str]] = ..., root_span_id: _Optional[str] = ..., found: bool = ...) -> None: ...
+
+class ListTracesRequest(_message.Message):
+    __slots__ = ("project_id", "service", "name", "min_duration_ms", "has_error", "from_time", "to_time", "limit", "offset")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    SERVICE_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    MIN_DURATION_MS_FIELD_NUMBER: _ClassVar[int]
+    HAS_ERROR_FIELD_NUMBER: _ClassVar[int]
+    FROM_TIME_FIELD_NUMBER: _ClassVar[int]
+    TO_TIME_FIELD_NUMBER: _ClassVar[int]
+    LIMIT_FIELD_NUMBER: _ClassVar[int]
+    OFFSET_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    service: str
+    name: str
+    min_duration_ms: int
+    has_error: bool
+    from_time: str
+    to_time: str
+    limit: int
+    offset: int
+    def __init__(self, project_id: _Optional[int] = ..., service: _Optional[str] = ..., name: _Optional[str] = ..., min_duration_ms: _Optional[int] = ..., has_error: bool = ..., from_time: _Optional[str] = ..., to_time: _Optional[str] = ..., limit: _Optional[int] = ..., offset: _Optional[int] = ...) -> None: ...
+
+class TraceSummary(_message.Message):
+    __slots__ = ("trace_id", "root_span_id", "root_name", "service_name", "start_time", "duration_ms", "span_count", "has_error")
+    TRACE_ID_FIELD_NUMBER: _ClassVar[int]
+    ROOT_SPAN_ID_FIELD_NUMBER: _ClassVar[int]
+    ROOT_NAME_FIELD_NUMBER: _ClassVar[int]
+    SERVICE_NAME_FIELD_NUMBER: _ClassVar[int]
+    START_TIME_FIELD_NUMBER: _ClassVar[int]
+    DURATION_MS_FIELD_NUMBER: _ClassVar[int]
+    SPAN_COUNT_FIELD_NUMBER: _ClassVar[int]
+    HAS_ERROR_FIELD_NUMBER: _ClassVar[int]
+    trace_id: str
+    root_span_id: str
+    root_name: str
+    service_name: str
+    start_time: str
+    duration_ms: int
+    span_count: int
+    has_error: bool
+    def __init__(self, trace_id: _Optional[str] = ..., root_span_id: _Optional[str] = ..., root_name: _Optional[str] = ..., service_name: _Optional[str] = ..., start_time: _Optional[str] = ..., duration_ms: _Optional[int] = ..., span_count: _Optional[int] = ..., has_error: bool = ...) -> None: ...
+
+class ListTracesResponse(_message.Message):
+    __slots__ = ("traces", "total", "has_more")
+    TRACES_FIELD_NUMBER: _ClassVar[int]
+    TOTAL_FIELD_NUMBER: _ClassVar[int]
+    HAS_MORE_FIELD_NUMBER: _ClassVar[int]
+    traces: _containers.RepeatedCompositeFieldContainer[TraceSummary]
+    total: int
+    has_more: bool
+    def __init__(self, traces: _Optional[_Iterable[_Union[TraceSummary, _Mapping]]] = ..., total: _Optional[int] = ..., has_more: bool = ...) -> None: ...
+
+class GetSpanLatencyRequest(_message.Message):
+    __slots__ = ("project_id", "service", "name", "from_time", "to_time")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    SERVICE_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    FROM_TIME_FIELD_NUMBER: _ClassVar[int]
+    TO_TIME_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    service: str
+    name: str
+    from_time: str
+    to_time: str
+    def __init__(self, project_id: _Optional[int] = ..., service: _Optional[str] = ..., name: _Optional[str] = ..., from_time: _Optional[str] = ..., to_time: _Optional[str] = ...) -> None: ...
+
+class SpanLatencyBucket(_message.Message):
+    __slots__ = ("service_name", "name", "bucket", "calls", "p50_ns", "p95_ns", "p99_ns", "errors")
+    SERVICE_NAME_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    BUCKET_FIELD_NUMBER: _ClassVar[int]
+    CALLS_FIELD_NUMBER: _ClassVar[int]
+    P50_NS_FIELD_NUMBER: _ClassVar[int]
+    P95_NS_FIELD_NUMBER: _ClassVar[int]
+    P99_NS_FIELD_NUMBER: _ClassVar[int]
+    ERRORS_FIELD_NUMBER: _ClassVar[int]
+    service_name: str
+    name: str
+    bucket: str
+    calls: int
+    p50_ns: int
+    p95_ns: int
+    p99_ns: int
+    errors: int
+    def __init__(self, service_name: _Optional[str] = ..., name: _Optional[str] = ..., bucket: _Optional[str] = ..., calls: _Optional[int] = ..., p50_ns: _Optional[int] = ..., p95_ns: _Optional[int] = ..., p99_ns: _Optional[int] = ..., errors: _Optional[int] = ...) -> None: ...
+
+class GetSpanLatencyResponse(_message.Message):
+    __slots__ = ("project_id", "data")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    DATA_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    data: _containers.RepeatedCompositeFieldContainer[SpanLatencyBucket]
+    def __init__(self, project_id: _Optional[int] = ..., data: _Optional[_Iterable[_Union[SpanLatencyBucket, _Mapping]]] = ...) -> None: ...
+
+class QueryCustomMetricsRequest(_message.Message):
+    __slots__ = ("project_id", "name", "tags", "from_time", "to_time", "agg", "step_seconds")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    TAGS_FIELD_NUMBER: _ClassVar[int]
+    FROM_TIME_FIELD_NUMBER: _ClassVar[int]
+    TO_TIME_FIELD_NUMBER: _ClassVar[int]
+    AGG_FIELD_NUMBER: _ClassVar[int]
+    STEP_SECONDS_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    name: str
+    tags: str
+    from_time: str
+    to_time: str
+    agg: str
+    step_seconds: int
+    def __init__(self, project_id: _Optional[int] = ..., name: _Optional[str] = ..., tags: _Optional[str] = ..., from_time: _Optional[str] = ..., to_time: _Optional[str] = ..., agg: _Optional[str] = ..., step_seconds: _Optional[int] = ...) -> None: ...
+
+class CustomMetricDataPoint(_message.Message):
+    __slots__ = ("bucket", "value")
+    BUCKET_FIELD_NUMBER: _ClassVar[int]
+    VALUE_FIELD_NUMBER: _ClassVar[int]
+    bucket: str
+    value: float
+    def __init__(self, bucket: _Optional[str] = ..., value: _Optional[float] = ...) -> None: ...
+
+class QueryCustomMetricsResponse(_message.Message):
+    __slots__ = ("project_id", "name", "agg", "data")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    AGG_FIELD_NUMBER: _ClassVar[int]
+    DATA_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    name: str
+    agg: str
+    data: _containers.RepeatedCompositeFieldContainer[CustomMetricDataPoint]
+    def __init__(self, project_id: _Optional[int] = ..., name: _Optional[str] = ..., agg: _Optional[str] = ..., data: _Optional[_Iterable[_Union[CustomMetricDataPoint, _Mapping]]] = ...) -> None: ...
+
+class ListCustomMetricNamesRequest(_message.Message):
+    __slots__ = ("project_id", "prefix")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    PREFIX_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    prefix: str
+    def __init__(self, project_id: _Optional[int] = ..., prefix: _Optional[str] = ...) -> None: ...
+
+class ListCustomMetricNamesResponse(_message.Message):
+    __slots__ = ("names",)
+    NAMES_FIELD_NUMBER: _ClassVar[int]
+    names: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, names: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class ListCustomMetricTagsRequest(_message.Message):
+    __slots__ = ("project_id", "name")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    name: str
+    def __init__(self, project_id: _Optional[int] = ..., name: _Optional[str] = ...) -> None: ...
+
+class CustomMetricTagEntry(_message.Message):
+    __slots__ = ("key", "values")
+    KEY_FIELD_NUMBER: _ClassVar[int]
+    VALUES_FIELD_NUMBER: _ClassVar[int]
+    key: str
+    values: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, key: _Optional[str] = ..., values: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class ListCustomMetricTagsResponse(_message.Message):
+    __slots__ = ("tags",)
+    TAGS_FIELD_NUMBER: _ClassVar[int]
+    tags: _containers.RepeatedCompositeFieldContainer[CustomMetricTagEntry]
+    def __init__(self, tags: _Optional[_Iterable[_Union[CustomMetricTagEntry, _Mapping]]] = ...) -> None: ...
