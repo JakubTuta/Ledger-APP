@@ -2,6 +2,7 @@ import logging
 
 import fastapi
 import gateway_service.proto.query_pb2 as query_pb2
+import gateway_service.services.feature_flags as feature_flags
 import grpc
 from pydantic import BaseModel
 
@@ -41,6 +42,7 @@ async def query_custom_metrics(
     agg: str = fastapi.Query("sum"),
     step_seconds: int = fastapi.Query(300, ge=60),
 ) -> QueryCustomMetricsResponse:
+    await feature_flags.require_feature_enabled(request, project_id, "custom_metrics")
     grpc_pool = request.app.state.grpc_pool
 
     proto_req = query_pb2.QueryCustomMetricsRequest(
@@ -82,6 +84,7 @@ async def list_metric_names(
     project_id: int = fastapi.Query(...),
     prefix: str | None = fastapi.Query(None),
 ) -> list[str]:
+    await feature_flags.require_feature_enabled(request, project_id, "custom_metrics")
     grpc_pool = request.app.state.grpc_pool
 
     proto_req = query_pb2.ListCustomMetricNamesRequest(project_id=project_id)
@@ -107,6 +110,7 @@ async def list_metric_tags(
     project_id: int = fastapi.Query(...),
     name: str = fastapi.Query(...),
 ) -> list[MetricTagEntryResponse]:
+    await feature_flags.require_feature_enabled(request, project_id, "custom_metrics")
     grpc_pool = request.app.state.grpc_pool
 
     try:

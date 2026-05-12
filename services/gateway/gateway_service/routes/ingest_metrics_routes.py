@@ -2,6 +2,7 @@ import logging
 
 import fastapi
 import gateway_service.proto.ingestion_pb2 as ingestion_pb2
+import gateway_service.services.feature_flags as feature_flags
 import grpc
 from pydantic import BaseModel, Field
 
@@ -50,6 +51,9 @@ async def ingest_metrics_batch(
 
     grpc_pool = request.app.state.grpc_pool
     project_id = request.state.project_id
+
+    if not await feature_flags.is_feature_enabled(request, project_id, "custom_metrics"):
+        return IngestMetricsBatchResponse(accepted=0, rejected=len(payload.metrics))
 
     proto_metrics = [
         ingestion_pb2.MetricDataPoint(

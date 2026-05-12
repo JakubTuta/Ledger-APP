@@ -53,7 +53,7 @@ def _proto_to_notif(n) -> NotificationItemResponse:
 
 
 @router.get(
-    "/inbox",
+    "/notifications",
     response_model=ListNotificationsResponse,
     summary="List notification inbox",
 )
@@ -88,7 +88,7 @@ async def list_notifications(
 
 
 @router.get(
-    "/inbox/unread-count",
+    "/notifications/unread-count",
     response_model=UnreadCountResponse,
     summary="Get unread notification count",
 )
@@ -110,7 +110,7 @@ async def get_unread_count(request: fastapi.Request) -> UnreadCountResponse:
 
 
 @router.post(
-    "/inbox/{notification_id}/read",
+    "/notifications/{notification_id}/read",
     status_code=204,
     summary="Mark notification as read",
 )
@@ -134,7 +134,7 @@ async def mark_notification_read(
 
 
 @router.post(
-    "/inbox/read-all",
+    "/notifications/read-all",
     status_code=204,
     summary="Mark all notifications as read",
 )
@@ -154,7 +154,7 @@ async def mark_all_notifications_read(request: fastapi.Request) -> None:
 
 
 @router.delete(
-    "/inbox/{notification_id}",
+    "/notifications/{notification_id}",
     status_code=204,
     summary="Delete notification",
 )

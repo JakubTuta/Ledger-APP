@@ -71,6 +71,8 @@ def setup_jobs() -> None:
     cm1h_cron = _parse_cron_expression(settings.ANALYTICS_CUSTOM_METRICS_1H_CRON)
     cm1d_cron = _parse_cron_expression(settings.ANALYTICS_CUSTOM_METRICS_1D_CRON)
     alert_cron = _parse_cron_expression(settings.ANALYTICS_ALERT_EVALUATOR_CRON)
+    cardinality_cron = _parse_cron_expression(settings.ANALYTICS_CARDINALITY_CHECK_CRON)
+    notif_cleanup_cron = _parse_cron_expression(settings.ANALYTICS_NOTIFICATION_CLEANUP_CRON)
 
     scheduler.add_job(
         jobs.aggregate_error_rates,
@@ -192,6 +194,22 @@ def setup_jobs() -> None:
         replace_existing=True,
     )
 
+    scheduler.add_job(
+        jobs.update_metric_series_cardinality,
+        trigger=cron_trigger.CronTrigger(**cardinality_cron),
+        id="update_metric_series_cardinality",
+        name="Update Metric Series Cardinality",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        jobs.cleanup_expired_notifications,
+        trigger=cron_trigger.CronTrigger(**notif_cleanup_cron),
+        id="cleanup_expired_notifications",
+        name="Cleanup Expired Notifications",
+        replace_existing=True,
+    )
+
     logger.info("Scheduled jobs with cron expressions:")
     logger.info(f"  - Aggregate Error Rates: {settings.ANALYTICS_ERROR_RATE_CRON}")
     logger.info(f"  - Aggregate Log Volumes: {settings.ANALYTICS_LOG_VOLUME_CRON}")
@@ -208,6 +226,8 @@ def setup_jobs() -> None:
     logger.info(f"  - Rollup Custom Metrics 1h: {settings.ANALYTICS_CUSTOM_METRICS_1H_CRON}")
     logger.info(f"  - Rollup Custom Metrics 1d: {settings.ANALYTICS_CUSTOM_METRICS_1D_CRON}")
     logger.info(f"  - Evaluate Alert Rules: {settings.ANALYTICS_ALERT_EVALUATOR_CRON}")
+    logger.info(f"  - Update Metric Series Cardinality: {settings.ANALYTICS_CARDINALITY_CHECK_CRON}")
+    logger.info(f"  - Cleanup Expired Notifications: {settings.ANALYTICS_NOTIFICATION_CLEANUP_CRON}")
 
 
 def _parse_cron_expression(cron_expr: str) -> dict:

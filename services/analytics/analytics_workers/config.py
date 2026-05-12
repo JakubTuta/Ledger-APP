@@ -226,6 +226,11 @@ class Settings(pydantic_settings.BaseSettings):
         description="Custom metrics cardinality check cron schedule",
     )
 
+    ANALYTICS_NOTIFICATION_CLEANUP_CRON: str = pydantic.Field(
+        default="0 3 * * *",
+        description="Expired notification cleanup cron schedule (daily at 03:00)",
+    )
+
     ANALYTICS_MAX_SERIES_PER_PROJECT: int = pydantic.Field(
         default=500,
         ge=10,

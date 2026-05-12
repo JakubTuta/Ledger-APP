@@ -4,7 +4,9 @@ import logging
 import fastapi
 import gateway_service.proto.auth_pb2 as auth_pb2
 import gateway_service.proto.auth_pb2_grpc as auth_pb2_grpc
+import gateway_service.services.feature_flags as feature_flags
 import grpc
+import httpx
 from pydantic import BaseModel, Field
 
 router = fastapi.APIRouter(tags=["Alerts"])
@@ -130,6 +132,7 @@ async def list_alert_rules(
     project_id: int = fastapi.Query(...),
 ) -> list[AlertRuleResponse]:
     _require_account(request)
+    await feature_flags.require_feature_enabled(request, project_id, "alert_rules")
     grpc_pool = request.app.state.grpc_pool
     try:
         channel = grpc_pool.get_channel("auth")
@@ -179,6 +182,7 @@ async def create_alert_rule(
     request: fastapi.Request,
 ) -> AlertRuleResponse:
     _require_account(request)
+    await feature_flags.require_feature_enabled(request, payload.project_id, "alert_rules")
     grpc_pool = request.app.state.grpc_pool
     try:
         channel = grpc_pool.get_channel("auth")
@@ -378,6 +382,91 @@ async def delete_alert_channel(
         )
     except grpc.RpcError as e:
         raise fastapi.HTTPException(status_code=502, detail=str(e.details()))
+
+
+@router.post(
+    "/alerts/channels/{channel_id}/test",
+    status_code=204,
+    summary="Send a test notification through an alert channel",
+    description=(
+        "Dispatches a synthetic test alert through the specified channel. "
+        "For in_app channels, creates a test notification in the inbox. "
+        "For webhook channels, POSTs a test payload to the configured URL. "
+        "For email channels, logs the test (email stub)."
+    ),
+)
+async def test_alert_channel(
+    channel_id: int,
+    request: fastapi.Request,
+    project_id: int = fastapi.Query(...),
+) -> None:
+    account_id = _require_account(request)
+    grpc_pool = request.app.state.grpc_pool
+
+    try:
+        auth_channel = grpc_pool.get_channel("auth")
+        stub = auth_pb2_grpc.AuthServiceStub(auth_channel)
+        ch_response = await stub.GetAlertChannel(
+            auth_pb2.GetAlertChannelRequest(
+                channel_id=channel_id, project_id=project_id
+            ),
+            timeout=5.0,
+        )
+    except grpc.RpcError as e:
+        raise fastapi.HTTPException(status_code=502, detail=str(e.details()))
+
+    if not ch_response.found:
+        raise fastapi.HTTPException(status_code=404, detail="Alert channel not found")
+
+    ch = ch_response.channel
+    test_payload = {
+        "test": True,
+        "channel_id": channel_id,
+        "channel_kind": ch.kind,
+        "message": "This is a test notification from Ledger.",
+    }
+
+    if ch.kind == "in_app":
+        try:
+            auth_channel = grpc_pool.get_channel("auth")
+            stub = auth_pb2_grpc.AuthServiceStub(auth_channel)
+            await stub.CreateNotification(
+                auth_pb2.CreateNotificationRequest(
+                    user_id=ch.user_id,
+                    project_id=ch.project_id,
+                    kind="alert_firing",
+                    severity=1,
+                    payload=json.dumps(test_payload),
+                ),
+                timeout=5.0,
+            )
+        except grpc.RpcError as e:
+            raise fastapi.HTTPException(status_code=502, detail=str(e.details()))
+
+    elif ch.kind == "webhook":
+        try:
+            config_dict = json.loads(ch.config) if ch.config else {}
+            url = config_dict.get("url")
+            if not url:
+                raise fastapi.HTTPException(
+                    status_code=400, detail="Webhook channel has no URL configured"
+                )
+            async with httpx.AsyncClient(timeout=10.0) as http:
+                await http.post(
+                    url,
+                    json=test_payload,
+                    headers={"Content-Type": "application/json"},
+                )
+        except httpx.RequestError as e:
+            raise fastapi.HTTPException(
+                status_code=502, detail=f"Webhook delivery failed: {str(e)}"
+            )
+
+    elif ch.kind == "email":
+        logger.info(
+            f"[email stub] Test notification for channel {channel_id} "
+            f"(user {account_id}): {test_payload}"
+        )
 
 
 # ==================== Notification Preferences Endpoints ====================

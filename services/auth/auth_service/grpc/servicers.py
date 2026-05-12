@@ -351,6 +351,16 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     environment=request.environment or "production",
                 )
 
+                for flag_key in ("tracing", "custom_metrics", "alert_rules"):
+                    session.add(
+                        models.FeatureFlag(
+                            project_id=project.id,
+                            key=flag_key,
+                            enabled=True,
+                        )
+                    )
+                await session.flush()
+
                 return auth_pb2.CreateProjectResponse(
                     project_id=project.id,
                     name=project.name,

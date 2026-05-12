@@ -2,6 +2,7 @@ import logging
 
 import fastapi
 import gateway_service.proto.query_pb2 as query_pb2
+import gateway_service.services.feature_flags as feature_flags
 import grpc
 from pydantic import BaseModel
 
@@ -51,6 +52,71 @@ class ListTracesResponse(BaseModel):
     has_more: bool
 
 
+class SpanLatencyBucketResponse(BaseModel):
+    service_name: str
+    name: str
+    bucket: str
+    calls: int
+    p50_ns: int
+    p95_ns: int
+    p99_ns: int
+    errors: int
+
+
+class SpanLatencyResponse(BaseModel):
+    project_id: int
+    data: list[SpanLatencyBucketResponse]
+
+
+@router.get(
+    "/metrics/span-latency",
+    response_model=SpanLatencyResponse,
+    summary="Get span latency percentiles",
+    description="Query hourly span latency rollup (p50/p95/p99) from span_latency_1h table.",
+)
+async def get_span_latency(
+    request: fastapi.Request,
+    project_id: int = fastapi.Query(...),
+    service: str | None = fastapi.Query(None),
+    name: str | None = fastapi.Query(None),
+    from_time: str | None = fastapi.Query(None),
+    to_time: str | None = fastapi.Query(None),
+) -> SpanLatencyResponse:
+    await feature_flags.require_feature_enabled(request, project_id, "tracing")
+    grpc_pool = request.app.state.grpc_pool
+
+    proto_req = query_pb2.GetSpanLatencyRequest(project_id=project_id)
+    if service is not None:
+        proto_req.service = service
+    if name is not None:
+        proto_req.name = name
+    if from_time is not None:
+        proto_req.from_time = from_time
+    if to_time is not None:
+        proto_req.to_time = to_time
+
+    try:
+        async with grpc_pool.get_query_stub() as stub:
+            response = await stub.GetSpanLatency(proto_req, timeout=10.0)
+    except grpc.RpcError as e:
+        raise fastapi.HTTPException(status_code=502, detail=str(e.details()))
+
+    data = [
+        SpanLatencyBucketResponse(
+            service_name=b.service_name,
+            name=b.name,
+            bucket=b.bucket,
+            calls=b.calls,
+            p50_ns=b.p50_ns,
+            p95_ns=b.p95_ns,
+            p99_ns=b.p99_ns,
+            errors=b.errors,
+        )
+        for b in response.data
+    ]
+    return SpanLatencyResponse(project_id=response.project_id, data=data)
+
+
 @router.get(
     "/traces",
     response_model=ListTracesResponse,
@@ -68,6 +134,7 @@ async def list_traces(
     limit: int = fastapi.Query(50, ge=1, le=500),
     offset: int = fastapi.Query(0, ge=0),
 ) -> ListTracesResponse:
+    await feature_flags.require_feature_enabled(request, project_id, "tracing")
     grpc_pool = request.app.state.grpc_pool
 
     proto_req = query_pb2.ListTracesRequest(
@@ -122,6 +189,7 @@ async def get_trace(
     trace_id: str,
     project_id: int = fastapi.Query(...),
 ) -> TraceResponse:
+    await feature_flags.require_feature_enabled(request, project_id, "tracing")
     grpc_pool = request.app.state.grpc_pool
 
     try:

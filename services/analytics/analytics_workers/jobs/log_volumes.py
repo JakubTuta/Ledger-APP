@@ -11,6 +11,34 @@ import sqlalchemy as sa
 logger = logging.get_logger("jobs.log_volumes")
 
 _VALID_LEVELS = frozenset({"debug", "info", "warning", "error", "critical"})
+_JOB_NAME = "log_volumes_5m"
+_DEFAULT_LOOKBACK = datetime.timedelta(days=7)
+
+
+async def _get_last_bucket(session: sa.ext.asyncio.AsyncSession) -> datetime.datetime:
+    result = await session.execute(
+        sa.text("SELECT last_bucket FROM rollup_job_state WHERE job_name = :name"),
+        {"name": _JOB_NAME},
+    )
+    row = result.fetchone()
+    if row:
+        return row[0]
+    return datetime.datetime.now(datetime.timezone.utc) - _DEFAULT_LOOKBACK
+
+
+async def _set_last_bucket(
+    session: sa.ext.asyncio.AsyncSession, bucket: datetime.datetime
+) -> None:
+    await session.execute(
+        sa.text(
+            """
+            INSERT INTO rollup_job_state (job_name, last_bucket)
+            VALUES (:name, :bucket)
+            ON CONFLICT (job_name) DO UPDATE SET last_bucket = EXCLUDED.last_bucket
+            """
+        ),
+        {"name": _JOB_NAME, "bucket": bucket},
+    )
 
 
 async def aggregate_log_volumes() -> None:
@@ -20,6 +48,8 @@ async def aggregate_log_volumes() -> None:
 
     try:
         async with database.get_logs_session() as session:
+            last_bucket = await _get_last_bucket(session)
+
             query = sa.text(
                 """
                 SELECT
@@ -28,24 +58,28 @@ async def aggregate_log_volumes() -> None:
                     level,
                     COUNT(*) as count
                 FROM logs
-                WHERE timestamp > NOW() - INTERVAL '7 days'
+                WHERE timestamp >= :since
                   AND level IN ('debug', 'info', 'warning', 'error', 'critical')
                 GROUP BY project_id, bucket, level
                 ORDER BY project_id, bucket DESC
             """
             )
 
-            result = await session.execute(query)
+            result = await session.execute(query, {"since": last_bucket})
             rows = result.fetchall()
 
             aggregated: dict[tuple[int, datetime.datetime], dict] = {}
             rollup_rows: list[dict] = []
+            max_bucket: datetime.datetime | None = None
 
             for row in rows:
                 project_id = row[0]
                 bucket = row[1]
                 level = row[2]
                 count = row[3]
+
+                if max_bucket is None or bucket > max_bucket:
+                    max_bucket = bucket
 
                 key = (project_id, bucket)
                 if key not in aggregated:
@@ -87,29 +121,6 @@ async def aggregate_log_volumes() -> None:
                 )
 
             if rollup_rows:
-                upsert_query = sa.text(
-                    """
-                    INSERT INTO log_volume_5m (project_id, level, bucket, count)
-                    SELECT
-                        project_id,
-                        level,
-                        date_trunc('hour', bucket) +
-                            (EXTRACT(minute FROM bucket)::int / 5) * INTERVAL '5 minutes',
-                        SUM(count)
-                    FROM (
-                        SELECT
-                            :project_id AS project_id,
-                            :level AS level,
-                            :bucket AS bucket,
-                            :count AS count
-                    ) sub
-                    GROUP BY project_id, level,
-                        date_trunc('hour', bucket) +
-                            (EXTRACT(minute FROM bucket)::int / 5) * INTERVAL '5 minutes'
-                    ON CONFLICT (project_id, level, bucket)
-                    DO UPDATE SET count = EXCLUDED.count
-                    """
-                )
                 for row_data in rollup_rows:
                     await session.execute(
                         sa.text(
@@ -128,7 +139,11 @@ async def aggregate_log_volumes() -> None:
                         ),
                         row_data,
                     )
-                await session.commit()
+
+            if max_bucket is not None:
+                await _set_last_bucket(session, max_bucket)
+
+            await session.commit()
 
         elapsed = time.perf_counter() - start
         logger.info(
