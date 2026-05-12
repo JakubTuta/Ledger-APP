@@ -10,6 +10,47 @@ from auth_service.utils import jwt_utils
 from redis.asyncio import Redis
 
 
+def _panel_dict_to_proto(panel: dict) -> auth_pb2.Panel:
+    tag_filter = panel.get("tag_filter")
+    kwargs = {
+        "id": panel["id"],
+        "name": panel["name"],
+        "index": panel["index"],
+        "project_id": panel["project_id"],
+        "period": panel.get("period"),
+        "periodFrom": panel.get("periodFrom"),
+        "periodTo": panel.get("periodTo"),
+        "type": panel["type"],
+        "endpoint": panel.get("endpoint", ""),
+        "routes": panel.get("routes", []),
+        "statistic": panel.get("statistic", ""),
+        "layout": auth_pb2.PanelLayout(**panel["layout"]) if panel.get("layout") else None,
+    }
+    if panel.get("trace_id") is not None:
+        kwargs["trace_id"] = panel["trace_id"]
+    if panel.get("service_filter") is not None:
+        kwargs["service_filter"] = panel["service_filter"]
+    if panel.get("operation_filter") is not None:
+        kwargs["operation_filter"] = panel["operation_filter"]
+    if panel.get("min_duration_ms") is not None:
+        kwargs["min_duration_ms"] = panel["min_duration_ms"]
+    if panel.get("has_error") is not None:
+        kwargs["has_error"] = panel["has_error"]
+    if panel.get("limit") is not None:
+        kwargs["limit"] = panel["limit"]
+    if panel.get("metric_name") is not None:
+        kwargs["metric_name"] = panel["metric_name"]
+    if tag_filter is not None:
+        kwargs["tag_filter_json"] = json.dumps(tag_filter)
+    if panel.get("agg") is not None:
+        kwargs["agg"] = panel["agg"]
+    if panel.get("viz") is not None:
+        kwargs["viz"] = panel["viz"]
+    if panel.get("step") is not None:
+        kwargs["step"] = panel["step"]
+    return auth_pb2.Panel(**kwargs)
+
+
 class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
     """Implements all Auth Service RPC methods."""
 
@@ -785,23 +826,7 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     user_id=request.user_id,
                 )
 
-                panel_messages = [
-                    auth_pb2.Panel(
-                        id=panel["id"],
-                        name=panel["name"],
-                        index=panel["index"],
-                        project_id=panel["project_id"],
-                        period=panel.get("period"),
-                        periodFrom=panel.get("periodFrom"),
-                        periodTo=panel.get("periodTo"),
-                        type=panel["type"],
-                        endpoint=panel.get("endpoint", ""),
-                        routes=panel.get("routes", []),
-                        statistic=panel.get("statistic", ""),
-                        layout=auth_pb2.PanelLayout(**panel["layout"]) if panel.get("layout") else None,
-                    )
-                    for panel in panels
-                ]
+                panel_messages = [_panel_dict_to_proto(panel) for panel in panels]
 
                 return auth_pb2.GetDashboardPanelsResponse(panels=panel_messages)
 
@@ -836,24 +861,20 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     routes=list(request.routes) if request.routes else None,
                     statistic=request.statistic if request.statistic else None,
                     layout=req_layout,
+                    trace_id=request.trace_id if request.HasField("trace_id") else None,
+                    service_filter=request.service_filter if request.HasField("service_filter") else None,
+                    operation_filter=request.operation_filter if request.HasField("operation_filter") else None,
+                    min_duration_ms=request.min_duration_ms if request.HasField("min_duration_ms") else None,
+                    has_error=request.has_error if request.HasField("has_error") else None,
+                    limit=request.limit if request.HasField("limit") else None,
+                    metric_name=request.metric_name if request.HasField("metric_name") else None,
+                    tag_filter=json.loads(request.tag_filter_json) if request.HasField("tag_filter_json") and request.tag_filter_json else None,
+                    agg=request.agg if request.HasField("agg") else None,
+                    viz=request.viz if request.HasField("viz") else None,
+                    step=request.step if request.HasField("step") else None,
                 )
 
-                panel_message = auth_pb2.Panel(
-                    id=panel["id"],
-                    name=panel["name"],
-                    index=panel["index"],
-                    project_id=panel["project_id"],
-                    period=panel.get("period"),
-                    periodFrom=panel.get("periodFrom"),
-                    periodTo=panel.get("periodTo"),
-                    type=panel["type"],
-                    endpoint=panel.get("endpoint", ""),
-                    routes=panel.get("routes", []),
-                    statistic=panel.get("statistic", ""),
-                    layout=auth_pb2.PanelLayout(**panel["layout"]) if panel.get("layout") else None,
-                )
-
-                return auth_pb2.CreateDashboardPanelResponse(panel=panel_message)
+                return auth_pb2.CreateDashboardPanelResponse(panel=_panel_dict_to_proto(panel))
 
         except ValueError as e:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
@@ -892,24 +913,20 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     routes=list(request.routes) if request.routes else None,
                     statistic=request.statistic if request.statistic else None,
                     layout=req_layout,
+                    trace_id=request.trace_id if request.HasField("trace_id") else None,
+                    service_filter=request.service_filter if request.HasField("service_filter") else None,
+                    operation_filter=request.operation_filter if request.HasField("operation_filter") else None,
+                    min_duration_ms=request.min_duration_ms if request.HasField("min_duration_ms") else None,
+                    has_error=request.has_error if request.HasField("has_error") else None,
+                    limit=request.limit if request.HasField("limit") else None,
+                    metric_name=request.metric_name if request.HasField("metric_name") else None,
+                    tag_filter=json.loads(request.tag_filter_json) if request.HasField("tag_filter_json") and request.tag_filter_json else None,
+                    agg=request.agg if request.HasField("agg") else None,
+                    viz=request.viz if request.HasField("viz") else None,
+                    step=request.step if request.HasField("step") else None,
                 )
 
-                panel_message = auth_pb2.Panel(
-                    id=panel["id"],
-                    name=panel["name"],
-                    index=panel["index"],
-                    project_id=panel["project_id"],
-                    period=panel.get("period"),
-                    periodFrom=panel.get("periodFrom"),
-                    periodTo=panel.get("periodTo"),
-                    type=panel["type"],
-                    endpoint=panel.get("endpoint", ""),
-                    routes=panel.get("routes", []),
-                    statistic=panel.get("statistic", ""),
-                    layout=auth_pb2.PanelLayout(**panel["layout"]) if panel.get("layout") else None,
-                )
-
-                return auth_pb2.UpdateDashboardPanelResponse(panel=panel_message)
+                return auth_pb2.UpdateDashboardPanelResponse(panel=_panel_dict_to_proto(panel))
 
         except ValueError as e:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)

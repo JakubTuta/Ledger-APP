@@ -83,12 +83,23 @@ class DashboardService:
         routes: list[str] | None = None,
         statistic: str | None = None,
         layout: dict | None = None,
+        trace_id: str | None = None,
+        service_filter: str | None = None,
+        operation_filter: str | None = None,
+        min_duration_ms: int | None = None,
+        has_error: bool | None = None,
+        limit: int | None = None,
+        metric_name: str | None = None,
+        tag_filter: dict | None = None,
+        agg: str | None = None,
+        viz: str | None = None,
+        step: str | None = None,
     ) -> dict:
         """Create a new dashboard panel."""
 
         if not self._validate_panel_type(panel_type):
             raise ValueError(
-                f"Invalid panel type '{panel_type}'. Must be one of: logs, errors, metrics, error_list, bottleneck, error_heatmap"
+                f"Invalid panel type '{panel_type}'. Must be one of: logs, errors, metrics, error_list, bottleneck, error_heatmap, trace, trace_list, custom_metric"
             )
 
         if panel_type == "bottleneck":
@@ -137,6 +148,17 @@ class DashboardService:
             "routes": routes if routes else [],
             "statistic": statistic if statistic else "",
             "layout": layout,
+            "trace_id": trace_id,
+            "service_filter": service_filter,
+            "operation_filter": operation_filter,
+            "min_duration_ms": min_duration_ms,
+            "has_error": has_error,
+            "limit": limit,
+            "metric_name": metric_name,
+            "tag_filter": tag_filter,
+            "agg": agg,
+            "viz": viz,
+            "step": step,
         }
 
         result = await session.execute(
@@ -180,12 +202,23 @@ class DashboardService:
         routes: list[str] | None = None,
         statistic: str | None = None,
         layout: dict | None = None,
+        trace_id: str | None = None,
+        service_filter: str | None = None,
+        operation_filter: str | None = None,
+        min_duration_ms: int | None = None,
+        has_error: bool | None = None,
+        limit: int | None = None,
+        metric_name: str | None = None,
+        tag_filter: dict | None = None,
+        agg: str | None = None,
+        viz: str | None = None,
+        step: str | None = None,
     ) -> dict:
         """Update an existing dashboard panel."""
 
         if not self._validate_panel_type(panel_type):
             raise ValueError(
-                f"Invalid panel type '{panel_type}'. Must be one of: logs, errors, metrics, error_list, bottleneck, error_heatmap"
+                f"Invalid panel type '{panel_type}'. Must be one of: logs, errors, metrics, error_list, bottleneck, error_heatmap, trace, trace_list, custom_metric"
             )
 
         if panel_type == "bottleneck":
@@ -245,6 +278,17 @@ class DashboardService:
                     "routes": routes if routes else [],
                     "statistic": statistic if statistic else "",
                     "layout": layout,
+                    "trace_id": trace_id,
+                    "service_filter": service_filter,
+                    "operation_filter": operation_filter,
+                    "min_duration_ms": min_duration_ms,
+                    "has_error": has_error,
+                    "limit": limit,
+                    "metric_name": metric_name,
+                    "tag_filter": tag_filter,
+                    "agg": agg,
+                    "viz": viz,
+                    "step": step,
                 }
                 panel_found = True
                 break
@@ -298,8 +342,10 @@ class DashboardService:
         return True
 
     def _validate_panel_type(self, panel_type: str) -> bool:
-        """Validate panel type."""
-        valid_types = {"logs", "errors", "metrics", "error_list", "bottleneck", "error_heatmap"}
+        valid_types = {
+            "logs", "errors", "metrics", "error_list", "bottleneck", "error_heatmap",
+            "trace", "trace_list", "custom_metric",
+        }
         return panel_type in valid_types
 
     def _generate_panel_id(self) -> str:

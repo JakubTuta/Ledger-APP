@@ -385,6 +385,19 @@ message Panel {
   repeated string routes = 10;
   string statistic = 11;
   optional PanelLayout layout = 12;
+  // trace panel fields
+  optional string trace_id = 13;
+  optional string service_filter = 14;
+  optional string operation_filter = 15;
+  optional int32 min_duration_ms = 16;
+  optional bool has_error = 17;
+  optional int32 limit = 18;
+  // custom metric panel fields
+  optional string metric_name = 19;
+  optional string tag_filter_json = 20;
+  optional string agg = 21;
+  optional string viz = 22;
+  optional string step = 23;
 }
 
 message GetDashboardPanelsRequest {
@@ -408,6 +421,17 @@ message CreateDashboardPanelRequest {
   repeated string routes = 10;
   string statistic = 11;
   optional PanelLayout layout = 12;
+  optional string trace_id = 13;
+  optional string service_filter = 14;
+  optional string operation_filter = 15;
+  optional int32 min_duration_ms = 16;
+  optional bool has_error = 17;
+  optional int32 limit = 18;
+  optional string metric_name = 19;
+  optional string tag_filter_json = 20;
+  optional string agg = 21;
+  optional string viz = 22;
+  optional string step = 23;
 }
 
 message CreateDashboardPanelResponse {
@@ -428,6 +452,17 @@ message UpdateDashboardPanelRequest {
   repeated string routes = 11;
   string statistic = 12;
   optional PanelLayout layout = 13;
+  optional string trace_id = 14;
+  optional string service_filter = 15;
+  optional string operation_filter = 16;
+  optional int32 min_duration_ms = 17;
+  optional bool has_error = 18;
+  optional int32 limit = 19;
+  optional string metric_name = 20;
+  optional string tag_filter_json = 21;
+  optional string agg = 22;
+  optional string viz = 23;
+  optional string step = 24;
 }
 
 message UpdateDashboardPanelResponse {

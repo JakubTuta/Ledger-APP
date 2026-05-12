@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 
 import fastapi
@@ -11,6 +12,48 @@ from gateway_service.services import grpc_pool
 logger = logging.getLogger(__name__)
 
 router = fastapi.APIRouter(tags=["Dashboard"])
+
+
+def _panel_proto_to_response(panel) -> schemas.PanelResponse:
+    panel_layout = None
+    if panel.HasField("layout"):
+        panel_layout = schemas.PanelLayout(
+            x=panel.layout.x,
+            y=panel.layout.y,
+            w=panel.layout.w,
+            h=panel.layout.h,
+        )
+    tag_filter = None
+    if panel.HasField("tag_filter_json") and panel.tag_filter_json:
+        try:
+            tag_filter = json.loads(panel.tag_filter_json)
+        except (json.JSONDecodeError, ValueError):
+            pass
+    return schemas.PanelResponse(
+        id=panel.id,
+        name=panel.name,
+        index=panel.index,
+        project_id=panel.project_id,
+        period=panel.period if panel.HasField("period") else None,
+        periodFrom=panel.periodFrom if panel.HasField("periodFrom") else None,
+        periodTo=panel.periodTo if panel.HasField("periodTo") else None,
+        type=panel.type,
+        endpoint=panel.endpoint if panel.endpoint else None,
+        routes=list(panel.routes) if panel.routes else None,
+        statistic=panel.statistic if panel.statistic else None,
+        layout=panel_layout,
+        trace_id=panel.trace_id if panel.HasField("trace_id") else None,
+        service_filter=panel.service_filter if panel.HasField("service_filter") else None,
+        operation_filter=panel.operation_filter if panel.HasField("operation_filter") else None,
+        min_duration_ms=panel.min_duration_ms if panel.HasField("min_duration_ms") else None,
+        has_error=panel.has_error if panel.HasField("has_error") else None,
+        limit=panel.limit if panel.HasField("limit") else None,
+        metric_name=panel.metric_name if panel.HasField("metric_name") else None,
+        tag_filter=tag_filter,
+        agg=panel.agg if panel.HasField("agg") else None,
+        viz=panel.viz if panel.HasField("viz") else None,
+        step=panel.step if panel.HasField("step") else None,
+    )
 
 
 # ==================== ROUTE HANDLERS ====================
@@ -43,28 +86,7 @@ async def get_dashboard_panels(
             stub.GetDashboardPanels(grpc_request), timeout=5.0
         )
 
-        panels = [
-            schemas.PanelResponse(
-                id=panel.id,
-                name=panel.name,
-                index=panel.index,
-                project_id=panel.project_id,
-                period=panel.period if panel.HasField("period") else None,
-                periodFrom=panel.periodFrom if panel.HasField("periodFrom") else None,
-                periodTo=panel.periodTo if panel.HasField("periodTo") else None,
-                type=panel.type,
-                endpoint=panel.endpoint if panel.endpoint else None,
-                routes=list(panel.routes) if panel.routes else None,
-                statistic=panel.statistic if panel.statistic else None,
-                layout=schemas.PanelLayout(
-                    x=panel.layout.x,
-                    y=panel.layout.y,
-                    w=panel.layout.w,
-                    h=panel.layout.h,
-                ) if panel.HasField("layout") else None,
-            )
-            for panel in response.panels
-        ]
+        panels = [_panel_proto_to_response(panel) for panel in response.panels]
 
         return schemas.PanelListResponse(panels=panels, total=len(panels))
 
@@ -146,6 +168,28 @@ async def create_dashboard_panel(
                 w=request_data.layout.w,
                 h=request_data.layout.h,
             )
+        if request_data.trace_id is not None:
+            grpc_request_kwargs["trace_id"] = request_data.trace_id
+        if request_data.service_filter is not None:
+            grpc_request_kwargs["service_filter"] = request_data.service_filter
+        if request_data.operation_filter is not None:
+            grpc_request_kwargs["operation_filter"] = request_data.operation_filter
+        if request_data.min_duration_ms is not None:
+            grpc_request_kwargs["min_duration_ms"] = request_data.min_duration_ms
+        if request_data.has_error is not None:
+            grpc_request_kwargs["has_error"] = request_data.has_error
+        if request_data.limit is not None:
+            grpc_request_kwargs["limit"] = request_data.limit
+        if request_data.metric_name is not None:
+            grpc_request_kwargs["metric_name"] = request_data.metric_name
+        if request_data.tag_filter is not None:
+            grpc_request_kwargs["tag_filter_json"] = json.dumps(request_data.tag_filter)
+        if request_data.agg is not None:
+            grpc_request_kwargs["agg"] = request_data.agg
+        if request_data.viz is not None:
+            grpc_request_kwargs["viz"] = request_data.viz
+        if request_data.step is not None:
+            grpc_request_kwargs["step"] = request_data.step
 
         grpc_request = auth_pb2.CreateDashboardPanelRequest(**grpc_request_kwargs)
 
@@ -159,29 +203,7 @@ async def create_dashboard_panel(
                 detail="Failed to create panel",
             )
 
-        panel_layout = None
-        if response.panel.HasField("layout"):
-            panel_layout = schemas.PanelLayout(
-                x=response.panel.layout.x,
-                y=response.panel.layout.y,
-                w=response.panel.layout.w,
-                h=response.panel.layout.h,
-            )
-
-        return schemas.PanelResponse(
-            id=response.panel.id,
-            name=response.panel.name,
-            index=response.panel.index,
-            project_id=response.panel.project_id,
-            period=response.panel.period if response.panel.HasField("period") else None,
-            periodFrom=response.panel.periodFrom if response.panel.HasField("periodFrom") else None,
-            periodTo=response.panel.periodTo if response.panel.HasField("periodTo") else None,
-            type=response.panel.type,
-            endpoint=response.panel.endpoint if response.panel.endpoint else None,
-            routes=list(response.panel.routes) if response.panel.routes else None,
-            statistic=response.panel.statistic if response.panel.statistic else None,
-            layout=panel_layout,
-        )
+        return _panel_proto_to_response(response.panel)
 
     except asyncio.TimeoutError:
         logger.error("Auth Service timeout creating dashboard panel")
@@ -263,6 +285,28 @@ async def update_dashboard_panel(
                 w=request_data.layout.w,
                 h=request_data.layout.h,
             )
+        if request_data.trace_id is not None:
+            grpc_request_kwargs["trace_id"] = request_data.trace_id
+        if request_data.service_filter is not None:
+            grpc_request_kwargs["service_filter"] = request_data.service_filter
+        if request_data.operation_filter is not None:
+            grpc_request_kwargs["operation_filter"] = request_data.operation_filter
+        if request_data.min_duration_ms is not None:
+            grpc_request_kwargs["min_duration_ms"] = request_data.min_duration_ms
+        if request_data.has_error is not None:
+            grpc_request_kwargs["has_error"] = request_data.has_error
+        if request_data.limit is not None:
+            grpc_request_kwargs["limit"] = request_data.limit
+        if request_data.metric_name is not None:
+            grpc_request_kwargs["metric_name"] = request_data.metric_name
+        if request_data.tag_filter is not None:
+            grpc_request_kwargs["tag_filter_json"] = json.dumps(request_data.tag_filter)
+        if request_data.agg is not None:
+            grpc_request_kwargs["agg"] = request_data.agg
+        if request_data.viz is not None:
+            grpc_request_kwargs["viz"] = request_data.viz
+        if request_data.step is not None:
+            grpc_request_kwargs["step"] = request_data.step
 
         grpc_request = auth_pb2.UpdateDashboardPanelRequest(**grpc_request_kwargs)
 
@@ -276,29 +320,7 @@ async def update_dashboard_panel(
                 detail=f"Panel {panel_id} not found",
             )
 
-        panel_layout = None
-        if response.panel.HasField("layout"):
-            panel_layout = schemas.PanelLayout(
-                x=response.panel.layout.x,
-                y=response.panel.layout.y,
-                w=response.panel.layout.w,
-                h=response.panel.layout.h,
-            )
-
-        return schemas.PanelResponse(
-            id=response.panel.id,
-            name=response.panel.name,
-            index=response.panel.index,
-            project_id=response.panel.project_id,
-            period=response.panel.period if response.panel.HasField("period") else None,
-            periodFrom=response.panel.periodFrom if response.panel.HasField("periodFrom") else None,
-            periodTo=response.panel.periodTo if response.panel.HasField("periodTo") else None,
-            type=response.panel.type,
-            endpoint=response.panel.endpoint if response.panel.endpoint else None,
-            routes=list(response.panel.routes) if response.panel.routes else None,
-            statistic=response.panel.statistic if response.panel.statistic else None,
-            layout=panel_layout,
-        )
+        return _panel_proto_to_response(response.panel)
 
     except asyncio.TimeoutError:
         logger.error("Auth Service timeout updating dashboard panel")

@@ -42,8 +42,8 @@ class PanelRequest(pydantic.BaseModel):
     )
     type: str = pydantic.Field(
         ...,
-        pattern=r"^(logs|errors|metrics|error_list|bottleneck|error_heatmap)$",
-        description="Panel type: logs (log viewer), errors (error tracking aggregated), error_list (individual error entries), metrics (charts/graphs), bottleneck (route performance metrics), or error_heatmap (hourly error heatmap)",
+        pattern=r"^(logs|errors|metrics|error_list|bottleneck|error_heatmap|trace|trace_list|custom_metric)$",
+        description="Panel type",
         examples=["errors"],
     )
     endpoint: str | None = pydantic.Field(
@@ -66,6 +66,17 @@ class PanelRequest(pydantic.BaseModel):
         None,
         description="Optional grid layout position. Omit to use default responsive layout.",
     )
+    trace_id: str | None = pydantic.Field(None, description="Pinned trace ID (trace panels)")
+    service_filter: str | None = pydantic.Field(None, description="Service name filter (trace_list panels)")
+    operation_filter: str | None = pydantic.Field(None, description="Operation name filter (trace_list panels)")
+    min_duration_ms: int | None = pydantic.Field(None, description="Minimum span duration filter in ms (trace_list panels)")
+    has_error: bool | None = pydantic.Field(None, description="Error-only filter (trace_list panels)")
+    limit: int | None = pydantic.Field(None, description="Max results (trace_list panels)")
+    metric_name: str | None = pydantic.Field(None, description="Custom metric name (custom_metric panels)")
+    tag_filter: dict[str, str] | None = pydantic.Field(None, description="Tag key/value filter (custom_metric panels)")
+    agg: str | None = pydantic.Field(None, description="Aggregation function (custom_metric panels)")
+    viz: str | None = pydantic.Field(None, description="Visualization type (custom_metric panels)")
+    step: str | None = pydantic.Field(None, description="Step interval (custom_metric panels)")
 
     @pydantic.model_validator(mode="after")
     def validate_time_range(self):
@@ -137,6 +148,17 @@ class PanelResponse(pydantic.BaseModel):
     routes: list[str] | None = pydantic.Field(None, description="List of route paths (for bottleneck panels)")
     statistic: str | None = pydantic.Field(None, description="Statistic type (for bottleneck panels)")
     layout: PanelLayout | None = pydantic.Field(None, description="Grid layout position (for resizable grid)")
+    trace_id: str | None = pydantic.Field(None)
+    service_filter: str | None = pydantic.Field(None)
+    operation_filter: str | None = pydantic.Field(None)
+    min_duration_ms: int | None = pydantic.Field(None)
+    has_error: bool | None = pydantic.Field(None)
+    limit: int | None = pydantic.Field(None)
+    metric_name: str | None = pydantic.Field(None)
+    tag_filter: dict[str, str] | None = pydantic.Field(None)
+    agg: str | None = pydantic.Field(None)
+    viz: str | None = pydantic.Field(None)
+    step: str | None = pydantic.Field(None)
 
     model_config = pydantic.ConfigDict(
         json_schema_extra={
@@ -252,8 +274,8 @@ class UpdatePanelRequest(pydantic.BaseModel):
     )
     type: str = pydantic.Field(
         ...,
-        pattern=r"^(logs|errors|metrics|error_list|bottleneck|error_heatmap)$",
-        description="Panel type (logs, errors, metrics, error_list, bottleneck, error_heatmap)",
+        pattern=r"^(logs|errors|metrics|error_list|bottleneck|error_heatmap|trace|trace_list|custom_metric)$",
+        description="Panel type",
         examples=["errors"],
     )
     endpoint: str | None = pydantic.Field(
@@ -276,6 +298,17 @@ class UpdatePanelRequest(pydantic.BaseModel):
         None,
         description="Optional grid layout position. Omit or set null to use default responsive layout.",
     )
+    trace_id: str | None = pydantic.Field(None, description="Pinned trace ID (trace panels)")
+    service_filter: str | None = pydantic.Field(None, description="Service name filter (trace_list panels)")
+    operation_filter: str | None = pydantic.Field(None, description="Operation name filter (trace_list panels)")
+    min_duration_ms: int | None = pydantic.Field(None, description="Minimum span duration filter in ms (trace_list panels)")
+    has_error: bool | None = pydantic.Field(None, description="Error-only filter (trace_list panels)")
+    limit: int | None = pydantic.Field(None, description="Max results (trace_list panels)")
+    metric_name: str | None = pydantic.Field(None, description="Custom metric name (custom_metric panels)")
+    tag_filter: dict[str, str] | None = pydantic.Field(None, description="Tag key/value filter (custom_metric panels)")
+    agg: str | None = pydantic.Field(None, description="Aggregation function (custom_metric panels)")
+    viz: str | None = pydantic.Field(None, description="Visualization type (custom_metric panels)")
+    step: str | None = pydantic.Field(None, description="Step interval (custom_metric panels)")
 
     @pydantic.model_validator(mode="after")
     def validate_time_range(self):
