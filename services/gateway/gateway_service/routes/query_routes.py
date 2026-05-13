@@ -853,7 +853,7 @@ async def get_aggregated_metrics(
         data = [
             schemas.AggregatedMetricDataResponse(
                 date=item.date,
-                hour=item.hour if item.hour > 0 else None,
+                hour=item.hour if granularity == "hourly" else None,
                 endpoint_method=item.endpoint_method if item.endpoint_method else None,
                 endpoint_path=item.endpoint_path if item.endpoint_path else None,
                 log_level=item.log_level if item.log_level else None,

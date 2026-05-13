@@ -66,6 +66,10 @@ class ProjectResponse(pydantic.BaseModel):
         default_factory=list,
         description="List of unique API endpoint routes (e.g., 'GET /api/v1/users') discovered from endpoint logs. Populated by analytics workers.",
     )
+    features: dict[str, bool] = pydantic.Field(
+        default_factory=dict,
+        description="Per-project feature flags (e.g. tracing, custom_metrics, alert_rules).",
+    )
 
     model_config = pydantic.ConfigDict(
         json_schema_extra={

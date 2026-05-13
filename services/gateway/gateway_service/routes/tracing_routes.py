@@ -1,4 +1,6 @@
+import json
 import logging
+from datetime import datetime, timedelta
 
 import fastapi
 import gateway_service.proto.query_pb2 as query_pb2
@@ -9,12 +11,35 @@ from pydantic import BaseModel
 router = fastapi.APIRouter(tags=["Tracing"])
 logger = logging.getLogger(__name__)
 
+_STATUS_MAP = {0: "UNSET", 1: "OK", 2: "ERROR"}
+
+
+def _ns_to_ms(ns: int) -> float:
+    return round(ns / 1_000_000, 3)
+
+
+def _add_ns_to_iso(iso_str: str, duration_ns: int) -> str:
+    try:
+        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+        dt_end = dt + timedelta(microseconds=duration_ns / 1000)
+        return dt_end.isoformat()
+    except Exception:
+        return iso_str
+
+
+def _parse_json_field(raw: str) -> dict | list | None:
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return None
+
 
 class TraceSummaryResponse(BaseModel):
     trace_id: str
-    root_span_id: str
-    root_name: str
-    service_name: str
+    root_service: str
+    root_operation: str
     start_time: str
     duration_ms: int
     span_count: int
@@ -24,17 +49,17 @@ class TraceSummaryResponse(BaseModel):
 class SpanResponse(BaseModel):
     span_id: str
     trace_id: str
-    parent_span_id: str
-    project_id: int
+    parent_span_id: str | None
     service_name: str
     name: str
     kind: int
     start_time: str
-    duration_ns: int
-    status_code: int
+    end_time: str
+    duration_ms: float
+    status: str
     status_message: str
-    attributes: str
-    events: str
+    attributes: dict | None
+    events: list | None
     error_fingerprint: str
 
 
@@ -126,11 +151,11 @@ async def list_traces(
     request: fastapi.Request,
     project_id: int = fastapi.Query(...),
     service: str | None = fastapi.Query(None),
-    name: str | None = fastapi.Query(None),
+    operation: str | None = fastapi.Query(None),
     min_duration_ms: int | None = fastapi.Query(None),
     has_error: bool | None = fastapi.Query(None),
-    from_time: str | None = fastapi.Query(None),
-    to_time: str | None = fastapi.Query(None),
+    from_time: str | None = fastapi.Query(None, alias="from"),
+    to_time: str | None = fastapi.Query(None, alias="to"),
     limit: int = fastapi.Query(50, ge=1, le=500),
     offset: int = fastapi.Query(0, ge=0),
 ) -> ListTracesResponse:
@@ -144,8 +169,8 @@ async def list_traces(
     )
     if service is not None:
         proto_req.service = service
-    if name is not None:
-        proto_req.name = name
+    if operation is not None:
+        proto_req.name = operation
     if min_duration_ms is not None:
         proto_req.min_duration_ms = min_duration_ms
     if has_error is not None:
@@ -164,9 +189,8 @@ async def list_traces(
     traces = [
         TraceSummaryResponse(
             trace_id=t.trace_id,
-            root_span_id=t.root_span_id,
-            root_name=t.root_name,
-            service_name=t.service_name,
+            root_service=t.service_name,
+            root_operation=t.root_name,
             start_time=t.start_time,
             duration_ms=t.duration_ms,
             span_count=t.span_count,
@@ -210,17 +234,17 @@ async def get_trace(
         SpanResponse(
             span_id=s.span_id,
             trace_id=s.trace_id,
-            parent_span_id=s.parent_span_id,
-            project_id=s.project_id,
+            parent_span_id=s.parent_span_id or None,
             service_name=s.service_name,
             name=s.name,
             kind=s.kind,
             start_time=s.start_time,
-            duration_ns=s.duration_ns,
-            status_code=s.status_code,
+            end_time=_add_ns_to_iso(s.start_time, s.duration_ns),
+            duration_ms=_ns_to_ms(s.duration_ns),
+            status=_STATUS_MAP.get(s.status_code, "UNSET"),
             status_message=s.status_message,
-            attributes=s.attributes,
-            events=s.events,
+            attributes=_parse_json_field(s.attributes),
+            events=_parse_json_field(s.events),
             error_fingerprint=s.error_fingerprint,
         )
         for s in response.spans
