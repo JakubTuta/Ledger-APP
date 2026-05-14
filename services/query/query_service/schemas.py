@@ -13,6 +13,8 @@ class LogFilters(pydantic.BaseModel):
     ] | None = None
     environment: str | None = None
     error_fingerprint: str | None = None
+    status_class: list[str] | None = None  # ["2xx", "4xx", "5xx"]
+    search: str | None = None              # substring match on method or path
 
 
 class Pagination(pydantic.BaseModel):
@@ -40,6 +42,10 @@ class LogResponse(pydantic.BaseModel):
     platform_version: str | None
     processing_time_ms: int | None
     error_fingerprint: str | None
+    method: str | None = None
+    path: str | None = None
+    status_code: int | None = None
+    duration_ms: int | None = None
 
     model_config = pydantic.ConfigDict(from_attributes=True)
 

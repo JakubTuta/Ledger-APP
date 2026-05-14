@@ -58,6 +58,19 @@ class Log(Base):
         postgresql.JSONB, nullable=True
     )
 
+    method: orm.Mapped[str | None] = orm.mapped_column(
+        sqlalchemy.VARCHAR(8), nullable=True
+    )
+    path: orm.Mapped[str | None] = orm.mapped_column(
+        sqlalchemy.VARCHAR(2048), nullable=True
+    )
+    status_code: orm.Mapped[int | None] = orm.mapped_column(
+        sqlalchemy.SmallInteger, nullable=True
+    )
+    duration_ms: orm.Mapped[int | None] = orm.mapped_column(
+        sqlalchemy.Integer, nullable=True
+    )
+
     sdk_version: orm.Mapped[str | None] = orm.mapped_column(
         sqlalchemy.VARCHAR(20), nullable=True
     )

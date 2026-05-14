@@ -7,7 +7,7 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class QueryLogsRequest(_message.Message):
-    __slots__ = ("project_id", "start_time", "end_time", "level", "log_type", "environment", "error_fingerprint", "limit", "offset")
+    __slots__ = ("project_id", "start_time", "end_time", "level", "log_type", "environment", "error_fingerprint", "limit", "offset", "status_class", "search")
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
     START_TIME_FIELD_NUMBER: _ClassVar[int]
     END_TIME_FIELD_NUMBER: _ClassVar[int]
@@ -17,6 +17,8 @@ class QueryLogsRequest(_message.Message):
     ERROR_FINGERPRINT_FIELD_NUMBER: _ClassVar[int]
     LIMIT_FIELD_NUMBER: _ClassVar[int]
     OFFSET_FIELD_NUMBER: _ClassVar[int]
+    STATUS_CLASS_FIELD_NUMBER: _ClassVar[int]
+    SEARCH_FIELD_NUMBER: _ClassVar[int]
     project_id: int
     start_time: str
     end_time: str
@@ -26,7 +28,9 @@ class QueryLogsRequest(_message.Message):
     error_fingerprint: str
     limit: int
     offset: int
-    def __init__(self, project_id: _Optional[int] = ..., start_time: _Optional[str] = ..., end_time: _Optional[str] = ..., level: _Optional[str] = ..., log_type: _Optional[str] = ..., environment: _Optional[str] = ..., error_fingerprint: _Optional[str] = ..., limit: _Optional[int] = ..., offset: _Optional[int] = ...) -> None: ...
+    status_class: _containers.RepeatedScalarFieldContainer[str]
+    search: str
+    def __init__(self, project_id: _Optional[int] = ..., start_time: _Optional[str] = ..., end_time: _Optional[str] = ..., level: _Optional[str] = ..., log_type: _Optional[str] = ..., environment: _Optional[str] = ..., error_fingerprint: _Optional[str] = ..., limit: _Optional[int] = ..., offset: _Optional[int] = ..., status_class: _Optional[_Iterable[str]] = ..., search: _Optional[str] = ...) -> None: ...
 
 class SearchLogsRequest(_message.Message):
     __slots__ = ("project_id", "query", "start_time", "end_time", "limit", "offset")
@@ -53,7 +57,7 @@ class GetLogRequest(_message.Message):
     def __init__(self, log_id: _Optional[int] = ..., project_id: _Optional[int] = ...) -> None: ...
 
 class LogEntry(_message.Message):
-    __slots__ = ("id", "project_id", "timestamp", "ingested_at", "level", "log_type", "importance", "environment", "release", "message", "error_type", "error_message", "stack_trace", "attributes", "sdk_version", "platform", "platform_version", "processing_time_ms", "error_fingerprint")
+    __slots__ = ("id", "project_id", "timestamp", "ingested_at", "level", "log_type", "importance", "environment", "release", "message", "error_type", "error_message", "stack_trace", "attributes", "sdk_version", "platform", "platform_version", "processing_time_ms", "error_fingerprint", "method", "path", "status_code", "duration_ms")
     ID_FIELD_NUMBER: _ClassVar[int]
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
     TIMESTAMP_FIELD_NUMBER: _ClassVar[int]
@@ -73,6 +77,10 @@ class LogEntry(_message.Message):
     PLATFORM_VERSION_FIELD_NUMBER: _ClassVar[int]
     PROCESSING_TIME_MS_FIELD_NUMBER: _ClassVar[int]
     ERROR_FINGERPRINT_FIELD_NUMBER: _ClassVar[int]
+    METHOD_FIELD_NUMBER: _ClassVar[int]
+    PATH_FIELD_NUMBER: _ClassVar[int]
+    STATUS_CODE_FIELD_NUMBER: _ClassVar[int]
+    DURATION_MS_FIELD_NUMBER: _ClassVar[int]
     id: int
     project_id: int
     timestamp: str
@@ -92,7 +100,11 @@ class LogEntry(_message.Message):
     platform_version: str
     processing_time_ms: int
     error_fingerprint: str
-    def __init__(self, id: _Optional[int] = ..., project_id: _Optional[int] = ..., timestamp: _Optional[str] = ..., ingested_at: _Optional[str] = ..., level: _Optional[str] = ..., log_type: _Optional[str] = ..., importance: _Optional[str] = ..., environment: _Optional[str] = ..., release: _Optional[str] = ..., message: _Optional[str] = ..., error_type: _Optional[str] = ..., error_message: _Optional[str] = ..., stack_trace: _Optional[str] = ..., attributes: _Optional[str] = ..., sdk_version: _Optional[str] = ..., platform: _Optional[str] = ..., platform_version: _Optional[str] = ..., processing_time_ms: _Optional[int] = ..., error_fingerprint: _Optional[str] = ...) -> None: ...
+    method: str
+    path: str
+    status_code: int
+    duration_ms: int
+    def __init__(self, id: _Optional[int] = ..., project_id: _Optional[int] = ..., timestamp: _Optional[str] = ..., ingested_at: _Optional[str] = ..., level: _Optional[str] = ..., log_type: _Optional[str] = ..., importance: _Optional[str] = ..., environment: _Optional[str] = ..., release: _Optional[str] = ..., message: _Optional[str] = ..., error_type: _Optional[str] = ..., error_message: _Optional[str] = ..., stack_trace: _Optional[str] = ..., attributes: _Optional[str] = ..., sdk_version: _Optional[str] = ..., platform: _Optional[str] = ..., platform_version: _Optional[str] = ..., processing_time_ms: _Optional[int] = ..., error_fingerprint: _Optional[str] = ..., method: _Optional[str] = ..., path: _Optional[str] = ..., status_code: _Optional[int] = ..., duration_ms: _Optional[int] = ...) -> None: ...
 
 class QueryLogsResponse(_message.Message):
     __slots__ = ("logs", "total", "has_more")

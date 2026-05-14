@@ -48,6 +48,10 @@ def _panel_dict_to_proto(panel: dict) -> auth_pb2.Panel:
         kwargs["viz"] = panel["viz"]
     if panel.get("step") is not None:
         kwargs["step"] = panel["step"]
+    if panel.get("status_class") is not None:
+        kwargs["status_class"] = panel["status_class"]
+    if panel.get("logs_search") is not None:
+        kwargs["logs_search"] = panel["logs_search"]
     return auth_pb2.Panel(**kwargs)
 
 
@@ -862,6 +866,8 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     agg=request.agg if request.HasField("agg") else None,
                     viz=request.viz if request.HasField("viz") else None,
                     step=request.step if request.HasField("step") else None,
+                    status_class=request.status_class if request.HasField("status_class") else None,
+                    logs_search=request.logs_search if request.HasField("logs_search") else None,
                 )
 
                 return auth_pb2.CreateDashboardPanelResponse(panel=_panel_dict_to_proto(panel))
@@ -914,6 +920,8 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     agg=request.agg if request.HasField("agg") else None,
                     viz=request.viz if request.HasField("viz") else None,
                     step=request.step if request.HasField("step") else None,
+                    status_class=request.status_class if request.HasField("status_class") else None,
+                    logs_search=request.logs_search if request.HasField("logs_search") else None,
                 )
 
                 return auth_pb2.UpdateDashboardPanelResponse(panel=_panel_dict_to_proto(panel))

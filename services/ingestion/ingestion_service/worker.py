@@ -42,6 +42,28 @@ class StorageWorker:
                 for log_data in logs:
                     timestamp = datetime.datetime.fromisoformat(log_data["timestamp"])
 
+                    method = None
+                    path = None
+                    status_code = None
+                    duration_ms = None
+                    attributes = log_data.get("attributes")
+                    if log_data.get("log_type") in ("endpoint", "network") and attributes:
+                        ep = attributes.get("endpoint") or {}
+                        method = ep.get("method")
+                        path = ep.get("path")
+                        raw_status = ep.get("status_code")
+                        raw_duration = ep.get("duration_ms")
+                        if raw_status is not None:
+                            try:
+                                status_code = int(raw_status)
+                            except (TypeError, ValueError):
+                                pass
+                        if raw_duration is not None:
+                            try:
+                                duration_ms = round(float(raw_duration))
+                            except (TypeError, ValueError):
+                                pass
+
                     log_record = {
                         "project_id": log_data["project_id"],
                         "timestamp": timestamp,
@@ -57,11 +79,15 @@ class StorageWorker:
                         "error_type": log_data.get("error_type"),
                         "error_message": log_data.get("error_message"),
                         "stack_trace": log_data.get("stack_trace"),
-                        "attributes": log_data.get("attributes"),
+                        "attributes": attributes,
                         "sdk_version": log_data.get("sdk_version"),
                         "platform": log_data.get("platform"),
                         "platform_version": log_data.get("platform_version"),
                         "error_fingerprint": log_data.get("error_fingerprint"),
+                        "method": method,
+                        "path": path,
+                        "status_code": status_code,
+                        "duration_ms": duration_ms,
                     }
                     log_records.append(log_record)
                     required_partitions.add(timestamp.date())

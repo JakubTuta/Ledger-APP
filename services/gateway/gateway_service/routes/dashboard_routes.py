@@ -53,6 +53,8 @@ def _panel_proto_to_response(panel) -> schemas.PanelResponse:
         agg=panel.agg if panel.HasField("agg") else None,
         viz=panel.viz if panel.HasField("viz") else None,
         step=panel.step if panel.HasField("step") else None,
+        statusClass=panel.status_class if panel.HasField("status_class") else None,
+        search=panel.logs_search if panel.HasField("logs_search") else None,
     )
 
 
@@ -190,6 +192,10 @@ async def create_dashboard_panel(
             grpc_request_kwargs["viz"] = request_data.viz
         if request_data.step is not None:
             grpc_request_kwargs["step"] = request_data.step
+        if request_data.statusClass is not None:
+            grpc_request_kwargs["status_class"] = request_data.statusClass
+        if request_data.search is not None:
+            grpc_request_kwargs["logs_search"] = request_data.search
 
         grpc_request = auth_pb2.CreateDashboardPanelRequest(**grpc_request_kwargs)
 
@@ -307,6 +313,10 @@ async def update_dashboard_panel(
             grpc_request_kwargs["viz"] = request_data.viz
         if request_data.step is not None:
             grpc_request_kwargs["step"] = request_data.step
+        if request_data.statusClass is not None:
+            grpc_request_kwargs["status_class"] = request_data.statusClass
+        if request_data.search is not None:
+            grpc_request_kwargs["logs_search"] = request_data.search
 
         grpc_request = auth_pb2.UpdateDashboardPanelRequest(**grpc_request_kwargs)
 

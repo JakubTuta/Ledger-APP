@@ -394,6 +394,9 @@ message Panel {
   optional string agg = 21;
   optional string viz = 22;
   optional string step = 23;
+  // logs panel filter fields
+  optional string status_class = 24;
+  optional string logs_search = 25;
 }
 
 message GetDashboardPanelsRequest {
@@ -428,6 +431,8 @@ message CreateDashboardPanelRequest {
   optional string agg = 21;
   optional string viz = 22;
   optional string step = 23;
+  optional string status_class = 24;
+  optional string logs_search = 25;
 }
 
 message CreateDashboardPanelResponse {
@@ -459,6 +464,8 @@ message UpdateDashboardPanelRequest {
   optional string agg = 22;
   optional string viz = 23;
   optional string step = 24;
+  optional string status_class = 25;
+  optional string logs_search = 26;
 }
 
 message UpdateDashboardPanelResponse {

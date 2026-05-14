@@ -77,6 +77,8 @@ class PanelRequest(pydantic.BaseModel):
     agg: str | None = pydantic.Field(None, description="Aggregation function (custom_metric panels)")
     viz: str | None = pydantic.Field(None, description="Visualization type (custom_metric panels)")
     step: str | None = pydantic.Field(None, description="Step interval (custom_metric panels)")
+    statusClass: str | None = pydantic.Field(None, description="HTTP status class filter (logs panels): 2xx, 4xx, 5xx")
+    search: str | None = pydantic.Field(None, max_length=200, description="Path/method substring filter (logs panels)")
 
     @pydantic.model_validator(mode="after")
     def validate_time_range(self):
@@ -159,6 +161,8 @@ class PanelResponse(pydantic.BaseModel):
     agg: str | None = pydantic.Field(None)
     viz: str | None = pydantic.Field(None)
     step: str | None = pydantic.Field(None)
+    statusClass: str | None = pydantic.Field(None)
+    search: str | None = pydantic.Field(None)
 
     model_config = pydantic.ConfigDict(
         json_schema_extra={
@@ -309,6 +313,8 @@ class UpdatePanelRequest(pydantic.BaseModel):
     agg: str | None = pydantic.Field(None, description="Aggregation function (custom_metric panels)")
     viz: str | None = pydantic.Field(None, description="Visualization type (custom_metric panels)")
     step: str | None = pydantic.Field(None, description="Step interval (custom_metric panels)")
+    statusClass: str | None = pydantic.Field(None, description="HTTP status class filter (logs panels): 2xx, 4xx, 5xx")
+    search: str | None = pydantic.Field(None, max_length=200, description="Path/method substring filter (logs panels)")
 
     @pydantic.model_validator(mode="after")
     def validate_time_range(self):

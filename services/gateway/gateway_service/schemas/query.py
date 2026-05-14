@@ -64,6 +64,18 @@ class LogEntryResponse(pydantic.BaseModel):
     error_fingerprint: typing.Optional[str] = pydantic.Field(
         default=None, description="Error fingerprint (SHA-256 hash)"
     )
+    method: typing.Optional[str] = pydantic.Field(
+        default=None, description="HTTP method (GET, POST, etc.)"
+    )
+    path: typing.Optional[str] = pydantic.Field(
+        default=None, description="HTTP request path"
+    )
+    status_code: typing.Optional[int] = pydantic.Field(
+        default=None, description="HTTP response status code"
+    )
+    duration_ms: typing.Optional[int] = pydantic.Field(
+        default=None, description="Request duration in milliseconds"
+    )
 
     model_config = pydantic.ConfigDict(from_attributes=True)
 

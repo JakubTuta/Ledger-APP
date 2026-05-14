@@ -30,6 +30,31 @@ async def query_logs(
             query = query.where(
                 models.Log.error_fingerprint == filters.error_fingerprint
             )
+        if filters.status_class:
+            status_conditions = []
+            for sc in filters.status_class:
+                if sc == "2xx":
+                    status_conditions.append(
+                        models.Log.status_code.between(200, 299)
+                    )
+                elif sc == "4xx":
+                    status_conditions.append(
+                        models.Log.status_code.between(400, 499)
+                    )
+                elif sc == "5xx":
+                    status_conditions.append(
+                        models.Log.status_code.between(500, 599)
+                    )
+            if status_conditions:
+                query = query.where(sa.or_(*status_conditions))
+        if filters.search:
+            term = f"%{filters.search}%"
+            query = query.where(
+                sa.or_(
+                    models.Log.method.ilike(term),
+                    models.Log.path.ilike(term),
+                )
+            )
 
         query = query.order_by(models.Log.timestamp.desc())
 

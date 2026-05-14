@@ -94,6 +94,8 @@ class DashboardService:
         agg: str | None = None,
         viz: str | None = None,
         step: str | None = None,
+        status_class: str | None = None,
+        logs_search: str | None = None,
     ) -> dict:
         """Create a new dashboard panel."""
 
@@ -159,6 +161,8 @@ class DashboardService:
             "agg": agg,
             "viz": viz,
             "step": step,
+            "status_class": status_class,
+            "logs_search": logs_search,
         }
 
         result = await session.execute(
@@ -213,6 +217,8 @@ class DashboardService:
         agg: str | None = None,
         viz: str | None = None,
         step: str | None = None,
+        status_class: str | None = None,
+        logs_search: str | None = None,
     ) -> dict:
         """Update an existing dashboard panel."""
 
@@ -289,6 +295,8 @@ class DashboardService:
                     "agg": agg,
                     "viz": viz,
                     "step": step,
+                    "status_class": status_class,
+                    "logs_search": logs_search,
                 }
                 panel_found = True
                 break

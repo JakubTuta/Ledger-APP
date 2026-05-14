@@ -36,6 +36,8 @@ message QueryLogsRequest {
     optional string error_fingerprint = 7;
     int32 limit = 8;
     int32 offset = 9;
+    repeated string status_class = 10;  // "2xx", "4xx", "5xx"
+    optional string search = 11;        // substring match on method or path
 }
 
 message SearchLogsRequest {
@@ -72,6 +74,10 @@ message LogEntry {
     optional string platform_version = 17;
     optional int32 processing_time_ms = 18;
     optional string error_fingerprint = 19;
+    optional string method = 20;
+    optional string path = 21;
+    optional int32 status_code = 22;
+    optional int32 duration_ms = 23;
 }
 
 message QueryLogsResponse {

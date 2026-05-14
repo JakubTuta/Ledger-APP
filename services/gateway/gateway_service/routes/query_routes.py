@@ -364,6 +364,15 @@ async def query_logs(
         description="Number of logs to skip for pagination",
         ge=0,
     ),
+    status_class: typing.Optional[typing.List[typing.Literal["2xx", "4xx", "5xx"]]] = fastapi.Query(
+        None,
+        description="Filter by HTTP status class (2xx, 4xx, 5xx). Can be repeated.",
+    ),
+    search: typing.Optional[str] = fastapi.Query(
+        None,
+        description="Substring search on HTTP method or path.",
+        max_length=200,
+    ),
 ) -> schemas.LogsListResponse:
     """
     Query logs for dashboard panels.
@@ -480,17 +489,23 @@ async def query_logs(
                     detail=f"Invalid date format. Use ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ): {str(e)}",
                 )
 
+        grpc_request = query_pb2.QueryLogsRequest(
+            project_id=project_id,
+            start_time=start_time.isoformat(),
+            end_time=end_time.isoformat(),
+            level=level if level else "",
+            log_type=log_type if log_type else "",
+            limit=limit,
+            offset=offset,
+        )
+        if status_class:
+            grpc_request.status_class.extend(status_class)
+        if search:
+            grpc_request.search = search
+
         async with grpc_pool.get_query_stub() as stub:
             response = await stub.QueryLogs(
-                query_pb2.QueryLogsRequest(
-                    project_id=project_id,
-                    start_time=start_time.isoformat(),
-                    end_time=end_time.isoformat(),
-                    level=level if level else "",
-                    log_type=log_type if log_type else "",
-                    limit=limit,
-                    offset=offset,
-                ),
+                grpc_request,
                 timeout=10.0,
             )
 
@@ -1478,4 +1493,8 @@ def _proto_to_pydantic_log(proto_log: query_pb2.LogEntry) -> schemas.LogEntryRes
         error_fingerprint=(
             proto_log.error_fingerprint if proto_log.error_fingerprint else None
         ),
+        method=proto_log.method if proto_log.HasField("method") else None,
+        path=proto_log.path if proto_log.HasField("path") else None,
+        status_code=proto_log.status_code if proto_log.HasField("status_code") else None,
+        duration_ms=proto_log.duration_ms if proto_log.HasField("duration_ms") else None,
     )

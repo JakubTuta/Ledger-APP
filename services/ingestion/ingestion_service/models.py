@@ -8,6 +8,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     Index,
+    Integer,
     SmallInteger,
     Text,
 )
@@ -47,6 +48,11 @@ class Log(database.Base):
     stack_trace: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     attributes: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+    method: Mapped[str | None] = mapped_column(VARCHAR(8), nullable=True)
+    path: Mapped[str | None] = mapped_column(VARCHAR(2048), nullable=True)
+    status_code: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     sdk_version: Mapped[str | None] = mapped_column(VARCHAR(20), nullable=True)
     platform: Mapped[str | None] = mapped_column(VARCHAR(50), nullable=True)
