@@ -1,8 +1,13 @@
 import json
+from datetime import datetime, timezone
 
 import sqlalchemy as sa
 
 import query_service.database as database
+
+
+def _parse_iso(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
 async def get_trace(project_id: int, trace_id: str) -> dict | None:
@@ -70,10 +75,10 @@ async def list_traces(
         conditions.append("status_code != 2")
     if from_time:
         conditions.append("start_time >= :from_time")
-        params["from_time"] = from_time
+        params["from_time"] = _parse_iso(from_time)
     if to_time:
         conditions.append("start_time <= :to_time")
-        params["to_time"] = to_time
+        params["to_time"] = _parse_iso(to_time)
 
     where = " AND ".join(conditions)
     count_sql = f"SELECT COUNT(*) FROM spans WHERE parent_span_id IS NULL AND {where}"

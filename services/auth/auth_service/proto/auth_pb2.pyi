@@ -679,44 +679,6 @@ class DeleteDashboardPanelResponse(_message.Message):
     success: bool
     def __init__(self, success: bool = ...) -> None: ...
 
-class GetFeatureFlagsRequest(_message.Message):
-    __slots__ = ("project_id",)
-    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
-    project_id: int
-    def __init__(self, project_id: _Optional[int] = ...) -> None: ...
-
-class FeatureFlag(_message.Message):
-    __slots__ = ("key", "enabled")
-    KEY_FIELD_NUMBER: _ClassVar[int]
-    ENABLED_FIELD_NUMBER: _ClassVar[int]
-    key: str
-    enabled: bool
-    def __init__(self, key: _Optional[str] = ..., enabled: bool = ...) -> None: ...
-
-class GetFeatureFlagsResponse(_message.Message):
-    __slots__ = ("flags",)
-    FLAGS_FIELD_NUMBER: _ClassVar[int]
-    flags: _containers.RepeatedCompositeFieldContainer[FeatureFlag]
-    def __init__(self, flags: _Optional[_Iterable[_Union[FeatureFlag, _Mapping]]] = ...) -> None: ...
-
-class SetFeatureFlagRequest(_message.Message):
-    __slots__ = ("project_id", "key", "enabled")
-    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
-    KEY_FIELD_NUMBER: _ClassVar[int]
-    ENABLED_FIELD_NUMBER: _ClassVar[int]
-    project_id: int
-    key: str
-    enabled: bool
-    def __init__(self, project_id: _Optional[int] = ..., key: _Optional[str] = ..., enabled: bool = ...) -> None: ...
-
-class SetFeatureFlagResponse(_message.Message):
-    __slots__ = ("success", "flag")
-    SUCCESS_FIELD_NUMBER: _ClassVar[int]
-    FLAG_FIELD_NUMBER: _ClassVar[int]
-    success: bool
-    flag: FeatureFlag
-    def __init__(self, success: bool = ..., flag: _Optional[_Union[FeatureFlag, _Mapping]] = ...) -> None: ...
-
 class NotificationItem(_message.Message):
     __slots__ = ("id", "user_id", "project_id", "kind", "severity", "payload", "created_at", "read_at", "expires_at")
     ID_FIELD_NUMBER: _ClassVar[int]

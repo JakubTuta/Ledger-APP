@@ -12,7 +12,6 @@ from gateway_service.routes import (
     auth_routes,
     custom_metrics_routes,
     dashboard_routes,
-    feature_flag_routes,
     health_routes,
     ingest_metrics_routes,
     ingest_spans_routes,
@@ -212,10 +211,6 @@ def custom_openapi():
             "name": "Notification Inbox",
             "description": "In-app notification inbox endpoints",
         },
-        {
-            "name": "Feature Flags",
-            "description": "Per-project feature flag management",
-        },
     ]
 
     app.openapi_schema = openapi_schema
@@ -332,7 +327,6 @@ include_router(auth_routes.router, prefix="/api/v1")
 include_router(project_routes.router, prefix="/api/v1")
 include_router(api_key_routes.router, prefix="/api/v1")
 include_router(dashboard_routes.router, prefix="/api/v1")
-include_router(feature_flag_routes.router, prefix="/api/v1")
 include_router(health_routes.router, prefix="/api/v1")
 include_router(ingestion_routes.router, prefix="/api/v1")
 include_router(ingest_spans_routes.router, prefix="/api/v1")

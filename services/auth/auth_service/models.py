@@ -557,42 +557,6 @@ class UserDashboard(database.Base):
         return f"<UserDashboard(id={self.id}, user_id={self.user_id}, panels={len(self.panels)})>"
 
 
-class FeatureFlag(database.Base):
-    __tablename__ = "feature_flags"
-
-    project_id: Mapped[int] = mapped_column(
-        BigInteger,
-        ForeignKey("projects.id", ondelete="CASCADE"),
-        primary_key=True,
-        nullable=False,
-    )
-    key: Mapped[str] = mapped_column(VARCHAR(50), primary_key=True, nullable=False)
-    enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=datetime.datetime.now(datetime.timezone.utc),
-        nullable=False,
-    )
-    updated_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=datetime.datetime.now(datetime.timezone.utc),
-        onupdate=datetime.datetime.now(datetime.timezone.utc),
-        nullable=False,
-    )
-
-    __table_args__ = (
-        Index("idx_feature_flags_project_id", "project_id"),
-        CheckConstraint(
-            "key IN ('tracing', 'custom_metrics', 'alert_rules')",
-            name="check_feature_flag_key",
-        ),
-    )
-
-    def __repr__(self) -> str:
-        return f"<FeatureFlag(project_id={self.project_id}, key={self.key}, enabled={self.enabled})>"
-
-
 class Notification(database.Base):
     __tablename__ = "notifications"
 

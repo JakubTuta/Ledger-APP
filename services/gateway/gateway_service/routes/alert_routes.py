@@ -4,7 +4,6 @@ import logging
 import fastapi
 import gateway_service.proto.auth_pb2 as auth_pb2
 import gateway_service.proto.auth_pb2_grpc as auth_pb2_grpc
-import gateway_service.services.feature_flags as feature_flags
 import grpc
 import httpx
 from pydantic import BaseModel, Field
@@ -132,7 +131,6 @@ async def list_alert_rules(
     project_id: int = fastapi.Query(...),
 ) -> list[AlertRuleResponse]:
     _require_account(request)
-    await feature_flags.require_feature_enabled(request, project_id, "alert_rules")
     grpc_pool = request.app.state.grpc_pool
     try:
         channel = grpc_pool.get_channel("auth")
@@ -182,7 +180,6 @@ async def create_alert_rule(
     request: fastapi.Request,
 ) -> AlertRuleResponse:
     _require_account(request)
-    await feature_flags.require_feature_enabled(request, payload.project_id, "alert_rules")
     grpc_pool = request.app.state.grpc_pool
     try:
         channel = grpc_pool.get_channel("auth")

@@ -159,26 +159,7 @@ FOREIGN KEY (user_id) REFERENCES accounts(id)
 ON DELETE CASCADE;
 
 -- ============================================
--- 6. FEATURE FLAGS (per-project)
--- ============================================
-
-CREATE TABLE feature_flags (
-    project_id  BIGINT NOT NULL,
-    key         TEXT NOT NULL,
-    enabled     BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (project_id, key)
-);
-
-CREATE INDEX CONCURRENTLY idx_feature_flags_project ON feature_flags (project_id);
-
-ALTER TABLE feature_flags
-    ADD CONSTRAINT check_feature_flag_key
-    CHECK (key IN ('tracing', 'custom_metrics', 'alert_rules'));
-
--- ============================================
--- 7. PERSISTED NOTIFICATIONS
+-- 6. PERSISTED NOTIFICATIONS
 -- ============================================
 
 CREATE TABLE notifications (

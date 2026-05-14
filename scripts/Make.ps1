@@ -107,7 +107,7 @@ function Compile-Proto {
         @{ Proto = "proto/query.proto";     Out = "services/gateway/gateway_service/proto" }
     )
     foreach ($c in $compilations) {
-        & $python -m grpc_tools.protoc -I=proto --python_out=$c.Out --grpc_python_out=$c.Out --pyi_out=$c.Out $c.Proto
+        & $python -m grpc_tools.protoc -I=proto "--python_out=$($c.Out)" "--grpc_python_out=$($c.Out)" "--pyi_out=$($c.Out)" $c.Proto
         if ($LASTEXITCODE -ne 0) { Write-Host "Proto compilation failed: $($c.Proto) -> $($c.Out)" -ForegroundColor Red; exit 1 }
     }
 

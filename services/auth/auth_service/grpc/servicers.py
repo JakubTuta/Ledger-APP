@@ -392,16 +392,6 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     environment=request.environment or "production",
                 )
 
-                for flag_key in ("tracing", "custom_metrics", "alert_rules"):
-                    session.add(
-                        models.FeatureFlag(
-                            project_id=project.id,
-                            key=flag_key,
-                            enabled=True,
-                        )
-                    )
-                await session.flush()
-
                 return auth_pb2.CreateProjectResponse(
                     project_id=project.id,
                     name=project.name,
@@ -963,60 +953,6 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f"Internal error: {str(e)}")
             return auth_pb2.DeleteDashboardPanelResponse(success=False)
-
-    # ==================== Feature Flag Operations ====================
-
-    async def GetFeatureFlags(
-        self,
-        request: auth_pb2.GetFeatureFlagsRequest,
-        context: grpc.aio.ServicerContext,
-    ) -> auth_pb2.GetFeatureFlagsResponse:
-        try:
-            async with database.get_session() as session:
-                result = await session.execute(
-                    sa.select(models.FeatureFlag).where(
-                        models.FeatureFlag.project_id == request.project_id
-                    )
-                )
-                rows = result.scalars().all()
-                flags = [
-                    auth_pb2.FeatureFlag(key=r.key, enabled=r.enabled) for r in rows
-                ]
-                return auth_pb2.GetFeatureFlagsResponse(flags=flags)
-        except Exception as e:
-            context.set_code(grpc.StatusCode.INTERNAL)
-            context.set_details(f"Internal error: {str(e)}")
-            return auth_pb2.GetFeatureFlagsResponse()
-
-    async def SetFeatureFlag(
-        self,
-        request: auth_pb2.SetFeatureFlagRequest,
-        context: grpc.aio.ServicerContext,
-    ) -> auth_pb2.SetFeatureFlagResponse:
-        try:
-            async with database.get_session() as session:
-                await session.execute(
-                    sa.text("""
-                        INSERT INTO feature_flags (project_id, key, enabled, created_at, updated_at)
-                        VALUES (:project_id, :key, :enabled, NOW(), NOW())
-                        ON CONFLICT (project_id, key) DO UPDATE
-                        SET enabled = EXCLUDED.enabled, updated_at = NOW()
-                    """),
-                    {
-                        "project_id": request.project_id,
-                        "key": request.key,
-                        "enabled": request.enabled,
-                    },
-                )
-                await session.commit()
-                return auth_pb2.SetFeatureFlagResponse(
-                    success=True,
-                    flag=auth_pb2.FeatureFlag(key=request.key, enabled=request.enabled),
-                )
-        except Exception as e:
-            context.set_code(grpc.StatusCode.INTERNAL)
-            context.set_details(f"Internal error: {str(e)}")
-            return auth_pb2.SetFeatureFlagResponse(success=False)
 
     # ==================== Notification Inbox Operations ====================
 

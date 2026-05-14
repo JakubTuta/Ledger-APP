@@ -15,17 +15,6 @@ logger = logging.getLogger(__name__)
 router = fastapi.APIRouter(tags=["Projects"])
 
 
-async def _fetch_feature_flags(stub: auth_pb2_grpc.AuthServiceStub, project_id: int) -> dict[str, bool]:
-    try:
-        response = await asyncio.wait_for(
-            stub.GetFeatureFlags(auth_pb2.GetFeatureFlagsRequest(project_id=project_id)),
-            timeout=3.0,
-        )
-        return {f.key: f.enabled for f in response.flags}
-    except Exception:
-        return {}
-
-
 # ==================== ROUTE HANDLERS ====================
 # Note: Request/Response models moved to gateway_service/schemas/projects.py
 
@@ -199,10 +188,6 @@ async def list_projects(
 
         response = await asyncio.wait_for(stub.GetProjects(grpc_request), timeout=5.0)
 
-        flags_list = await asyncio.gather(
-            *[_fetch_feature_flags(stub, p.project_id) for p in response.projects]
-        )
-
         projects = [
             schemas.ProjectResponse(
                 project_id=p.project_id,
@@ -212,9 +197,8 @@ async def list_projects(
                 retention_days=p.retention_days,
                 daily_quota=p.daily_quota,
                 available_routes=list(p.available_routes),
-                features=flags,
             )
-            for p, flags in zip(response.projects, flags_list)
+            for p in response.projects
         ]
 
         return schemas.ProjectListResponse(projects=projects, total=len(projects))
@@ -292,7 +276,6 @@ async def get_project_by_slug(
 
         for p in response.projects:
             if p.slug == project_slug:
-                flags = await _fetch_feature_flags(stub, p.project_id)
                 return schemas.ProjectResponse(
                     project_id=p.project_id,
                     name=p.name,
@@ -301,7 +284,6 @@ async def get_project_by_slug(
                     retention_days=p.retention_days,
                     daily_quota=p.daily_quota,
                     available_routes=list(p.available_routes),
-                    features=flags,
                 )
 
         raise fastapi.HTTPException(

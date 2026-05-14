@@ -41,10 +41,6 @@ service AuthService {
   rpc UpdateDashboardPanel(UpdateDashboardPanelRequest) returns (UpdateDashboardPanelResponse);
   rpc DeleteDashboardPanel(DeleteDashboardPanelRequest) returns (DeleteDashboardPanelResponse);
 
-  // Feature flag operations
-  rpc GetFeatureFlags(GetFeatureFlagsRequest) returns (GetFeatureFlagsResponse);
-  rpc SetFeatureFlag(SetFeatureFlagRequest) returns (SetFeatureFlagResponse);
-
   // Notification inbox operations
   rpc ListNotifications(ListNotificationsRequest) returns (ListNotificationsResponse);
   rpc GetUnreadNotificationCount(GetUnreadNotificationCountRequest) returns (GetUnreadNotificationCountResponse);
@@ -476,32 +472,6 @@ message DeleteDashboardPanelRequest {
 
 message DeleteDashboardPanelResponse {
   bool success = 1;
-}
-
-// ==================== Feature Flag Messages ====================
-
-message GetFeatureFlagsRequest {
-  int64 project_id = 1;
-}
-
-message FeatureFlag {
-  string key = 1;
-  bool enabled = 2;
-}
-
-message GetFeatureFlagsResponse {
-  repeated FeatureFlag flags = 1;
-}
-
-message SetFeatureFlagRequest {
-  int64 project_id = 1;
-  string key = 2;
-  bool enabled = 3;
-}
-
-message SetFeatureFlagResponse {
-  bool success = 1;
-  FeatureFlag flag = 2;
 }
 
 // ==================== Notification Inbox Messages ====================
