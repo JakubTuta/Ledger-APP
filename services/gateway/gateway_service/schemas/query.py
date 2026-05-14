@@ -141,6 +141,13 @@ class ErrorListEntryResponse(pydantic.BaseModel):
     attributes: typing.Optional[dict] = pydantic.Field(default=None, description="Additional attributes")
     sdk_version: typing.Optional[str] = pydantic.Field(default=None, description="SDK version")
     platform: typing.Optional[str] = pydantic.Field(default=None, description="Platform (e.g., Python)")
+    group_key: typing.Optional[str] = pydantic.Field(default=None, description="Grouping key (fingerprint or hash)")
+    occurrence_count: int = pydantic.Field(default=1, description="Number of occurrences in time period")
+    first_seen: typing.Optional[datetime.datetime] = pydantic.Field(default=None, description="First occurrence timestamp")
+    last_seen: typing.Optional[datetime.datetime] = pydantic.Field(default=None, description="Most recent occurrence timestamp")
+    status_code: typing.Optional[int] = pydantic.Field(default=None, description="HTTP status code (if HTTP error)")
+    path: typing.Optional[str] = pydantic.Field(default=None, description="Request path (if HTTP error)")
+    stack_trace: typing.Optional[str] = pydantic.Field(default=None, description="Stack trace")
 
     model_config = pydantic.ConfigDict(from_attributes=True)
 

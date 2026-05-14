@@ -222,6 +222,7 @@ message GetErrorListRequest {
     optional string period_to = 4;
     int32 limit = 5;
     int32 offset = 6;
+    optional string search = 7;
 }
 
 message ErrorListEntry {
@@ -236,6 +237,14 @@ message ErrorListEntry {
     optional string attributes = 9;
     optional string sdk_version = 10;
     optional string platform = 11;
+    optional string group_key = 12;
+    int32 occurrence_count = 13;
+    string first_seen = 14;
+    string last_seen = 15;
+    optional int32 status_code = 16;
+    optional string path = 17;
+    optional string stack_trace = 18;
+    int64 latest_log_id = 19;
 }
 
 message GetErrorListResponse {

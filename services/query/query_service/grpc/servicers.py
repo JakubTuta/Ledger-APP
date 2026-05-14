@@ -454,11 +454,13 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
                 period=request.period if request.period else None,
                 period_from=period_from,
                 period_to=period_to,
+                search=request.search if request.HasField("search") else None,
                 pagination=pagination,
             )
 
-            error_entries = [
-                query_pb2.ErrorListEntry(
+            error_entries = []
+            for error in result.errors:
+                entry_kwargs = dict(
                     log_id=error.log_id,
                     project_id=error.project_id,
                     level=error.level,
@@ -470,9 +472,20 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
                     attributes=json.dumps(error.attributes) if error.attributes else "",
                     sdk_version=error.sdk_version or "",
                     platform=error.platform or "",
+                    occurrence_count=error.occurrence_count,
+                    first_seen=error.first_seen.isoformat() if error.first_seen else error.timestamp.isoformat(),
+                    last_seen=error.last_seen.isoformat() if error.last_seen else error.timestamp.isoformat(),
+                    latest_log_id=error.latest_log_id if error.latest_log_id is not None else error.log_id,
                 )
-                for error in result.errors
-            ]
+                if error.group_key is not None:
+                    entry_kwargs["group_key"] = error.group_key
+                if error.status_code is not None:
+                    entry_kwargs["status_code"] = error.status_code
+                if error.path is not None:
+                    entry_kwargs["path"] = error.path
+                if error.stack_trace is not None:
+                    entry_kwargs["stack_trace"] = error.stack_trace
+                error_entries.append(query_pb2.ErrorListEntry(**entry_kwargs))
 
             return query_pb2.GetErrorListResponse(
                 project_id=result.project_id,

@@ -998,6 +998,11 @@ async def get_error_list(
         description="End date in ISO 8601 format (YYYY-MM-DD). Must be used with periodFrom.",
         pattern=r"^\\d{4}-\\d{2}-\\d{2}$",
     ),
+    search: typing.Optional[str] = fastapi.Query(
+        None,
+        description="Substring filter on path or message",
+        max_length=200,
+    ),
     limit: int = fastapi.Query(
         100,
         description="Maximum number of errors to return",
@@ -1025,16 +1030,20 @@ async def get_error_list(
         )
 
     try:
+        error_list_kwargs: dict = dict(
+            project_id=project_id,
+            period=period if period else "",
+            period_from=periodFrom if periodFrom else "",
+            period_to=periodTo if periodTo else "",
+            limit=limit,
+            offset=offset,
+        )
+        if search:
+            error_list_kwargs["search"] = search
+
         async with grpc_pool.get_query_stub() as stub:
             response = await stub.GetErrorList(
-                query_pb2.GetErrorListRequest(
-                    project_id=project_id,
-                    period=period if period else "",
-                    period_from=periodFrom if periodFrom else "",
-                    period_to=periodTo if periodTo else "",
-                    limit=limit,
-                    offset=offset,
-                ),
+                query_pb2.GetErrorListRequest(**error_list_kwargs),
                 timeout=10.0,
             )
 
@@ -1065,6 +1074,13 @@ async def get_error_list(
                     attributes=attributes,
                     sdk_version=error.sdk_version if error.sdk_version else None,
                     platform=error.platform if error.platform else None,
+                    group_key=error.group_key if error.HasField("group_key") else None,
+                    occurrence_count=error.occurrence_count if error.occurrence_count else 1,
+                    first_seen=error.first_seen if error.first_seen else None,
+                    last_seen=error.last_seen if error.last_seen else None,
+                    status_code=error.status_code if error.HasField("status_code") else None,
+                    path=error.path if error.HasField("path") else None,
+                    stack_trace=error.stack_trace if error.HasField("stack_trace") else None,
                 )
             )
 

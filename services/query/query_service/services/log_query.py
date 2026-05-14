@@ -171,6 +171,7 @@ async def get_error_list(
     period: str | None = None,
     period_from: datetime.datetime | None = None,
     period_to: datetime.datetime | None = None,
+    search: str | None = None,
     pagination: schemas.Pagination = schemas.Pagination(),
 ) -> schemas.ErrorListResponse:
     if period:
@@ -182,53 +183,116 @@ async def get_error_list(
         start_time, end_time = _calculate_time_range_for_period("today")
 
     async with database.get_logs_session() as session:
-        query = (
-            sa.select(
-                models.Log.id.label("log_id"),
-                models.Log.project_id,
-                models.Log.level,
-                models.Log.log_type,
-                models.Log.message,
-                models.Log.error_type,
-                models.Log.timestamp,
-                models.Log.error_fingerprint,
-                models.Log.attributes,
-                models.Log.sdk_version,
-                models.Log.platform,
-            )
-            .where(
-                models.Log.project_id == project_id,
-                models.Log.timestamp >= start_time,
-                models.Log.timestamp <= end_time,
-                models.Log.level.in_(["error", "critical"]),
-            )
-            .order_by(models.Log.timestamp.desc())
+        # Build group_key expression: fingerprint or hash(error_type|message)
+        group_key_col = sa.func.coalesce(
+            models.Log.error_fingerprint,
+            sa.func.md5(
+                sa.func.coalesce(models.Log.error_type, sa.literal(""))
+                + sa.literal("|")
+                + sa.func.coalesce(models.Log.message, sa.literal(""))
+            ),
         )
 
-        count_query = sa.select(sa.func.count()).select_from(query.subquery())
-        total_result = await session.execute(count_query)
-        total = total_result.scalar() or 0
+        base_where_conditions = [
+            models.Log.project_id == project_id,
+            models.Log.timestamp >= start_time,
+            models.Log.timestamp <= end_time,
+            models.Log.level.in_(["error", "critical"]),
+        ]
 
-        query = query.limit(pagination.limit).offset(pagination.offset)
+        if search:
+            term = f"%{search}%"
+            base_where_conditions.append(
+                sa.or_(
+                    models.Log.path.ilike(term),
+                    models.Log.message.ilike(term),
+                )
+            )
 
-        result = await session.execute(query)
+        base_where = sa.and_(*base_where_conditions)
+
+        # Step 1: group aggregation — count, first/last seen, latest id per group
+        groups_subq = (
+            sa.select(
+                group_key_col.label("group_key"),
+                sa.func.count().label("occurrence_count"),
+                sa.func.min(models.Log.timestamp).label("first_seen"),
+                sa.func.max(models.Log.timestamp).label("last_seen"),
+                sa.func.max(models.Log.id).label("latest_log_id"),
+                models.Log.project_id.label("project_id"),
+            )
+            .where(base_where)
+            .group_by(group_key_col, models.Log.project_id)
+            .subquery("groups")
+        )
+
+        # Total distinct groups
+        count_result = await session.execute(sa.select(sa.func.count()).select_from(groups_subq))
+        total = count_result.scalar() or 0
+
+        # Step 2: paginate groups, then join latest row to get sample fields
+        paged_groups = (
+            sa.select(groups_subq)
+            .order_by(groups_subq.c.last_seen.desc())
+            .limit(pagination.limit)
+            .offset(pagination.offset)
+            .subquery("paged_groups")
+        )
+
+        latest_log = models.Log.__table__.alias("latest_log")
+
+        final_query = (
+            sa.select(
+                paged_groups.c.group_key,
+                paged_groups.c.occurrence_count,
+                paged_groups.c.first_seen,
+                paged_groups.c.last_seen,
+                paged_groups.c.latest_log_id,
+                paged_groups.c.project_id,
+                latest_log.c.message,
+                latest_log.c.error_type,
+                latest_log.c.path,
+                latest_log.c.status_code,
+                latest_log.c.level,
+                latest_log.c.log_type,
+                latest_log.c.error_fingerprint,
+                latest_log.c.attributes,
+                latest_log.c.stack_trace,
+                latest_log.c.sdk_version,
+                latest_log.c.platform,
+            )
+            .join(latest_log, latest_log.c.id == paged_groups.c.latest_log_id)
+            .order_by(paged_groups.c.last_seen.desc())
+        )
+
+        result = await session.execute(final_query)
         rows = result.all()
 
         errors = []
         for row in rows:
+            attributes = row.attributes if isinstance(row.attributes, dict) else None
+
             errors.append(
                 schemas.ErrorListEntry(
-                    log_id=row.log_id,
+                    log_id=row.latest_log_id,
                     project_id=row.project_id,
-                    level=row.level,
-                    log_type=row.log_type,
+                    level=row.level or "error",
+                    log_type=row.log_type or "exception",
                     message=row.message or "",
                     error_type=row.error_type,
-                    timestamp=row.timestamp,
+                    timestamp=row.last_seen,
                     error_fingerprint=row.error_fingerprint,
-                    attributes=row.attributes,
+                    attributes=attributes,
                     sdk_version=row.sdk_version,
                     platform=row.platform,
+                    group_key=row.group_key,
+                    occurrence_count=row.occurrence_count,
+                    first_seen=row.first_seen,
+                    last_seen=row.last_seen,
+                    status_code=row.status_code,
+                    path=row.path,
+                    stack_trace=row.stack_trace,
+                    latest_log_id=row.latest_log_id,
                 )
             )
 

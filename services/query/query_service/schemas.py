@@ -191,6 +191,14 @@ class ErrorListEntry(pydantic.BaseModel):
     attributes: dict | None
     sdk_version: str | None
     platform: str | None
+    group_key: str | None = None
+    occurrence_count: int = 1
+    first_seen: datetime.datetime | None = None
+    last_seen: datetime.datetime | None = None
+    status_code: int | None = None
+    path: str | None = None
+    stack_trace: str | None = None
+    latest_log_id: int | None = None
 
     model_config = pydantic.ConfigDict(from_attributes=True)
 
