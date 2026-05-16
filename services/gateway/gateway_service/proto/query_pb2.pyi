@@ -341,23 +341,25 @@ class GetAggregatedMetricsResponse(_message.Message):
     def __init__(self, project_id: _Optional[int] = ..., metric_type: _Optional[str] = ..., granularity: _Optional[str] = ..., start_date: _Optional[str] = ..., end_date: _Optional[str] = ..., data: _Optional[_Iterable[_Union[AggregatedMetricData, _Mapping]]] = ...) -> None: ...
 
 class GetErrorListRequest(_message.Message):
-    __slots__ = ("project_id", "period", "period_from", "period_to", "limit", "offset")
+    __slots__ = ("project_id", "period", "period_from", "period_to", "limit", "offset", "search")
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
     PERIOD_FIELD_NUMBER: _ClassVar[int]
     PERIOD_FROM_FIELD_NUMBER: _ClassVar[int]
     PERIOD_TO_FIELD_NUMBER: _ClassVar[int]
     LIMIT_FIELD_NUMBER: _ClassVar[int]
     OFFSET_FIELD_NUMBER: _ClassVar[int]
+    SEARCH_FIELD_NUMBER: _ClassVar[int]
     project_id: int
     period: str
     period_from: str
     period_to: str
     limit: int
     offset: int
-    def __init__(self, project_id: _Optional[int] = ..., period: _Optional[str] = ..., period_from: _Optional[str] = ..., period_to: _Optional[str] = ..., limit: _Optional[int] = ..., offset: _Optional[int] = ...) -> None: ...
+    search: str
+    def __init__(self, project_id: _Optional[int] = ..., period: _Optional[str] = ..., period_from: _Optional[str] = ..., period_to: _Optional[str] = ..., limit: _Optional[int] = ..., offset: _Optional[int] = ..., search: _Optional[str] = ...) -> None: ...
 
 class ErrorListEntry(_message.Message):
-    __slots__ = ("log_id", "project_id", "level", "log_type", "message", "error_type", "timestamp", "error_fingerprint", "attributes", "sdk_version", "platform")
+    __slots__ = ("log_id", "project_id", "level", "log_type", "message", "error_type", "timestamp", "error_fingerprint", "attributes", "sdk_version", "platform", "group_key", "occurrence_count", "first_seen", "last_seen", "status_code", "path", "stack_trace", "latest_log_id")
     LOG_ID_FIELD_NUMBER: _ClassVar[int]
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
     LEVEL_FIELD_NUMBER: _ClassVar[int]
@@ -369,6 +371,14 @@ class ErrorListEntry(_message.Message):
     ATTRIBUTES_FIELD_NUMBER: _ClassVar[int]
     SDK_VERSION_FIELD_NUMBER: _ClassVar[int]
     PLATFORM_FIELD_NUMBER: _ClassVar[int]
+    GROUP_KEY_FIELD_NUMBER: _ClassVar[int]
+    OCCURRENCE_COUNT_FIELD_NUMBER: _ClassVar[int]
+    FIRST_SEEN_FIELD_NUMBER: _ClassVar[int]
+    LAST_SEEN_FIELD_NUMBER: _ClassVar[int]
+    STATUS_CODE_FIELD_NUMBER: _ClassVar[int]
+    PATH_FIELD_NUMBER: _ClassVar[int]
+    STACK_TRACE_FIELD_NUMBER: _ClassVar[int]
+    LATEST_LOG_ID_FIELD_NUMBER: _ClassVar[int]
     log_id: int
     project_id: int
     level: str
@@ -380,7 +390,15 @@ class ErrorListEntry(_message.Message):
     attributes: str
     sdk_version: str
     platform: str
-    def __init__(self, log_id: _Optional[int] = ..., project_id: _Optional[int] = ..., level: _Optional[str] = ..., log_type: _Optional[str] = ..., message: _Optional[str] = ..., error_type: _Optional[str] = ..., timestamp: _Optional[str] = ..., error_fingerprint: _Optional[str] = ..., attributes: _Optional[str] = ..., sdk_version: _Optional[str] = ..., platform: _Optional[str] = ...) -> None: ...
+    group_key: str
+    occurrence_count: int
+    first_seen: str
+    last_seen: str
+    status_code: int
+    path: str
+    stack_trace: str
+    latest_log_id: int
+    def __init__(self, log_id: _Optional[int] = ..., project_id: _Optional[int] = ..., level: _Optional[str] = ..., log_type: _Optional[str] = ..., message: _Optional[str] = ..., error_type: _Optional[str] = ..., timestamp: _Optional[str] = ..., error_fingerprint: _Optional[str] = ..., attributes: _Optional[str] = ..., sdk_version: _Optional[str] = ..., platform: _Optional[str] = ..., group_key: _Optional[str] = ..., occurrence_count: _Optional[int] = ..., first_seen: _Optional[str] = ..., last_seen: _Optional[str] = ..., status_code: _Optional[int] = ..., path: _Optional[str] = ..., stack_trace: _Optional[str] = ..., latest_log_id: _Optional[int] = ...) -> None: ...
 
 class GetErrorListResponse(_message.Message):
     __slots__ = ("project_id", "errors", "total", "has_more")
@@ -439,6 +457,68 @@ class GetBottleneckMetricsResponse(_message.Message):
     end_date: str
     data: _containers.RepeatedCompositeFieldContainer[BottleneckMetricDataPoint]
     def __init__(self, project_id: _Optional[int] = ..., statistic: _Optional[str] = ..., granularity: _Optional[str] = ..., start_date: _Optional[str] = ..., end_date: _Optional[str] = ..., data: _Optional[_Iterable[_Union[BottleneckMetricDataPoint, _Mapping]]] = ...) -> None: ...
+
+class GetBottleneckListRequest(_message.Message):
+    __slots__ = ("project_id", "statistic", "sort", "period", "period_from", "period_to", "limit", "offset", "search")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    STATISTIC_FIELD_NUMBER: _ClassVar[int]
+    SORT_FIELD_NUMBER: _ClassVar[int]
+    PERIOD_FIELD_NUMBER: _ClassVar[int]
+    PERIOD_FROM_FIELD_NUMBER: _ClassVar[int]
+    PERIOD_TO_FIELD_NUMBER: _ClassVar[int]
+    LIMIT_FIELD_NUMBER: _ClassVar[int]
+    OFFSET_FIELD_NUMBER: _ClassVar[int]
+    SEARCH_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    statistic: str
+    sort: str
+    period: str
+    period_from: str
+    period_to: str
+    limit: int
+    offset: int
+    search: str
+    def __init__(self, project_id: _Optional[int] = ..., statistic: _Optional[str] = ..., sort: _Optional[str] = ..., period: _Optional[str] = ..., period_from: _Optional[str] = ..., period_to: _Optional[str] = ..., limit: _Optional[int] = ..., offset: _Optional[int] = ..., search: _Optional[str] = ...) -> None: ...
+
+class BottleneckListEntry(_message.Message):
+    __slots__ = ("route", "value", "request_count", "min_value", "max_value", "avg_value", "median_value")
+    ROUTE_FIELD_NUMBER: _ClassVar[int]
+    VALUE_FIELD_NUMBER: _ClassVar[int]
+    REQUEST_COUNT_FIELD_NUMBER: _ClassVar[int]
+    MIN_VALUE_FIELD_NUMBER: _ClassVar[int]
+    MAX_VALUE_FIELD_NUMBER: _ClassVar[int]
+    AVG_VALUE_FIELD_NUMBER: _ClassVar[int]
+    MEDIAN_VALUE_FIELD_NUMBER: _ClassVar[int]
+    route: str
+    value: float
+    request_count: int
+    min_value: float
+    max_value: float
+    avg_value: float
+    median_value: float
+    def __init__(self, route: _Optional[str] = ..., value: _Optional[float] = ..., request_count: _Optional[int] = ..., min_value: _Optional[float] = ..., max_value: _Optional[float] = ..., avg_value: _Optional[float] = ..., median_value: _Optional[float] = ...) -> None: ...
+
+class GetBottleneckListResponse(_message.Message):
+    __slots__ = ("project_id", "statistic", "sort", "start_date", "end_date", "max_value", "entries", "total", "has_more")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    STATISTIC_FIELD_NUMBER: _ClassVar[int]
+    SORT_FIELD_NUMBER: _ClassVar[int]
+    START_DATE_FIELD_NUMBER: _ClassVar[int]
+    END_DATE_FIELD_NUMBER: _ClassVar[int]
+    MAX_VALUE_FIELD_NUMBER: _ClassVar[int]
+    ENTRIES_FIELD_NUMBER: _ClassVar[int]
+    TOTAL_FIELD_NUMBER: _ClassVar[int]
+    HAS_MORE_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    statistic: str
+    sort: str
+    start_date: str
+    end_date: str
+    max_value: float
+    entries: _containers.RepeatedCompositeFieldContainer[BottleneckListEntry]
+    total: int
+    has_more: bool
+    def __init__(self, project_id: _Optional[int] = ..., statistic: _Optional[str] = ..., sort: _Optional[str] = ..., start_date: _Optional[str] = ..., end_date: _Optional[str] = ..., max_value: _Optional[float] = ..., entries: _Optional[_Iterable[_Union[BottleneckListEntry, _Mapping]]] = ..., total: _Optional[int] = ..., has_more: bool = ...) -> None: ...
 
 class GetHealthSummaryRequest(_message.Message):
     __slots__ = ("project_ids", "period")

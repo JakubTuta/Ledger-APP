@@ -8,48 +8,6 @@ import query_service.models as models
 import query_service.schemas as schemas
 
 
-def _generate_time_buckets(
-    start_date: datetime.date,
-    end_date: datetime.date,
-    granularity: Literal["hourly", "daily", "weekly", "monthly"],
-) -> list[tuple[str, int | None]]:
-    """
-    Generate all expected time buckets for a date range and granularity.
-
-    Returns list of tuples: (date_str, hour) where hour is None except for hourly granularity.
-    Date format: YYYYMMDD
-    """
-    buckets = []
-
-    if granularity == "hourly":
-        date_str = start_date.strftime("%Y%m%d")
-        for hour in range(24):
-            buckets.append((date_str, hour))
-
-    elif granularity == "daily":
-        current = start_date
-        while current <= end_date:
-            buckets.append((current.strftime("%Y%m%d"), None))
-            current += datetime.timedelta(days=1)
-
-    elif granularity == "weekly":
-        current = start_date
-        while current <= end_date:
-            buckets.append((current.strftime("%Y%m%d"), None))
-            current += datetime.timedelta(weeks=1)
-
-    elif granularity == "monthly":
-        current = start_date
-        while current <= end_date:
-            buckets.append((current.strftime("%Y%m%d"), None))
-            if current.month == 12:
-                current = current.replace(year=current.year + 1, month=1)
-            else:
-                current = current.replace(month=current.month + 1)
-
-    return buckets
-
-
 def _parse_period(
     period: str | None,
     period_from: datetime.date | None,
@@ -87,154 +45,101 @@ def _parse_period(
         )
 
 
-async def get_bottleneck_metrics(
+async def get_bottleneck_list(
     project_id: int,
-    routes: list[str],
-    statistic: Literal["min", "max", "avg", "median", "count"],
+    statistic: Literal["min", "max", "avg", "median"],
+    sort: Literal["asc", "desc"],
     period: str | None = None,
     period_from: datetime.date | None = None,
     period_to: datetime.date | None = None,
-    granularity: Literal["hourly", "daily", "weekly", "monthly"] = "daily",
-) -> list[schemas.BottleneckMetricDataPoint]:
-    if not routes:
-        raise ValueError("At least one route must be provided")
-
+    limit: int = 25,
+    offset: int = 0,
+    search: str | None = None,
+) -> schemas.BottleneckListResponse:
     start_date, end_date = _parse_period(period, period_from, period_to)
+    start_date_str = start_date.strftime("%Y%m%d")
+    end_date_str = end_date.strftime("%Y%m%d")
 
-    statistic_column_map = {
-        "min": "min_duration_ms",
-        "max": "max_duration_ms",
-        "avg": "avg_duration_ms",
-        "median": "median_duration_ms",
-        "count": "log_count",
+    m = models.BottleneckMetric
+
+    weighted_avg = (
+        sa.func.sum(m.avg_duration_ms * m.log_count)
+        / sa.func.nullif(sa.func.sum(m.log_count), 0)
+    )
+
+    stat_expr_map = {
+        "min": sa.func.min(sa.func.nullif(m.min_duration_ms, 0)),
+        "max": sa.func.max(m.max_duration_ms),
+        "avg": weighted_avg,
+        "median": sa.func.avg(sa.func.nullif(m.median_duration_ms, 0)),
     }
 
-    column_name = statistic_column_map[statistic]
+    stat_expr = stat_expr_map[statistic]
+
+    base_where = [
+        m.project_id == project_id,
+        m.date >= start_date_str,
+        m.date <= end_date_str,
+    ]
+    if search:
+        base_where.append(m.route.ilike(f"%{search}%"))
 
     async with database.get_logs_session() as session:
-        start_date_str = start_date.strftime("%Y%m%d")
-        end_date_str = end_date.strftime("%Y%m%d")
-
-        if granularity == "hourly":
-            query = (
-                sa.select(
-                    models.BottleneckMetric.date,
-                    models.BottleneckMetric.hour,
-                    models.BottleneckMetric.route,
-                    getattr(models.BottleneckMetric, column_name).label("value"),
-                )
-                .where(
-                    models.BottleneckMetric.project_id == project_id,
-                    models.BottleneckMetric.date == start_date_str,
-                    models.BottleneckMetric.route.in_(routes),
-                )
-                .order_by(
-                    models.BottleneckMetric.hour, models.BottleneckMetric.route
-                )
+        agg_subq = (
+            sa.select(
+                m.route.label("route"),
+                sa.func.sum(m.log_count).label("request_count"),
+                sa.func.min(sa.func.nullif(m.min_duration_ms, 0)).label("min_value"),
+                sa.func.max(m.max_duration_ms).label("max_value"),
+                weighted_avg.label("avg_value"),
+                sa.func.avg(sa.func.nullif(m.median_duration_ms, 0)).label("median_value"),
+                stat_expr.label("stat_value"),
             )
+            .where(*base_where)
+            .group_by(m.route)
+            .having(sa.func.sum(m.log_count) > 0)
+            .subquery("agg")
+        )
 
-            result = await session.execute(query)
-            rows = result.fetchall()
+        count_result = await session.execute(
+            sa.select(sa.func.count()).select_from(agg_subq)
+        )
+        total = count_result.scalar() or 0
 
-            metrics_map = {(row.date, row.hour, row.route): row for row in rows}
+        max_result = await session.execute(
+            sa.select(sa.func.max(agg_subq.c.stat_value))
+        )
+        max_value = float(max_result.scalar() or 0)
 
-            all_buckets = _generate_time_buckets(start_date, end_date, granularity)
+        order_col = agg_subq.c.stat_value
+        order_expr = order_col.asc().nulls_last() if sort == "asc" else order_col.desc().nulls_last()
 
-            filled_data = []
-            for date_str, hour in all_buckets:
-                for route in routes:
-                    if (date_str, hour, route) in metrics_map:
-                        row = metrics_map[(date_str, hour, route)]
-                        filled_data.append(
-                            schemas.BottleneckMetricDataPoint(
-                                date=row.date,
-                                hour=row.hour,
-                                route=row.route,
-                                value=row.value if row.value is not None else 0,
-                            )
-                        )
-                    else:
-                        filled_data.append(
-                            schemas.BottleneckMetricDataPoint(
-                                date=date_str,
-                                hour=hour,
-                                route=route,
-                                value=0,
-                            )
-                        )
+        rows_result = await session.execute(
+            sa.select(agg_subq).order_by(order_expr).limit(limit).offset(offset)
+        )
+        rows = rows_result.all()
 
-            return filled_data
+    entries = [
+        schemas.BottleneckListEntry(
+            route=row.route,
+            value=float(row.stat_value) if row.stat_value is not None else 0.0,
+            request_count=int(row.request_count),
+            min_value=float(row.min_value) if row.min_value is not None else None,
+            max_value=float(row.max_value) if row.max_value is not None else None,
+            avg_value=float(row.avg_value) if row.avg_value is not None else None,
+            median_value=float(row.median_value) if row.median_value is not None else None,
+        )
+        for row in rows
+    ]
 
-        else:
-            if statistic == "count":
-                aggregation_expr = sa.func.sum(
-                    getattr(models.BottleneckMetric, column_name)
-                )
-            elif statistic == "avg":
-                aggregation_expr = sa.func.avg(
-                    getattr(models.BottleneckMetric, column_name)
-                )
-            elif statistic == "min":
-                aggregation_expr = sa.func.min(
-                    getattr(models.BottleneckMetric, column_name)
-                )
-            elif statistic == "max":
-                aggregation_expr = sa.func.max(
-                    getattr(models.BottleneckMetric, column_name)
-                )
-            elif statistic == "median":
-                aggregation_expr = sa.func.avg(
-                    getattr(models.BottleneckMetric, column_name)
-                )
-            else:
-                aggregation_expr = sa.func.avg(
-                    getattr(models.BottleneckMetric, column_name)
-                )
-
-            query = (
-                sa.select(
-                    models.BottleneckMetric.date,
-                    models.BottleneckMetric.route,
-                    aggregation_expr.label("value"),
-                )
-                .where(
-                    models.BottleneckMetric.project_id == project_id,
-                    models.BottleneckMetric.date >= start_date_str,
-                    models.BottleneckMetric.date <= end_date_str,
-                    models.BottleneckMetric.route.in_(routes),
-                )
-                .group_by(models.BottleneckMetric.date, models.BottleneckMetric.route)
-                .order_by(models.BottleneckMetric.date, models.BottleneckMetric.route)
-            )
-
-            result = await session.execute(query)
-            rows = result.fetchall()
-
-            metrics_map = {(row.date, row.route): row for row in rows}
-
-            all_buckets = _generate_time_buckets(start_date, end_date, granularity)
-
-            filled_data = []
-            for date_str, _ in all_buckets:
-                for route in routes:
-                    if (date_str, route) in metrics_map:
-                        row = metrics_map[(date_str, route)]
-                        filled_data.append(
-                            schemas.BottleneckMetricDataPoint(
-                                date=row.date,
-                                hour=None,
-                                route=row.route,
-                                value=row.value if row.value is not None else 0,
-                            )
-                        )
-                    else:
-                        filled_data.append(
-                            schemas.BottleneckMetricDataPoint(
-                                date=date_str,
-                                hour=None,
-                                route=route,
-                                value=0,
-                            )
-                        )
-
-            return filled_data
+    return schemas.BottleneckListResponse(
+        project_id=project_id,
+        statistic=statistic,
+        sort=sort,
+        start_date=start_date_str,
+        end_date=end_date_str,
+        max_value=max_value,
+        entries=entries,
+        total=total,
+        has_more=(offset + len(entries)) < total,
+    )

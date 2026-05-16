@@ -1118,229 +1118,23 @@ async def get_error_list(
 
 
 @router.get(
-    "/metrics/bottleneck",
+    "/metrics/bottleneck/list",
     status_code=200,
-    summary="Get route performance bottleneck metrics",
-    description=(
-        "Retrieve performance metrics for specific API routes to identify bottlenecks. "
-        "Returns time-series data for a selected statistic (min/max/avg/median duration or request count) "
-        "across multiple routes. Data is formatted for easy visualization in charts with routes as separate series."
-    ),
-    response_description="Route performance metrics formatted for graph display",
-    response_model=schemas.BottleneckMetricsResponse,
-    responses={
-        400: {
-            "description": "Invalid parameters",
-            "content": {
-                "application/json": {
-                    "examples": {
-                        "missing_period": {
-                            "summary": "Missing period parameters",
-                            "value": {
-                                "detail": "Either 'period' or both 'periodFrom' and 'periodTo' must be provided"
-                            },
-                        },
-                        "missing_routes": {
-                            "summary": "No routes provided",
-                            "value": {"detail": "At least one route must be provided"},
-                        },
-                        "invalid_statistic": {
-                            "summary": "Invalid statistic",
-                            "value": {
-                                "detail": "statistic must be one of: min, max, avg, median, count"
-                            },
-                        },
-                    }
-                }
-            },
-        },
-        500: {
-            "description": "Server error",
-            "content": {
-                "application/json": {
-                    "example": {"detail": "Failed to retrieve bottleneck metrics"}
-                }
-            },
-        },
-    },
+    summary="Get bottleneck endpoints as a ranked list",
+    response_model=schemas.BottleneckListResponse,
 )
-async def get_bottleneck_metrics(
+async def get_bottleneck_list(
     request: fastapi.Request,
-    project_id: int = fastapi.Query(
-        ...,
-        description="The project ID to retrieve metrics for",
-        gt=0,
-    ),
-    routes: list[str] = fastapi.Query(
-        ...,
-        description=(
-            "List of route paths to analyze (e.g., /api/users, /api/posts). "
-            "Multiple routes can be specified for comparison. "
-            "Each route will be a separate series in the response data."
-        ),
-        min_length=1,
-    ),
-    statistic: typing.Literal["min", "max", "avg", "median", "count"] = fastapi.Query(
-        ...,
-        description=(
-            "Which statistic to retrieve:\n"
-            "- **min**: Minimum response time (ms) - fastest request\n"
-            "- **max**: Maximum response time (ms) - slowest request\n"
-            "- **avg**: Average response time (ms) - mean latency\n"
-            "- **median**: Median response time (ms) - p50 percentile\n"
-            "- **count**: Number of requests - traffic volume"
-        ),
-    ),
-    period: typing.Optional[
-        typing.Literal[
-            "today",
-            "last7days",
-            "last30days",
-            "currentWeek",
-            "currentMonth",
-            "currentYear",
-        ]
-    ] = fastapi.Query(
-        None,
-        description="Predefined time period. Mutually exclusive with periodFrom/periodTo.",
-    ),
-    periodFrom: typing.Optional[str] = fastapi.Query(
-        None,
-        description="Start date in ISO 8601 format (YYYY-MM-DD). Must be used with periodTo.",
-        pattern=r"^\d{4}-\d{2}-\d{2}$",
-    ),
-    periodTo: typing.Optional[str] = fastapi.Query(
-        None,
-        description="End date in ISO 8601 format (YYYY-MM-DD). Must be used with periodFrom.",
-        pattern=r"^\d{4}-\d{2}-\d{2}$",
-    ),
-) -> schemas.BottleneckMetricsResponse:
-    """
-    Retrieve route performance metrics to identify bottlenecks.
-
-    This endpoint returns time-series performance data for specified API routes,
-    helping you identify slow endpoints and optimize your application. The response
-    format is optimized for charting libraries, with each route as a separate series.
-
-    ## Query Parameters
-
-    ### Required
-    - **project_id** (integer): The project ID to retrieve metrics for
-    - **routes** (array of strings): List of route paths to analyze (e.g., ["/api/users", "/api/posts"])
-      - At least one route must be provided
-      - Multiple routes enable side-by-side performance comparison
-      - Each route becomes a separate series in the chart
-    - **statistic** (string): Which metric to retrieve
-      - `min`: Fastest request (minimum duration in ms)
-      - `max`: Slowest request (maximum duration in ms)
-      - `avg`: Average request duration (mean in ms)
-      - `median`: Median request duration (p50 in ms)
-      - `count`: Number of requests (traffic volume)
-
-    - **Period selection** (one required):
-      - **period** (string): Predefined time period
-        - `today`: Current day (returns hourly data)
-        - `last7days`: Last 7 days (returns daily data)
-        - `last30days`: Last 30 days (returns daily data)
-        - `currentWeek`: From Monday to today (returns daily data)
-        - `currentMonth`: From 1st of month to today (returns daily data)
-        - `currentYear`: From January 1st to today (returns daily data)
-      - **OR**
-      - **periodFrom** + **periodTo** (string): Custom date range in ISO 8601 format (YYYY-MM-DD)
-
-    ## Response Structure
-
-    The response includes a `granularity` field indicating the time bucket size:
-    - `"hourly"`: Data grouped by hour (only for single-day queries like "today")
-    - `"daily"`: Data grouped by day (for multi-day queries)
-
-    ## Data Format (Optimized for Charting)
-
-    The `data` array contains time-series data points structured for easy graph visualization:
-
-    **Format:** Each route has one data point per time bucket (hour or day)
-
-    **Example for 2 routes over 3 hours:**
-    ```json
-    {
-      "data": [
-        {"date": "20251206", "hour": 14, "route": "/api/users", "value": 45.2},
-        {"date": "20251206", "hour": 15, "route": "/api/users", "value": 52.1},
-        {"date": "20251206", "hour": 16, "route": "/api/users", "value": 48.7},
-        {"date": "20251206", "hour": 14, "route": "/api/posts", "value": 120.5},
-        {"date": "20251206", "hour": 15, "route": "/api/posts", "value": 115.3},
-        {"date": "20251206", "hour": 16, "route": "/api/posts", "value": 118.9}
-      ]
-    }
-    ```
-
-    ### Charting Recommendations
-
-    **For Chart.js, Recharts, or similar libraries:**
-
-    1. **X-Axis**: `date` (and optionally `hour` for hourly granularity)
-    2. **Y-Axis**: `value` (duration in ms or request count)
-    3. **Series**: Group data by `route`
-
-    **Example transformation for Chart.js:**
-    ```javascript
-    // Group data by route
-    const seriesByRoute = data.reduce((acc, point) => {
-      if (!acc[point.route]) acc[point.route] = [];
-      acc[point.route].push({x: `${point.date}_${point.hour}`, y: point.value});
-      return acc;
-    }, {});
-
-    // Convert to Chart.js datasets
-    const datasets = Object.entries(seriesByRoute).map(([route, points]) => ({
-      label: route,
-      data: points
-    }));
-    ```
-
-    ## Use Cases
-
-    - **Identify slow endpoints**: Find routes with high avg/max/median response times
-    - **Track performance over time**: Monitor route latency trends hourly or daily
-    - **Compare routes**: Side-by-side performance analysis of multiple endpoints
-    - **Capacity planning**: Use `count` statistic to track traffic patterns
-    - **Optimization verification**: Measure performance improvements after code changes
-    - **SLA monitoring**: Track median (p50) response times against targets
-
-    ## Example Requests
-
-    ### Today's hourly avg response time for 2 routes
-    ```
-    GET /api/v1/metrics/bottleneck?project_id=1&routes=/api/users&routes=/api/posts&statistic=avg&period=today
-    Returns: Hourly granularity with avg_duration_ms for each route
-    ```
-
-    ### Last 7 days median response time comparison
-    ```
-    GET /api/v1/metrics/bottleneck?project_id=1&routes=/api/checkout&routes=/api/payment&statistic=median&period=last7days
-    Returns: Daily granularity with median_duration_ms for 2 routes
-    ```
-
-    ### Custom date range with request counts
-    ```
-    GET /api/v1/metrics/bottleneck?project_id=1&routes=/api/search&statistic=count&periodFrom=2025-11-01&periodTo=2025-11-30
-    Returns: Daily granularity with log_count (number of requests) for 1 route
-    ```
-
-    ### Maximum response time for critical endpoints
-    ```
-    GET /api/v1/metrics/bottleneck?project_id=1&routes=/api/orders&routes=/api/inventory&routes=/api/shipping&statistic=max&period=currentMonth
-    Returns: Daily granularity with max_duration_ms for 3 routes
-    ```
-
-    ## Notes
-
-    - **Zero-filling**: If a route had no traffic during a time bucket, `value` is 0
-    - **Missing routes**: If project had NO activity in an hour, NO data points are returned for that hour
-    - **Data availability**: Metrics are aggregated every hour at :30 (1:30, 2:30, etc.) by analytics workers
-
-    Requires session token authentication via `Authorization: Bearer <token>` header.
-    """
+    project_id: int = fastapi.Query(..., gt=0),
+    statistic: typing.Literal["min", "max", "avg", "median"] = fastapi.Query("avg"),
+    sort: typing.Literal["asc", "desc"] = fastapi.Query("desc"),
+    period: typing.Optional[str] = fastapi.Query(None),
+    periodFrom: typing.Optional[str] = fastapi.Query(None),
+    periodTo: typing.Optional[str] = fastapi.Query(None),
+    limit: int = fastapi.Query(25, ge=1, le=100),
+    offset: int = fastapi.Query(0, ge=0),
+    search: typing.Optional[str] = fastapi.Query(None, max_length=200),
+) -> schemas.BottleneckListResponse:
     grpc_pool = request.app.state.grpc_pool
 
     if not period and not (periodFrom and periodTo):
@@ -1349,124 +1143,89 @@ async def get_bottleneck_metrics(
             detail="Either 'period' or both 'periodFrom' and 'periodTo' must be provided",
         )
 
-    if period and (periodFrom or periodTo):
-        raise fastapi.HTTPException(
-            status_code=400,
-            detail="Cannot use both 'period' and 'periodFrom'/'periodTo' parameters",
-        )
-
-    if not routes:
-        raise fastapi.HTTPException(
-            status_code=400,
-            detail="At least one route must be provided",
-        )
-
-    period_from_date = None
-    period_to_date = None
-
+    period_from_str = ""
+    period_to_str = ""
     if periodFrom:
         try:
-            period_from_date = datetime.date.fromisoformat(periodFrom)
-            today = datetime.date.today()
-            if period_from_date > today:
-                raise fastapi.HTTPException(
-                    status_code=400, detail="periodFrom cannot be in the future"
-                )
+            pf = datetime.date.fromisoformat(periodFrom)
+            period_from_str = pf.isoformat()
         except ValueError:
             raise fastapi.HTTPException(
-                status_code=400,
-                detail="periodFrom must be in ISO 8601 format (YYYY-MM-DD)",
+                status_code=400, detail="periodFrom must be in ISO 8601 format (YYYY-MM-DD)"
             )
-
     if periodTo:
         try:
-            period_to_date = datetime.date.fromisoformat(periodTo)
-            today = datetime.date.today()
-            if period_to_date > today:
-                raise fastapi.HTTPException(
-                    status_code=400, detail="periodTo cannot be in the future"
-                )
+            pt = datetime.date.fromisoformat(periodTo)
+            period_to_str = pt.isoformat()
         except ValueError:
             raise fastapi.HTTPException(
-                status_code=400,
-                detail="periodTo must be in ISO 8601 format (YYYY-MM-DD)",
+                status_code=400, detail="periodTo must be in ISO 8601 format (YYYY-MM-DD)"
             )
 
-    if period_from_date and period_to_date and period_from_date > period_to_date:
-        raise fastapi.HTTPException(
-            status_code=400, detail="periodFrom must be before or equal to periodTo"
-        )
-
-    granularity: typing.Literal["hourly", "daily", "weekly", "monthly"]
-    if period:
-        granularity = _calculate_granularity_for_period(period)
-    elif period_from_date and period_to_date:
-        granularity = _calculate_granularity_for_date_range(
-            period_from_date, period_to_date
-        )
-    else:
-        granularity = "daily"
-
     try:
+        req_kwargs: dict = dict(
+            project_id=project_id,
+            statistic=statistic,
+            sort=sort,
+            limit=limit,
+            offset=offset,
+        )
+        if period:
+            req_kwargs["period"] = period
+        if period_from_str:
+            req_kwargs["period_from"] = period_from_str
+        if period_to_str:
+            req_kwargs["period_to"] = period_to_str
+        if search:
+            req_kwargs["search"] = search
+
         async with grpc_pool.get_query_stub() as stub:
-            response = await stub.GetBottleneckMetrics(
-                query_pb2.GetBottleneckMetricsRequest(
-                    project_id=project_id,
-                    routes=routes,
-                    statistic=statistic,
-                    period=period if period else "",
-                    period_from=(
-                        period_from_date.isoformat() if period_from_date else ""
-                    ),
-                    period_to=period_to_date.isoformat() if period_to_date else "",
-                    granularity=granularity,
-                ),
+            response = await stub.GetBottleneckList(
+                query_pb2.GetBottleneckListRequest(**req_kwargs),
                 timeout=10.0,
             )
 
-        data = [
-            schemas.BottleneckMetricDataPointResponse(
-                date=item.date,
-                hour=item.hour if item.hour > 0 else None,
-                route=item.route,
-                value=item.value,
+        entries = []
+        for e in response.entries:
+            entry_kwargs: dict = dict(
+                route=e.route,
+                value=e.value,
+                request_count=e.request_count,
             )
-            for item in response.data
-        ]
+            if e.HasField("min_value"):
+                entry_kwargs["min_value"] = e.min_value
+            if e.HasField("max_value"):
+                entry_kwargs["max_value"] = e.max_value
+            if e.HasField("avg_value"):
+                entry_kwargs["avg_value"] = e.avg_value
+            if e.HasField("median_value"):
+                entry_kwargs["median_value"] = e.median_value
+            entries.append(schemas.BottleneckListEntryResponse(**entry_kwargs))
 
-        return schemas.BottleneckMetricsResponse(
+        return schemas.BottleneckListResponse(
             project_id=response.project_id,
             statistic=response.statistic,
-            granularity=response.granularity,
+            sort=response.sort,
             start_date=response.start_date,
             end_date=response.end_date,
-            data=data,
+            max_value=response.max_value,
+            entries=entries,
+            total=response.total,
+            has_more=response.has_more,
         )
 
     except grpc.RpcError as e:
         if e.code() == grpc.StatusCode.INVALID_ARGUMENT:
-            raise fastapi.HTTPException(
-                status_code=400,
-                detail=e.details(),
-            )
-        else:
-            logger.error(
-                f"gRPC error retrieving bottleneck metrics: {e.code()} - {e.details()}"
-            )
-            raise fastapi.HTTPException(
-                status_code=500,
-                detail="Failed to retrieve bottleneck metrics",
-            )
+            raise fastapi.HTTPException(status_code=400, detail=e.details())
+        logger.error(f"gRPC error retrieving bottleneck list: {e.code()} - {e.details()}")
+        raise fastapi.HTTPException(status_code=500, detail="Failed to retrieve bottleneck list")
 
     except fastapi.HTTPException:
         raise
 
     except Exception as e:
-        logger.error(f"Failed to retrieve bottleneck metrics: {e}", exc_info=True)
-        raise fastapi.HTTPException(
-            status_code=500,
-            detail="Failed to retrieve bottleneck metrics",
-        )
+        logger.error(f"Failed to retrieve bottleneck list: {e}", exc_info=True)
+        raise fastapi.HTTPException(status_code=500, detail="Failed to retrieve bottleneck list")
 
 
 def _proto_to_pydantic_log(proto_log: query_pb2.LogEntry) -> schemas.LogEntryResponse:

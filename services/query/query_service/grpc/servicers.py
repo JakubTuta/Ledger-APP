@@ -507,64 +507,77 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
         request: query_pb2.GetBottleneckMetricsRequest,
         context: grpc.aio.ServicerContext,
     ) -> query_pb2.GetBottleneckMetricsResponse:
+        await context.abort(
+            grpc.StatusCode.UNIMPLEMENTED,
+            "Bottleneck chart metrics removed; use GetBottleneckList",
+        )
+
+    async def GetBottleneckList(
+        self,
+        request: query_pb2.GetBottleneckListRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> query_pb2.GetBottleneckListResponse:
         try:
-            period_from = None
-            period_to = None
-
-            if request.period_from:
-                period_from = datetime.date.fromisoformat(request.period_from)
-            if request.period_to:
-                period_to = datetime.date.fromisoformat(request.period_to)
-
-            granularity = request.granularity if request.granularity else "daily"
-
-            routes = list(request.routes)
-            if not routes:
-                await context.abort(
-                    grpc.StatusCode.INVALID_ARGUMENT,
-                    "At least one route must be provided",
-                )
-
-            valid_statistics = ["min", "max", "avg", "median", "count"]
+            valid_statistics = ["min", "max", "avg", "median"]
             if request.statistic not in valid_statistics:
                 await context.abort(
                     grpc.StatusCode.INVALID_ARGUMENT,
                     f"Invalid statistic. Must be one of: {', '.join(valid_statistics)}",
                 )
 
-            result = await bottleneck_metrics_service.get_bottleneck_metrics(
-                project_id=request.project_id,
-                routes=routes,
-                statistic=request.statistic,
-                period=request.period if request.period else None,
-                period_from=period_from,
-                period_to=period_to,
-                granularity=granularity,
-            )
-
-            start_date, end_date = bottleneck_metrics_service._parse_period(
-                period=request.period if request.period else None,
-                period_from=period_from,
-                period_to=period_to,
-            )
-
-            data_entries = [
-                query_pb2.BottleneckMetricDataPoint(
-                    date=item.date,
-                    hour=item.hour if item.hour is not None else 0,
-                    route=item.route,
-                    value=float(item.value),
+            valid_sorts = ["asc", "desc"]
+            if request.sort not in valid_sorts:
+                await context.abort(
+                    grpc.StatusCode.INVALID_ARGUMENT,
+                    f"Invalid sort. Must be one of: {', '.join(valid_sorts)}",
                 )
-                for item in result
-            ]
 
-            return query_pb2.GetBottleneckMetricsResponse(
+            period_from = None
+            period_to = None
+            if request.HasField("period_from"):
+                period_from = datetime.date.fromisoformat(request.period_from)
+            if request.HasField("period_to"):
+                period_to = datetime.date.fromisoformat(request.period_to)
+
+            result = await bottleneck_metrics_service.get_bottleneck_list(
                 project_id=request.project_id,
                 statistic=request.statistic,
-                granularity=granularity,
-                start_date=start_date.strftime("%Y%m%d"),
-                end_date=end_date.strftime("%Y%m%d"),
-                data=data_entries,
+                sort=request.sort,
+                period=request.period if request.HasField("period") else None,
+                period_from=period_from,
+                period_to=period_to,
+                limit=request.limit if request.limit > 0 else 25,
+                offset=request.offset,
+                search=request.search if request.HasField("search") else None,
+            )
+
+            entries = []
+            for e in result.entries:
+                entry_kwargs = dict(
+                    route=e.route,
+                    value=e.value,
+                    request_count=e.request_count,
+                )
+                if e.min_value is not None:
+                    entry_kwargs["min_value"] = e.min_value
+                if e.max_value is not None:
+                    entry_kwargs["max_value"] = e.max_value
+                if e.avg_value is not None:
+                    entry_kwargs["avg_value"] = e.avg_value
+                if e.median_value is not None:
+                    entry_kwargs["median_value"] = e.median_value
+                entries.append(query_pb2.BottleneckListEntry(**entry_kwargs))
+
+            return query_pb2.GetBottleneckListResponse(
+                project_id=result.project_id,
+                statistic=result.statistic,
+                sort=result.sort,
+                start_date=result.start_date,
+                end_date=result.end_date,
+                max_value=result.max_value,
+                entries=entries,
+                total=result.total,
+                has_more=result.has_more,
             )
 
         except ValueError as e:
@@ -572,7 +585,7 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
 
         except Exception as e:
             await context.abort(
-                grpc.StatusCode.INTERNAL, f"Get bottleneck metrics failed: {str(e)}"
+                grpc.StatusCode.INTERNAL, f"Get bottleneck list failed: {str(e)}"
             )
 
     async def GetHealthSummary(

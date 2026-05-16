@@ -31,7 +31,17 @@ def get_engine() -> AsyncEngine:
             pool_size=config.settings.DB_POOL_SIZE,
             max_overflow=config.settings.DB_MAX_OVERFLOW,
             pool_pre_ping=True,
-            pool_recycle=3600,
+            pool_recycle=300,
+            pool_use_lifo=True,
+            pool_timeout=30,
+            connect_args={
+                "server_settings": {
+                    "application_name": "auth_service",
+                    "tcp_keepalives_idle": "60",
+                    "tcp_keepalives_interval": "10",
+                    "tcp_keepalives_count": "5",
+                },
+            },
             echo=config.settings.DEBUG,
         )
     return _engine

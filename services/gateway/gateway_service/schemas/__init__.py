@@ -46,8 +46,8 @@ from gateway_service.schemas.projects import (
 from gateway_service.schemas.query import (
     AggregatedMetricDataResponse,
     AggregatedMetricsResponse,
-    BottleneckMetricDataPointResponse,
-    BottleneckMetricsResponse,
+    BottleneckListEntryResponse,
+    BottleneckListResponse,
     ErrorListEntryResponse,
     ErrorListResponse,
     LogEntryResponse,
@@ -133,6 +133,6 @@ __all__ = [
     "ErrorListEntryResponse",
     "ErrorListResponse",
     "LogsListResponse",
-    "BottleneckMetricDataPointResponse",
-    "BottleneckMetricsResponse",
+    "BottleneckListEntryResponse",
+    "BottleneckListResponse",
 ]

@@ -217,19 +217,25 @@ class ErrorListResponse(pydantic.BaseModel):
     has_more: bool
 
 
-class BottleneckMetricDataPoint(pydantic.BaseModel):
-    date: str
-    hour: int | None = None
+class BottleneckListEntry(pydantic.BaseModel):
     route: str
-    value: float | int
+    value: float
+    request_count: int
+    min_value: float | None = None
+    max_value: float | None = None
+    avg_value: float | None = None
+    median_value: float | None = None
 
     model_config = pydantic.ConfigDict(from_attributes=True)
 
 
-class BottleneckMetricsResponse(pydantic.BaseModel):
+class BottleneckListResponse(pydantic.BaseModel):
     project_id: int
-    statistic: typing.Literal["min", "max", "avg", "median", "count"]
-    granularity: typing.Literal["hourly", "daily", "weekly", "monthly"]
+    statistic: typing.Literal["min", "max", "avg", "median"]
+    sort: typing.Literal["asc", "desc"]
     start_date: str
     end_date: str
-    data: list[BottleneckMetricDataPoint]
+    max_value: float
+    entries: list[BottleneckListEntry]
+    total: int
+    has_more: bool

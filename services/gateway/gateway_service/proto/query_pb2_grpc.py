@@ -84,6 +84,11 @@ class QueryServiceStub(object):
                 request_serializer=query__pb2.GetBottleneckMetricsRequest.SerializeToString,
                 response_deserializer=query__pb2.GetBottleneckMetricsResponse.FromString,
                 _registered_method=True)
+        self.GetBottleneckList = channel.unary_unary(
+                '/query.QueryService/GetBottleneckList',
+                request_serializer=query__pb2.GetBottleneckListRequest.SerializeToString,
+                response_deserializer=query__pb2.GetBottleneckListResponse.FromString,
+                _registered_method=True)
         self.GetHealthSummary = channel.unary_unary(
                 '/query.QueryService/GetHealthSummary',
                 request_serializer=query__pb2.GetHealthSummaryRequest.SerializeToString,
@@ -179,6 +184,12 @@ class QueryServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def GetBottleneckMetrics(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetBottleneckList(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -280,6 +291,11 @@ def add_QueryServiceServicer_to_server(servicer, server):
                     servicer.GetBottleneckMetrics,
                     request_deserializer=query__pb2.GetBottleneckMetricsRequest.FromString,
                     response_serializer=query__pb2.GetBottleneckMetricsResponse.SerializeToString,
+            ),
+            'GetBottleneckList': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetBottleneckList,
+                    request_deserializer=query__pb2.GetBottleneckListRequest.FromString,
+                    response_serializer=query__pb2.GetBottleneckListResponse.SerializeToString,
             ),
             'GetHealthSummary': grpc.unary_unary_rpc_method_handler(
                     servicer.GetHealthSummary,
@@ -587,6 +603,33 @@ class QueryService(object):
             '/query.QueryService/GetBottleneckMetrics',
             query__pb2.GetBottleneckMetricsRequest.SerializeToString,
             query__pb2.GetBottleneckMetricsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetBottleneckList(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/query.QueryService/GetBottleneckList',
+            query__pb2.GetBottleneckListRequest.SerializeToString,
+            query__pb2.GetBottleneckListResponse.FromString,
             options,
             channel_credentials,
             insecure,

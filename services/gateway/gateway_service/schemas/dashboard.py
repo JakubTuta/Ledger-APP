@@ -336,12 +336,6 @@ class UpdatePanelRequest(pydantic.BaseModel):
                 "Both 'periodFrom' and 'periodTo' must be provided together"
             )
 
-        if self.type == "bottleneck":
-            if not self.routes or len(self.routes) == 0:
-                raise ValueError("'routes' is required for bottleneck type panels")
-            if not self.statistic:
-                raise ValueError("'statistic' is required for bottleneck type panels")
-
         if self.type == "metrics":
             if not self.endpoint:
                 raise ValueError("'endpoint' is required for metrics type panels")

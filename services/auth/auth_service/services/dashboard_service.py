@@ -104,14 +104,6 @@ class DashboardService:
                 f"Invalid panel type '{panel_type}'. Must be one of: logs, errors, metrics, error_list, bottleneck, error_heatmap, trace, trace_list, custom_metric"
             )
 
-        if panel_type == "bottleneck":
-            if not routes or len(routes) == 0:
-                raise ValueError("'routes' is required for bottleneck type panels")
-            if not statistic:
-                raise ValueError("'statistic' is required for bottleneck type panels")
-            if statistic not in {"min", "max", "avg", "median", "count"}:
-                raise ValueError("'statistic' must be one of: min, max, avg, median, count")
-
         if panel_type == "metrics":
             if not endpoint:
                 raise ValueError("'endpoint' is required for metrics type panels")
@@ -226,14 +218,6 @@ class DashboardService:
             raise ValueError(
                 f"Invalid panel type '{panel_type}'. Must be one of: logs, errors, metrics, error_list, bottleneck, error_heatmap, trace, trace_list, custom_metric"
             )
-
-        if panel_type == "bottleneck":
-            if not routes or len(routes) == 0:
-                raise ValueError("'routes' is required for bottleneck type panels")
-            if not statistic:
-                raise ValueError("'statistic' is required for bottleneck type panels")
-            if statistic not in {"min", "max", "avg", "median", "count"}:
-                raise ValueError("'statistic' must be one of: min, max, avg, median, count")
 
         if panel_type == "metrics":
             if not endpoint:

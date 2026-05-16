@@ -13,6 +13,7 @@ service QueryService {
     rpc GetAggregatedMetrics(GetAggregatedMetricsRequest) returns (GetAggregatedMetricsResponse);
     rpc GetErrorList(GetErrorListRequest) returns (GetErrorListResponse);
     rpc GetBottleneckMetrics(GetBottleneckMetricsRequest) returns (GetBottleneckMetricsResponse);
+    rpc GetBottleneckList(GetBottleneckListRequest) returns (GetBottleneckListResponse);
     rpc GetHealthSummary(GetHealthSummaryRequest) returns (GetHealthSummaryResponse);
 
     // Distributed tracing
@@ -278,6 +279,40 @@ message GetBottleneckMetricsResponse {
     string start_date = 4;
     string end_date = 5;
     repeated BottleneckMetricDataPoint data = 6;
+}
+
+message GetBottleneckListRequest {
+    int64 project_id = 1;
+    string statistic = 2;
+    string sort = 3;
+    optional string period = 4;
+    optional string period_from = 5;
+    optional string period_to = 6;
+    int32 limit = 7;
+    int32 offset = 8;
+    optional string search = 9;
+}
+
+message BottleneckListEntry {
+    string route = 1;
+    double value = 2;
+    int64 request_count = 3;
+    optional double min_value = 4;
+    optional double max_value = 5;
+    optional double avg_value = 6;
+    optional double median_value = 7;
+}
+
+message GetBottleneckListResponse {
+    int64 project_id = 1;
+    string statistic = 2;
+    string sort = 3;
+    string start_date = 4;
+    string end_date = 5;
+    double max_value = 6;
+    repeated BottleneckListEntry entries = 7;
+    int64 total = 8;
+    bool has_more = 9;
 }
 
 message GetHealthSummaryRequest {

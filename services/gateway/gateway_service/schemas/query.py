@@ -166,29 +166,25 @@ class LogsListResponse(pydantic.BaseModel):
     has_more: bool = pydantic.Field(description="Whether there are more logs to fetch")
 
 
-class BottleneckMetricDataPointResponse(pydantic.BaseModel):
-    date: str = pydantic.Field(description="Date in YYYYMMDD format")
-    hour: typing.Optional[int] = pydantic.Field(
-        default=None, description="Hour (0-23) for hourly granularity, null for daily"
-    )
-    route: str = pydantic.Field(description="Route path (e.g., /api/users)")
-    value: float = pydantic.Field(description="Metric value (duration in ms or request count)")
+class BottleneckListEntryResponse(pydantic.BaseModel):
+    route: str = pydantic.Field(description="Route as 'METHOD PATH' (e.g., 'GET /api/users')")
+    value: float = pydantic.Field(description="Value of the selected statistic in ms")
+    request_count: int = pydantic.Field(description="Total request count in the period")
+    min_value: typing.Optional[float] = pydantic.Field(default=None, description="Min duration ms")
+    max_value: typing.Optional[float] = pydantic.Field(default=None, description="Max duration ms")
+    avg_value: typing.Optional[float] = pydantic.Field(default=None, description="Avg duration ms")
+    median_value: typing.Optional[float] = pydantic.Field(default=None, description="Median duration ms")
 
 
-class BottleneckMetricsResponse(pydantic.BaseModel):
+class BottleneckListResponse(pydantic.BaseModel):
     project_id: int = pydantic.Field(description="Project ID")
-    statistic: typing.Literal["min", "max", "avg", "median", "count"] = pydantic.Field(
-        description="Statistic type: min/max/avg/median duration (ms) or request count"
+    statistic: typing.Literal["min", "max", "avg", "median"] = pydantic.Field(
+        description="Statistic used for sorting and the value field"
     )
-    granularity: typing.Literal["hourly", "daily", "weekly", "monthly"] = pydantic.Field(
-        description="Data granularity (hourly/daily/weekly/monthly)"
-    )
+    sort: typing.Literal["asc", "desc"] = pydantic.Field(description="Sort direction")
     start_date: str = pydantic.Field(description="Start date in YYYYMMDD format")
     end_date: str = pydantic.Field(description="End date in YYYYMMDD format")
-    data: list[BottleneckMetricDataPointResponse] = pydantic.Field(
-        description=(
-            "Time-series data points for route performance. "
-            "Each route has a data point for each time bucket (hour/day/week/month). "
-            "Format optimized for charting: routes as separate series, time as x-axis, value as y-axis."
-        )
-    )
+    max_value: float = pydantic.Field(description="Max stat value across all routes (for progress bar scaling)")
+    entries: list[BottleneckListEntryResponse] = pydantic.Field(description="Paginated route entries")
+    total: int = pydantic.Field(description="Total number of routes with data")
+    has_more: bool = pydantic.Field(description="Whether there are more pages")
