@@ -388,12 +388,6 @@ message Panel {
   optional int32 min_duration_ms = 16;
   optional bool has_error = 17;
   optional int32 limit = 18;
-  // custom metric panel fields
-  optional string metric_name = 19;
-  optional string tag_filter_json = 20;
-  optional string agg = 21;
-  optional string viz = 22;
-  optional string step = 23;
   // logs panel filter fields
   optional string status_class = 24;
   optional string logs_search = 25;
@@ -426,11 +420,6 @@ message CreateDashboardPanelRequest {
   optional int32 min_duration_ms = 16;
   optional bool has_error = 17;
   optional int32 limit = 18;
-  optional string metric_name = 19;
-  optional string tag_filter_json = 20;
-  optional string agg = 21;
-  optional string viz = 22;
-  optional string step = 23;
   optional string status_class = 24;
   optional string logs_search = 25;
 }
@@ -459,11 +448,6 @@ message UpdateDashboardPanelRequest {
   optional int32 min_duration_ms = 17;
   optional bool has_error = 18;
   optional int32 limit = 19;
-  optional string metric_name = 20;
-  optional string tag_filter_json = 21;
-  optional string agg = 22;
-  optional string viz = 23;
-  optional string step = 24;
   optional string status_class = 25;
   optional string logs_search = 26;
 }
@@ -561,7 +545,6 @@ message AlertRule {
   string name = 3;
   bool enabled = 4;
   string metric = 5;
-  string tag_filter = 6;  // JSON string
   string comparator = 7;
   double threshold = 8;
   int32 window_seconds = 9;
@@ -596,7 +579,6 @@ message CreateAlertRuleRequest {
   int64 project_id = 1;
   string name = 2;
   string metric = 3;
-  string tag_filter = 4;   // JSON string
   string comparator = 5;
   double threshold = 6;
   int32 window_seconds = 7;

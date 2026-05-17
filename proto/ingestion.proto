@@ -16,9 +16,6 @@ service IngestionService {
 
     // Ingest a batch of distributed trace spans
     rpc IngestSpansBatch(IngestSpansBatchRequest) returns (IngestSpansBatchResponse);
-
-    // Ingest a batch of custom metrics
-    rpc IngestMetricsBatch(IngestMetricsBatchRequest) returns (IngestMetricsBatchResponse);
 }
 
 // ==================== Messages ====================
@@ -123,32 +120,6 @@ message IngestSpansBatchRequest {
 }
 
 message IngestSpansBatchResponse {
-    bool success   = 1;
-    int32 accepted = 2;
-    int32 rejected = 3;
-    optional string error = 4;
-}
-
-// ==================== Custom Metrics Ingestion Messages ====================
-
-message MetricDataPoint {
-    string name   = 1;
-    string tags   = 2;   // JSON string: {"key": "value"}
-    int64  ts_unix_nano = 3;
-    int32  type   = 4;   // 1=counter 2=gauge 3=histogram
-    int64  count  = 5;
-    double sum    = 6;
-    double min_v  = 7;
-    double max_v  = 8;
-    string buckets = 9;  // JSON string for histograms
-}
-
-message IngestMetricsBatchRequest {
-    int64 project_id              = 1;
-    repeated MetricDataPoint metrics = 2;
-}
-
-message IngestMetricsBatchResponse {
     bool success   = 1;
     int32 accepted = 2;
     int32 rejected = 3;

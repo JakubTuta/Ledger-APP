@@ -284,62 +284,6 @@ class IngestionServicer(ingestion_pb2_grpc.IngestionServiceServicer):
             success=True, accepted=accepted, rejected=rejected
         )
 
-    async def IngestMetricsBatch(
-        self,
-        request: ingestion_pb2.IngestMetricsBatchRequest,
-        context: grpc.aio.ServicerContext,
-    ) -> ingestion_pb2.IngestMetricsBatchResponse:
-        accepted = 0
-        rejected = 0
-        rows = []
-
-        for m in request.metrics:
-            if not m.name:
-                rejected += 1
-                continue
-
-            ts_dt = datetime.datetime.fromtimestamp(
-                m.ts_unix_nano / 1e9, tz=datetime.timezone.utc
-            )
-            rows.append(
-                {
-                    "project_id": request.project_id,
-                    "name": m.name[:255],
-                    "tags": m.tags or "{}",
-                    "ts": ts_dt,
-                    "type": m.type,
-                    "count": m.count,
-                    "sum": m.sum,
-                    "min_v": m.min_v,
-                    "max_v": m.max_v,
-                    "buckets": m.buckets or "{}",
-                }
-            )
-            accepted += 1
-
-        if rows:
-            try:
-                async with database.get_session() as session:
-                    await session.execute(
-                        sa.text("""
-                            INSERT INTO custom_metrics (
-                                project_id, name, tags, ts, type, count, sum, min_v, max_v, buckets
-                            ) VALUES (
-                                :project_id, :name, :tags, :ts, :type, :count, :sum, :min_v, :max_v, :buckets
-                            )
-                        """),
-                        rows,
-                    )
-                    await session.commit()
-            except Exception as e:
-                logger.error(f"Failed to insert metrics batch: {e}", exc_info=True)
-                await context.abort(grpc.StatusCode.INTERNAL, "Failed to store metrics")
-                return
-
-        return ingestion_pb2.IngestMetricsBatchResponse(
-            success=True, accepted=accepted, rejected=rejected
-        )
-
 
 def _proto_to_log_entry(proto_log: ingestion_pb2.LogEntry) -> schemas.LogEntry:
     try:

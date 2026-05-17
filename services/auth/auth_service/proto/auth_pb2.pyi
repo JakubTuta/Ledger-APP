@@ -490,7 +490,7 @@ class PanelLayout(_message.Message):
     def __init__(self, x: _Optional[int] = ..., y: _Optional[int] = ..., w: _Optional[int] = ..., h: _Optional[int] = ...) -> None: ...
 
 class Panel(_message.Message):
-    __slots__ = ("id", "name", "index", "project_id", "period", "periodFrom", "periodTo", "type", "endpoint", "routes", "statistic", "layout", "trace_id", "service_filter", "operation_filter", "min_duration_ms", "has_error", "limit", "metric_name", "tag_filter_json", "agg", "viz", "step")
+    __slots__ = ("id", "name", "index", "project_id", "period", "periodFrom", "periodTo", "type", "endpoint", "routes", "statistic", "layout", "trace_id", "service_filter", "operation_filter", "min_duration_ms", "has_error", "limit", "status_class", "logs_search")
     ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     INDEX_FIELD_NUMBER: _ClassVar[int]
@@ -509,11 +509,8 @@ class Panel(_message.Message):
     MIN_DURATION_MS_FIELD_NUMBER: _ClassVar[int]
     HAS_ERROR_FIELD_NUMBER: _ClassVar[int]
     LIMIT_FIELD_NUMBER: _ClassVar[int]
-    METRIC_NAME_FIELD_NUMBER: _ClassVar[int]
-    TAG_FILTER_JSON_FIELD_NUMBER: _ClassVar[int]
-    AGG_FIELD_NUMBER: _ClassVar[int]
-    VIZ_FIELD_NUMBER: _ClassVar[int]
-    STEP_FIELD_NUMBER: _ClassVar[int]
+    STATUS_CLASS_FIELD_NUMBER: _ClassVar[int]
+    LOGS_SEARCH_FIELD_NUMBER: _ClassVar[int]
     id: str
     name: str
     index: int
@@ -532,12 +529,9 @@ class Panel(_message.Message):
     min_duration_ms: int
     has_error: bool
     limit: int
-    metric_name: str
-    tag_filter_json: str
-    agg: str
-    viz: str
-    step: str
-    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., period: _Optional[str] = ..., periodFrom: _Optional[str] = ..., periodTo: _Optional[str] = ..., type: _Optional[str] = ..., endpoint: _Optional[str] = ..., routes: _Optional[_Iterable[str]] = ..., statistic: _Optional[str] = ..., layout: _Optional[_Union[PanelLayout, _Mapping]] = ..., trace_id: _Optional[str] = ..., service_filter: _Optional[str] = ..., operation_filter: _Optional[str] = ..., min_duration_ms: _Optional[int] = ..., has_error: bool = ..., limit: _Optional[int] = ..., metric_name: _Optional[str] = ..., tag_filter_json: _Optional[str] = ..., agg: _Optional[str] = ..., viz: _Optional[str] = ..., step: _Optional[str] = ...) -> None: ...
+    status_class: str
+    logs_search: str
+    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., period: _Optional[str] = ..., periodFrom: _Optional[str] = ..., periodTo: _Optional[str] = ..., type: _Optional[str] = ..., endpoint: _Optional[str] = ..., routes: _Optional[_Iterable[str]] = ..., statistic: _Optional[str] = ..., layout: _Optional[_Union[PanelLayout, _Mapping]] = ..., trace_id: _Optional[str] = ..., service_filter: _Optional[str] = ..., operation_filter: _Optional[str] = ..., min_duration_ms: _Optional[int] = ..., has_error: bool = ..., limit: _Optional[int] = ..., status_class: _Optional[str] = ..., logs_search: _Optional[str] = ...) -> None: ...
 
 class GetDashboardPanelsRequest(_message.Message):
     __slots__ = ("user_id",)
@@ -552,7 +546,7 @@ class GetDashboardPanelsResponse(_message.Message):
     def __init__(self, panels: _Optional[_Iterable[_Union[Panel, _Mapping]]] = ...) -> None: ...
 
 class CreateDashboardPanelRequest(_message.Message):
-    __slots__ = ("user_id", "name", "index", "project_id", "period", "periodFrom", "periodTo", "type", "endpoint", "routes", "statistic", "layout", "trace_id", "service_filter", "operation_filter", "min_duration_ms", "has_error", "limit", "metric_name", "tag_filter_json", "agg", "viz", "step")
+    __slots__ = ("user_id", "name", "index", "project_id", "period", "periodFrom", "periodTo", "type", "endpoint", "routes", "statistic", "layout", "trace_id", "service_filter", "operation_filter", "min_duration_ms", "has_error", "limit", "status_class", "logs_search")
     USER_ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     INDEX_FIELD_NUMBER: _ClassVar[int]
@@ -571,11 +565,8 @@ class CreateDashboardPanelRequest(_message.Message):
     MIN_DURATION_MS_FIELD_NUMBER: _ClassVar[int]
     HAS_ERROR_FIELD_NUMBER: _ClassVar[int]
     LIMIT_FIELD_NUMBER: _ClassVar[int]
-    METRIC_NAME_FIELD_NUMBER: _ClassVar[int]
-    TAG_FILTER_JSON_FIELD_NUMBER: _ClassVar[int]
-    AGG_FIELD_NUMBER: _ClassVar[int]
-    VIZ_FIELD_NUMBER: _ClassVar[int]
-    STEP_FIELD_NUMBER: _ClassVar[int]
+    STATUS_CLASS_FIELD_NUMBER: _ClassVar[int]
+    LOGS_SEARCH_FIELD_NUMBER: _ClassVar[int]
     user_id: int
     name: str
     index: int
@@ -594,12 +585,9 @@ class CreateDashboardPanelRequest(_message.Message):
     min_duration_ms: int
     has_error: bool
     limit: int
-    metric_name: str
-    tag_filter_json: str
-    agg: str
-    viz: str
-    step: str
-    def __init__(self, user_id: _Optional[int] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., period: _Optional[str] = ..., periodFrom: _Optional[str] = ..., periodTo: _Optional[str] = ..., type: _Optional[str] = ..., endpoint: _Optional[str] = ..., routes: _Optional[_Iterable[str]] = ..., statistic: _Optional[str] = ..., layout: _Optional[_Union[PanelLayout, _Mapping]] = ..., trace_id: _Optional[str] = ..., service_filter: _Optional[str] = ..., operation_filter: _Optional[str] = ..., min_duration_ms: _Optional[int] = ..., has_error: bool = ..., limit: _Optional[int] = ..., metric_name: _Optional[str] = ..., tag_filter_json: _Optional[str] = ..., agg: _Optional[str] = ..., viz: _Optional[str] = ..., step: _Optional[str] = ...) -> None: ...
+    status_class: str
+    logs_search: str
+    def __init__(self, user_id: _Optional[int] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., period: _Optional[str] = ..., periodFrom: _Optional[str] = ..., periodTo: _Optional[str] = ..., type: _Optional[str] = ..., endpoint: _Optional[str] = ..., routes: _Optional[_Iterable[str]] = ..., statistic: _Optional[str] = ..., layout: _Optional[_Union[PanelLayout, _Mapping]] = ..., trace_id: _Optional[str] = ..., service_filter: _Optional[str] = ..., operation_filter: _Optional[str] = ..., min_duration_ms: _Optional[int] = ..., has_error: bool = ..., limit: _Optional[int] = ..., status_class: _Optional[str] = ..., logs_search: _Optional[str] = ...) -> None: ...
 
 class CreateDashboardPanelResponse(_message.Message):
     __slots__ = ("panel",)
@@ -608,7 +596,7 @@ class CreateDashboardPanelResponse(_message.Message):
     def __init__(self, panel: _Optional[_Union[Panel, _Mapping]] = ...) -> None: ...
 
 class UpdateDashboardPanelRequest(_message.Message):
-    __slots__ = ("user_id", "panel_id", "name", "index", "project_id", "period", "periodFrom", "periodTo", "type", "endpoint", "routes", "statistic", "layout", "trace_id", "service_filter", "operation_filter", "min_duration_ms", "has_error", "limit", "metric_name", "tag_filter_json", "agg", "viz", "step")
+    __slots__ = ("user_id", "panel_id", "name", "index", "project_id", "period", "periodFrom", "periodTo", "type", "endpoint", "routes", "statistic", "layout", "trace_id", "service_filter", "operation_filter", "min_duration_ms", "has_error", "limit", "status_class", "logs_search")
     USER_ID_FIELD_NUMBER: _ClassVar[int]
     PANEL_ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
@@ -628,11 +616,8 @@ class UpdateDashboardPanelRequest(_message.Message):
     MIN_DURATION_MS_FIELD_NUMBER: _ClassVar[int]
     HAS_ERROR_FIELD_NUMBER: _ClassVar[int]
     LIMIT_FIELD_NUMBER: _ClassVar[int]
-    METRIC_NAME_FIELD_NUMBER: _ClassVar[int]
-    TAG_FILTER_JSON_FIELD_NUMBER: _ClassVar[int]
-    AGG_FIELD_NUMBER: _ClassVar[int]
-    VIZ_FIELD_NUMBER: _ClassVar[int]
-    STEP_FIELD_NUMBER: _ClassVar[int]
+    STATUS_CLASS_FIELD_NUMBER: _ClassVar[int]
+    LOGS_SEARCH_FIELD_NUMBER: _ClassVar[int]
     user_id: int
     panel_id: str
     name: str
@@ -652,12 +637,9 @@ class UpdateDashboardPanelRequest(_message.Message):
     min_duration_ms: int
     has_error: bool
     limit: int
-    metric_name: str
-    tag_filter_json: str
-    agg: str
-    viz: str
-    step: str
-    def __init__(self, user_id: _Optional[int] = ..., panel_id: _Optional[str] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., period: _Optional[str] = ..., periodFrom: _Optional[str] = ..., periodTo: _Optional[str] = ..., type: _Optional[str] = ..., endpoint: _Optional[str] = ..., routes: _Optional[_Iterable[str]] = ..., statistic: _Optional[str] = ..., layout: _Optional[_Union[PanelLayout, _Mapping]] = ..., trace_id: _Optional[str] = ..., service_filter: _Optional[str] = ..., operation_filter: _Optional[str] = ..., min_duration_ms: _Optional[int] = ..., has_error: bool = ..., limit: _Optional[int] = ..., metric_name: _Optional[str] = ..., tag_filter_json: _Optional[str] = ..., agg: _Optional[str] = ..., viz: _Optional[str] = ..., step: _Optional[str] = ...) -> None: ...
+    status_class: str
+    logs_search: str
+    def __init__(self, user_id: _Optional[int] = ..., panel_id: _Optional[str] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., period: _Optional[str] = ..., periodFrom: _Optional[str] = ..., periodTo: _Optional[str] = ..., type: _Optional[str] = ..., endpoint: _Optional[str] = ..., routes: _Optional[_Iterable[str]] = ..., statistic: _Optional[str] = ..., layout: _Optional[_Union[PanelLayout, _Mapping]] = ..., trace_id: _Optional[str] = ..., service_filter: _Optional[str] = ..., operation_filter: _Optional[str] = ..., min_duration_ms: _Optional[int] = ..., has_error: bool = ..., limit: _Optional[int] = ..., status_class: _Optional[str] = ..., logs_search: _Optional[str] = ...) -> None: ...
 
 class UpdateDashboardPanelResponse(_message.Message):
     __slots__ = ("panel",)
@@ -794,13 +776,12 @@ class CreateNotificationResponse(_message.Message):
     def __init__(self, notification: _Optional[_Union[NotificationItem, _Mapping]] = ...) -> None: ...
 
 class AlertRule(_message.Message):
-    __slots__ = ("id", "project_id", "name", "enabled", "metric", "tag_filter", "comparator", "threshold", "window_seconds", "cooldown_seconds", "severity", "channels", "last_fired_at", "last_state", "created_at", "updated_at")
+    __slots__ = ("id", "project_id", "name", "enabled", "metric", "comparator", "threshold", "window_seconds", "cooldown_seconds", "severity", "channels", "last_fired_at", "last_state", "created_at", "updated_at")
     ID_FIELD_NUMBER: _ClassVar[int]
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     ENABLED_FIELD_NUMBER: _ClassVar[int]
     METRIC_FIELD_NUMBER: _ClassVar[int]
-    TAG_FILTER_FIELD_NUMBER: _ClassVar[int]
     COMPARATOR_FIELD_NUMBER: _ClassVar[int]
     THRESHOLD_FIELD_NUMBER: _ClassVar[int]
     WINDOW_SECONDS_FIELD_NUMBER: _ClassVar[int]
@@ -816,7 +797,6 @@ class AlertRule(_message.Message):
     name: str
     enabled: bool
     metric: str
-    tag_filter: str
     comparator: str
     threshold: float
     window_seconds: int
@@ -827,7 +807,7 @@ class AlertRule(_message.Message):
     last_state: str
     created_at: str
     updated_at: str
-    def __init__(self, id: _Optional[int] = ..., project_id: _Optional[int] = ..., name: _Optional[str] = ..., enabled: bool = ..., metric: _Optional[str] = ..., tag_filter: _Optional[str] = ..., comparator: _Optional[str] = ..., threshold: _Optional[float] = ..., window_seconds: _Optional[int] = ..., cooldown_seconds: _Optional[int] = ..., severity: _Optional[int] = ..., channels: _Optional[str] = ..., last_fired_at: _Optional[str] = ..., last_state: _Optional[str] = ..., created_at: _Optional[str] = ..., updated_at: _Optional[str] = ...) -> None: ...
+    def __init__(self, id: _Optional[int] = ..., project_id: _Optional[int] = ..., name: _Optional[str] = ..., enabled: bool = ..., metric: _Optional[str] = ..., comparator: _Optional[str] = ..., threshold: _Optional[float] = ..., window_seconds: _Optional[int] = ..., cooldown_seconds: _Optional[int] = ..., severity: _Optional[int] = ..., channels: _Optional[str] = ..., last_fired_at: _Optional[str] = ..., last_state: _Optional[str] = ..., created_at: _Optional[str] = ..., updated_at: _Optional[str] = ...) -> None: ...
 
 class ListAlertRulesRequest(_message.Message):
     __slots__ = ("project_id",)
@@ -858,11 +838,10 @@ class GetAlertRuleResponse(_message.Message):
     def __init__(self, rule: _Optional[_Union[AlertRule, _Mapping]] = ..., found: bool = ...) -> None: ...
 
 class CreateAlertRuleRequest(_message.Message):
-    __slots__ = ("project_id", "name", "metric", "tag_filter", "comparator", "threshold", "window_seconds", "cooldown_seconds", "severity")
+    __slots__ = ("project_id", "name", "metric", "comparator", "threshold", "window_seconds", "cooldown_seconds", "severity")
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     METRIC_FIELD_NUMBER: _ClassVar[int]
-    TAG_FILTER_FIELD_NUMBER: _ClassVar[int]
     COMPARATOR_FIELD_NUMBER: _ClassVar[int]
     THRESHOLD_FIELD_NUMBER: _ClassVar[int]
     WINDOW_SECONDS_FIELD_NUMBER: _ClassVar[int]
@@ -871,13 +850,12 @@ class CreateAlertRuleRequest(_message.Message):
     project_id: int
     name: str
     metric: str
-    tag_filter: str
     comparator: str
     threshold: float
     window_seconds: int
     cooldown_seconds: int
     severity: int
-    def __init__(self, project_id: _Optional[int] = ..., name: _Optional[str] = ..., metric: _Optional[str] = ..., tag_filter: _Optional[str] = ..., comparator: _Optional[str] = ..., threshold: _Optional[float] = ..., window_seconds: _Optional[int] = ..., cooldown_seconds: _Optional[int] = ..., severity: _Optional[int] = ...) -> None: ...
+    def __init__(self, project_id: _Optional[int] = ..., name: _Optional[str] = ..., metric: _Optional[str] = ..., comparator: _Optional[str] = ..., threshold: _Optional[float] = ..., window_seconds: _Optional[int] = ..., cooldown_seconds: _Optional[int] = ..., severity: _Optional[int] = ...) -> None: ...
 
 class CreateAlertRuleResponse(_message.Message):
     __slots__ = ("rule",)

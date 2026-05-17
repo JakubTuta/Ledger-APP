@@ -109,21 +109,6 @@ class QueryServiceStub(object):
                 request_serializer=query__pb2.GetSpanLatencyRequest.SerializeToString,
                 response_deserializer=query__pb2.GetSpanLatencyResponse.FromString,
                 _registered_method=True)
-        self.QueryCustomMetrics = channel.unary_unary(
-                '/query.QueryService/QueryCustomMetrics',
-                request_serializer=query__pb2.QueryCustomMetricsRequest.SerializeToString,
-                response_deserializer=query__pb2.QueryCustomMetricsResponse.FromString,
-                _registered_method=True)
-        self.ListCustomMetricNames = channel.unary_unary(
-                '/query.QueryService/ListCustomMetricNames',
-                request_serializer=query__pb2.ListCustomMetricNamesRequest.SerializeToString,
-                response_deserializer=query__pb2.ListCustomMetricNamesResponse.FromString,
-                _registered_method=True)
-        self.ListCustomMetricTags = channel.unary_unary(
-                '/query.QueryService/ListCustomMetricTags',
-                request_serializer=query__pb2.ListCustomMetricTagsRequest.SerializeToString,
-                response_deserializer=query__pb2.ListCustomMetricTagsResponse.FromString,
-                _registered_method=True)
 
 
 class QueryServiceServicer(object):
@@ -220,25 +205,6 @@ class QueryServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def QueryCustomMetrics(self, request, context):
-        """Custom metrics
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def ListCustomMetricNames(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def ListCustomMetricTags(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
 
 def add_QueryServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -316,21 +282,6 @@ def add_QueryServiceServicer_to_server(servicer, server):
                     servicer.GetSpanLatency,
                     request_deserializer=query__pb2.GetSpanLatencyRequest.FromString,
                     response_serializer=query__pb2.GetSpanLatencyResponse.SerializeToString,
-            ),
-            'QueryCustomMetrics': grpc.unary_unary_rpc_method_handler(
-                    servicer.QueryCustomMetrics,
-                    request_deserializer=query__pb2.QueryCustomMetricsRequest.FromString,
-                    response_serializer=query__pb2.QueryCustomMetricsResponse.SerializeToString,
-            ),
-            'ListCustomMetricNames': grpc.unary_unary_rpc_method_handler(
-                    servicer.ListCustomMetricNames,
-                    request_deserializer=query__pb2.ListCustomMetricNamesRequest.FromString,
-                    response_serializer=query__pb2.ListCustomMetricNamesResponse.SerializeToString,
-            ),
-            'ListCustomMetricTags': grpc.unary_unary_rpc_method_handler(
-                    servicer.ListCustomMetricTags,
-                    request_deserializer=query__pb2.ListCustomMetricTagsRequest.FromString,
-                    response_serializer=query__pb2.ListCustomMetricTagsResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -738,87 +689,6 @@ class QueryService(object):
             '/query.QueryService/GetSpanLatency',
             query__pb2.GetSpanLatencyRequest.SerializeToString,
             query__pb2.GetSpanLatencyResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def QueryCustomMetrics(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/query.QueryService/QueryCustomMetrics',
-            query__pb2.QueryCustomMetricsRequest.SerializeToString,
-            query__pb2.QueryCustomMetricsResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def ListCustomMetricNames(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/query.QueryService/ListCustomMetricNames',
-            query__pb2.ListCustomMetricNamesRequest.SerializeToString,
-            query__pb2.ListCustomMetricNamesResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def ListCustomMetricTags(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/query.QueryService/ListCustomMetricTags',
-            query__pb2.ListCustomMetricTagsRequest.SerializeToString,
-            query__pb2.ListCustomMetricTagsResponse.FromString,
             options,
             channel_credentials,
             insecure,

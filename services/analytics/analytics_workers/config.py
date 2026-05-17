@@ -201,29 +201,9 @@ class Settings(pydantic_settings.BaseSettings):
         description="span_latency_1h rollup cron schedule",
     )
 
-    ANALYTICS_CUSTOM_METRICS_5M_CRON: str = pydantic.Field(
-        default="*/1 * * * *",
-        description="custom_metrics_5m rollup cron schedule",
-    )
-
-    ANALYTICS_CUSTOM_METRICS_1H_CRON: str = pydantic.Field(
-        default="*/5 * * * *",
-        description="custom_metrics_1h rollup cron schedule",
-    )
-
-    ANALYTICS_CUSTOM_METRICS_1D_CRON: str = pydantic.Field(
-        default="0 * * * *",
-        description="custom_metrics_1d rollup cron schedule",
-    )
-
     ANALYTICS_ALERT_EVALUATOR_CRON: str = pydantic.Field(
         default="*/1 * * * *",
         description="Alert rule evaluator cron schedule",
-    )
-
-    ANALYTICS_CARDINALITY_CHECK_CRON: str = pydantic.Field(
-        default="0 * * * *",
-        description="Custom metrics cardinality check cron schedule",
     )
 
     ANALYTICS_NOTIFICATION_CLEANUP_CRON: str = pydantic.Field(

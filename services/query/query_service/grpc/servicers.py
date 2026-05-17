@@ -8,7 +8,6 @@ import query_service.proto.query_pb2_grpc as query_pb2_grpc
 import query_service.schemas as schemas
 import query_service.services.aggregated_metrics as aggregated_metrics_service
 import query_service.services.bottleneck_metrics as bottleneck_metrics_service
-import query_service.services.custom_metrics as custom_metrics_service
 import query_service.services.health_summary as health_summary_service
 import query_service.services.log_query as log_query
 import query_service.services.metrics as metrics_service
@@ -748,71 +747,3 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
                 grpc.StatusCode.INTERNAL, f"GetSpanLatency failed: {str(e)}"
             )
 
-    # ==================== Custom Metrics ====================
-
-    async def QueryCustomMetrics(
-        self,
-        request: query_pb2.QueryCustomMetricsRequest,
-        context: grpc.aio.ServicerContext,
-    ) -> query_pb2.QueryCustomMetricsResponse:
-        try:
-            agg = request.agg if request.HasField("agg") else "sum"
-            step = request.step_seconds if request.HasField("step_seconds") else 300
-            points = await custom_metrics_service.query_custom_metrics(
-                project_id=request.project_id,
-                name=request.name,
-                tags=request.tags,
-                from_time=request.from_time if request.HasField("from_time") else None,
-                to_time=request.to_time if request.HasField("to_time") else None,
-                agg=agg,
-                step_seconds=step,
-            )
-            data = [
-                query_pb2.CustomMetricDataPoint(bucket=p["bucket"], value=p["value"])
-                for p in points
-            ]
-            return query_pb2.QueryCustomMetricsResponse(
-                project_id=request.project_id,
-                name=request.name,
-                agg=agg,
-                data=data,
-            )
-        except Exception as e:
-            await context.abort(
-                grpc.StatusCode.INTERNAL, f"QueryCustomMetrics failed: {str(e)}"
-            )
-
-    async def ListCustomMetricNames(
-        self,
-        request: query_pb2.ListCustomMetricNamesRequest,
-        context: grpc.aio.ServicerContext,
-    ) -> query_pb2.ListCustomMetricNamesResponse:
-        try:
-            names = await custom_metrics_service.list_metric_names(
-                project_id=request.project_id,
-                prefix=request.prefix if request.HasField("prefix") else None,
-            )
-            return query_pb2.ListCustomMetricNamesResponse(names=names)
-        except Exception as e:
-            await context.abort(
-                grpc.StatusCode.INTERNAL, f"ListCustomMetricNames failed: {str(e)}"
-            )
-
-    async def ListCustomMetricTags(
-        self,
-        request: query_pb2.ListCustomMetricTagsRequest,
-        context: grpc.aio.ServicerContext,
-    ) -> query_pb2.ListCustomMetricTagsResponse:
-        try:
-            tag_entries = await custom_metrics_service.list_metric_tags(
-                project_id=request.project_id, name=request.name
-            )
-            tags = [
-                query_pb2.CustomMetricTagEntry(key=t["key"], values=t["values"])
-                for t in tag_entries
-            ]
-            return query_pb2.ListCustomMetricTagsResponse(tags=tags)
-        except Exception as e:
-            await context.abort(
-                grpc.StatusCode.INTERNAL, f"ListCustomMetricTags failed: {str(e)}"
-            )

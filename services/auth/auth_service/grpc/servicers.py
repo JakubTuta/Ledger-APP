@@ -11,7 +11,6 @@ from redis.asyncio import Redis
 
 
 def _panel_dict_to_proto(panel: dict) -> auth_pb2.Panel:
-    tag_filter = panel.get("tag_filter")
     kwargs = {
         "id": panel["id"],
         "name": panel["name"],
@@ -38,16 +37,6 @@ def _panel_dict_to_proto(panel: dict) -> auth_pb2.Panel:
         kwargs["has_error"] = panel["has_error"]
     if panel.get("limit") is not None:
         kwargs["limit"] = panel["limit"]
-    if panel.get("metric_name") is not None:
-        kwargs["metric_name"] = panel["metric_name"]
-    if tag_filter is not None:
-        kwargs["tag_filter_json"] = json.dumps(tag_filter)
-    if panel.get("agg") is not None:
-        kwargs["agg"] = panel["agg"]
-    if panel.get("viz") is not None:
-        kwargs["viz"] = panel["viz"]
-    if panel.get("step") is not None:
-        kwargs["step"] = panel["step"]
     if panel.get("status_class") is not None:
         kwargs["status_class"] = panel["status_class"]
     if panel.get("logs_search") is not None:
@@ -861,11 +850,6 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     min_duration_ms=request.min_duration_ms if request.HasField("min_duration_ms") else None,
                     has_error=request.has_error if request.HasField("has_error") else None,
                     limit=request.limit if request.HasField("limit") else None,
-                    metric_name=request.metric_name if request.HasField("metric_name") else None,
-                    tag_filter=json.loads(request.tag_filter_json) if request.HasField("tag_filter_json") and request.tag_filter_json else None,
-                    agg=request.agg if request.HasField("agg") else None,
-                    viz=request.viz if request.HasField("viz") else None,
-                    step=request.step if request.HasField("step") else None,
                     status_class=request.status_class if request.HasField("status_class") else None,
                     logs_search=request.logs_search if request.HasField("logs_search") else None,
                 )
@@ -915,11 +899,6 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     min_duration_ms=request.min_duration_ms if request.HasField("min_duration_ms") else None,
                     has_error=request.has_error if request.HasField("has_error") else None,
                     limit=request.limit if request.HasField("limit") else None,
-                    metric_name=request.metric_name if request.HasField("metric_name") else None,
-                    tag_filter=json.loads(request.tag_filter_json) if request.HasField("tag_filter_json") and request.tag_filter_json else None,
-                    agg=request.agg if request.HasField("agg") else None,
-                    viz=request.viz if request.HasField("viz") else None,
-                    step=request.step if request.HasField("step") else None,
                     status_class=request.status_class if request.HasField("status_class") else None,
                     logs_search=request.logs_search if request.HasField("logs_search") else None,
                 )
@@ -1524,7 +1503,6 @@ def _alert_rule_to_proto(r: models.AlertRule) -> auth_pb2.AlertRule:
         name=r.name,
         enabled=r.enabled,
         metric=r.metric_type,
-        tag_filter="{}",
         comparator=r.comparator,
         threshold=r.threshold,
         window_seconds=r.window_minutes * 60,

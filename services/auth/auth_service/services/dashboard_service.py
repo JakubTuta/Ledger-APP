@@ -89,11 +89,6 @@ class DashboardService:
         min_duration_ms: int | None = None,
         has_error: bool | None = None,
         limit: int | None = None,
-        metric_name: str | None = None,
-        tag_filter: dict | None = None,
-        agg: str | None = None,
-        viz: str | None = None,
-        step: str | None = None,
         status_class: str | None = None,
         logs_search: str | None = None,
     ) -> dict:
@@ -101,7 +96,7 @@ class DashboardService:
 
         if not self._validate_panel_type(panel_type):
             raise ValueError(
-                f"Invalid panel type '{panel_type}'. Must be one of: logs, errors, metrics, error_list, bottleneck, error_heatmap, trace, trace_list, custom_metric"
+                f"Invalid panel type '{panel_type}'. Must be one of: logs, errors, metrics, error_list, bottleneck, error_heatmap, trace, trace_list"
             )
 
         if panel_type == "metrics":
@@ -148,11 +143,6 @@ class DashboardService:
             "min_duration_ms": min_duration_ms,
             "has_error": has_error,
             "limit": limit,
-            "metric_name": metric_name,
-            "tag_filter": tag_filter,
-            "agg": agg,
-            "viz": viz,
-            "step": step,
             "status_class": status_class,
             "logs_search": logs_search,
         }
@@ -204,11 +194,6 @@ class DashboardService:
         min_duration_ms: int | None = None,
         has_error: bool | None = None,
         limit: int | None = None,
-        metric_name: str | None = None,
-        tag_filter: dict | None = None,
-        agg: str | None = None,
-        viz: str | None = None,
-        step: str | None = None,
         status_class: str | None = None,
         logs_search: str | None = None,
     ) -> dict:
@@ -216,7 +201,7 @@ class DashboardService:
 
         if not self._validate_panel_type(panel_type):
             raise ValueError(
-                f"Invalid panel type '{panel_type}'. Must be one of: logs, errors, metrics, error_list, bottleneck, error_heatmap, trace, trace_list, custom_metric"
+                f"Invalid panel type '{panel_type}'. Must be one of: logs, errors, metrics, error_list, bottleneck, error_heatmap, trace, trace_list"
             )
 
         if panel_type == "metrics":
@@ -274,11 +259,6 @@ class DashboardService:
                     "min_duration_ms": min_duration_ms,
                     "has_error": has_error,
                     "limit": limit,
-                    "metric_name": metric_name,
-                    "tag_filter": tag_filter,
-                    "agg": agg,
-                    "viz": viz,
-                    "step": step,
                     "status_class": status_class,
                     "logs_search": logs_search,
                 }
@@ -336,7 +316,7 @@ class DashboardService:
     def _validate_panel_type(self, panel_type: str) -> bool:
         valid_types = {
             "logs", "errors", "metrics", "error_list", "bottleneck", "error_heatmap",
-            "trace", "trace_list", "custom_metric",
+            "trace", "trace_list",
         }
         return panel_type in valid_types
 

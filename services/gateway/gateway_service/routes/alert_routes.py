@@ -28,7 +28,6 @@ class AlertRuleResponse(BaseModel):
     name: str
     enabled: bool
     metric: str
-    tag_filter: str
     comparator: str
     threshold: float
     window_seconds: int
@@ -44,7 +43,6 @@ class CreateAlertRuleRequest(BaseModel):
     project_id: int
     name: str
     metric: str
-    tag_filter: str = Field(default="{}")
     comparator: str
     threshold: float
     window_seconds: int = Field(default=300, ge=60)
@@ -108,7 +106,6 @@ def _proto_rule_to_response(r) -> AlertRuleResponse:
         name=r.name,
         enabled=r.enabled,
         metric=r.metric,
-        tag_filter=r.tag_filter,
         comparator=r.comparator,
         threshold=r.threshold,
         window_seconds=r.window_seconds,
@@ -189,7 +186,6 @@ async def create_alert_rule(
                 project_id=payload.project_id,
                 name=payload.name,
                 metric=payload.metric,
-                tag_filter=payload.tag_filter,
                 comparator=payload.comparator,
                 threshold=payload.threshold,
                 window_seconds=payload.window_seconds,

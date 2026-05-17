@@ -34,7 +34,7 @@ async def get_trace(project_id: int, trace_id: str) -> dict | None:
             spans[0],
         )
         total_duration_ms = max(
-            (s["duration_ns"] for s in spans), default=0
+            (s["duration_ns"] for s in spans if s["duration_ns"] is not None), default=0
         ) // 1_000_000
 
         return {
@@ -175,19 +175,20 @@ async def get_span_latency(
 
 
 def _row_to_span_dict(row) -> dict:
+    start_time = row.start_time
     return {
-        "span_id": row.span_id,
-        "trace_id": row.trace_id,
+        "span_id": row.span_id or "",
+        "trace_id": row.trace_id or "",
         "parent_span_id": row.parent_span_id or "",
-        "project_id": row.project_id,
-        "service_name": row.service_name,
-        "name": row.name,
-        "kind": row.kind,
-        "start_time": row.start_time.isoformat(),
-        "duration_ns": row.duration_ns,
-        "status_code": row.status_code,
+        "project_id": row.project_id or 0,
+        "service_name": row.service_name or "",
+        "name": row.name or "",
+        "kind": row.kind or 0,
+        "start_time": start_time.isoformat() if hasattr(start_time, "isoformat") else str(start_time),
+        "duration_ns": row.duration_ns or 0,
+        "status_code": row.status_code or 0,
         "status_message": row.status_message or "",
-        "attributes": row.attributes or "{}",
-        "events": row.events or "[]",
+        "attributes": json.dumps(row.attributes) if row.attributes is not None else "{}",
+        "events": json.dumps(row.events) if row.events is not None else "[]",
         "error_fingerprint": row.error_fingerprint or "",
     }

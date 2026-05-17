@@ -10,10 +10,8 @@ from gateway_service.routes import (
     alert_routes,
     api_key_routes,
     auth_routes,
-    custom_metrics_routes,
     dashboard_routes,
     health_routes,
-    ingest_metrics_routes,
     ingest_spans_routes,
     ingestion_routes,
     notification_inbox_routes,
@@ -330,10 +328,8 @@ include_router(dashboard_routes.router, prefix="/api/v1")
 include_router(health_routes.router, prefix="/api/v1")
 include_router(ingestion_routes.router, prefix="/api/v1")
 include_router(ingest_spans_routes.router, prefix="/api/v1")
-include_router(ingest_metrics_routes.router, prefix="/api/v1")
 include_router(query_routes.router, prefix="/api/v1")
 include_router(tracing_routes.router, prefix="/api/v1")
-include_router(custom_metrics_routes.router, prefix="/api/v1")
 include_router(notifications.router, prefix="/api/v1")
 include_router(notification_inbox_routes.router, prefix="/api/v1")
 include_router(alert_routes.router, prefix="/api/v1")

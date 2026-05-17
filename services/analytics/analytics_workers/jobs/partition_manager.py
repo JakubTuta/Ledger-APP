@@ -7,7 +7,7 @@ import sqlalchemy as sa
 
 logger = logging.get_logger("jobs.partition_manager")
 
-_DAILY_TABLES = ("spans", "custom_metrics")
+_DAILY_TABLES = ("spans",)
 _DAYS_AHEAD = 7
 _LOGS_MONTHS_AHEAD = 3
 

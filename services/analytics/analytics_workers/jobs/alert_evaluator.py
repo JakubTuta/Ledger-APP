@@ -28,7 +28,7 @@ async def evaluate_alert_rules() -> None:
             rules_result = await auth_session.execute(
                 sa.text(
                     """
-                    SELECT id, project_id, name, metric, tag_filter, comparator,
+                    SELECT id, project_id, name, metric, comparator,
                            threshold, window_seconds, cooldown_seconds, severity,
                            channels, last_fired_at, last_state
                     FROM alert_rules
@@ -67,17 +67,16 @@ async def _evaluate_rule(
     project_id = rule[1]
     rule_name = rule[2]
     metric = rule[3]
-    tag_filter = rule[4] or {}
-    comparator = rule[5]
-    threshold = rule[6]
-    window_seconds = rule[7]
-    cooldown_seconds = rule[8]
-    severity = rule[9]
-    channels = rule[10] or []
-    last_fired_at = rule[11]
-    last_state = rule[12]
+    comparator = rule[4]
+    threshold = rule[5]
+    window_seconds = rule[6]
+    cooldown_seconds = rule[7]
+    severity = rule[8]
+    channels = rule[9] or []
+    last_fired_at = rule[10]
+    last_state = rule[11]
 
-    value = await _query_metric(metric, project_id, tag_filter, window_seconds, logs_session)
+    value = await _query_metric(metric, project_id, window_seconds, logs_session)
     if value is None:
         return
 
@@ -121,7 +120,6 @@ async def _evaluate_rule(
 async def _query_metric(
     metric: str,
     project_id: int,
-    tag_filter: dict,
     window_seconds: int,
     session: sa.ext.asyncio.AsyncSession,
 ) -> float | None:
@@ -165,25 +163,6 @@ async def _query_metric(
                 """
             ),
             {"pid": project_id, "since": since},
-        )
-        val = result.scalar()
-        return float(val) if val is not None else None
-
-    if metric.startswith("custom:"):
-        metric_name = metric[len("custom:"):]
-        result = await session.execute(
-            sa.text(
-                """
-                SELECT COALESCE(SUM(sum) / NULLIF(SUM(count), 0), 0)
-                FROM custom_metrics_5m
-                WHERE project_id = :pid
-                  AND name = :name
-                  AND bucket >= :since
-                  AND (:tags = '{}'::jsonb OR tags @> :tags::jsonb)
-                """
-            ),
-            {"pid": project_id, "name": metric_name, "since": since,
-             "tags": json.dumps(tag_filter)},
         )
         val = result.scalar()
         return float(val) if val is not None else None

@@ -196,7 +196,6 @@ CREATE TABLE alert_rules (
     name             TEXT NOT NULL,
     enabled          BOOLEAN NOT NULL DEFAULT TRUE,
     metric           TEXT NOT NULL,
-    tag_filter       JSONB DEFAULT '{}'::jsonb,
     comparator       TEXT NOT NULL,
     threshold        DOUBLE PRECISION NOT NULL,
     window_seconds   INTEGER NOT NULL,

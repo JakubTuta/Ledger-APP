@@ -42,7 +42,7 @@ class PanelRequest(pydantic.BaseModel):
     )
     type: str = pydantic.Field(
         ...,
-        pattern=r"^(logs|errors|metrics|error_list|bottleneck|error_heatmap|trace|trace_list|custom_metric)$",
+        pattern=r"^(logs|errors|metrics|error_list|bottleneck|error_heatmap|trace|trace_list)$",
         description="Panel type",
         examples=["errors"],
     )
@@ -72,11 +72,6 @@ class PanelRequest(pydantic.BaseModel):
     min_duration_ms: int | None = pydantic.Field(None, description="Minimum span duration filter in ms (trace_list panels)")
     has_error: bool | None = pydantic.Field(None, description="Error-only filter (trace_list panels)")
     limit: int | None = pydantic.Field(None, description="Max results (trace_list panels)")
-    metric_name: str | None = pydantic.Field(None, description="Custom metric name (custom_metric panels)")
-    tag_filter: dict[str, str] | None = pydantic.Field(None, description="Tag key/value filter (custom_metric panels)")
-    agg: str | None = pydantic.Field(None, description="Aggregation function (custom_metric panels)")
-    viz: str | None = pydantic.Field(None, description="Visualization type (custom_metric panels)")
-    step: str | None = pydantic.Field(None, description="Step interval (custom_metric panels)")
     statusClass: str | None = pydantic.Field(None, description="HTTP status class filter (logs panels): 2xx, 4xx, 5xx")
     search: str | None = pydantic.Field(None, max_length=200, description="Path/method substring filter (logs panels)")
 
@@ -156,11 +151,6 @@ class PanelResponse(pydantic.BaseModel):
     min_duration_ms: int | None = pydantic.Field(None)
     has_error: bool | None = pydantic.Field(None)
     limit: int | None = pydantic.Field(None)
-    metric_name: str | None = pydantic.Field(None)
-    tag_filter: dict[str, str] | None = pydantic.Field(None)
-    agg: str | None = pydantic.Field(None)
-    viz: str | None = pydantic.Field(None)
-    step: str | None = pydantic.Field(None)
     statusClass: str | None = pydantic.Field(None)
     search: str | None = pydantic.Field(None)
 
@@ -278,7 +268,7 @@ class UpdatePanelRequest(pydantic.BaseModel):
     )
     type: str = pydantic.Field(
         ...,
-        pattern=r"^(logs|errors|metrics|error_list|bottleneck|error_heatmap|trace|trace_list|custom_metric)$",
+        pattern=r"^(logs|errors|metrics|error_list|bottleneck|error_heatmap|trace|trace_list)$",
         description="Panel type",
         examples=["errors"],
     )
@@ -308,11 +298,6 @@ class UpdatePanelRequest(pydantic.BaseModel):
     min_duration_ms: int | None = pydantic.Field(None, description="Minimum span duration filter in ms (trace_list panels)")
     has_error: bool | None = pydantic.Field(None, description="Error-only filter (trace_list panels)")
     limit: int | None = pydantic.Field(None, description="Max results (trace_list panels)")
-    metric_name: str | None = pydantic.Field(None, description="Custom metric name (custom_metric panels)")
-    tag_filter: dict[str, str] | None = pydantic.Field(None, description="Tag key/value filter (custom_metric panels)")
-    agg: str | None = pydantic.Field(None, description="Aggregation function (custom_metric panels)")
-    viz: str | None = pydantic.Field(None, description="Visualization type (custom_metric panels)")
-    step: str | None = pydantic.Field(None, description="Step interval (custom_metric panels)")
     statusClass: str | None = pydantic.Field(None, description="HTTP status class filter (logs panels): 2xx, 4xx, 5xx")
     search: str | None = pydantic.Field(None, max_length=200, description="Path/method substring filter (logs panels)")
 

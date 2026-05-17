@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 
 import fastapi
@@ -23,12 +22,6 @@ def _panel_proto_to_response(panel) -> schemas.PanelResponse:
             w=panel.layout.w,
             h=panel.layout.h,
         )
-    tag_filter = None
-    if panel.HasField("tag_filter_json") and panel.tag_filter_json:
-        try:
-            tag_filter = json.loads(panel.tag_filter_json)
-        except (json.JSONDecodeError, ValueError):
-            pass
     return schemas.PanelResponse(
         id=panel.id,
         name=panel.name,
@@ -48,11 +41,6 @@ def _panel_proto_to_response(panel) -> schemas.PanelResponse:
         min_duration_ms=panel.min_duration_ms if panel.HasField("min_duration_ms") else None,
         has_error=panel.has_error if panel.HasField("has_error") else None,
         limit=panel.limit if panel.HasField("limit") else None,
-        metric_name=panel.metric_name if panel.HasField("metric_name") else None,
-        tag_filter=tag_filter,
-        agg=panel.agg if panel.HasField("agg") else None,
-        viz=panel.viz if panel.HasField("viz") else None,
-        step=panel.step if panel.HasField("step") else None,
         statusClass=panel.status_class if panel.HasField("status_class") else None,
         search=panel.logs_search if panel.HasField("logs_search") else None,
     )
@@ -182,16 +170,6 @@ async def create_dashboard_panel(
             grpc_request_kwargs["has_error"] = request_data.has_error
         if request_data.limit is not None:
             grpc_request_kwargs["limit"] = request_data.limit
-        if request_data.metric_name is not None:
-            grpc_request_kwargs["metric_name"] = request_data.metric_name
-        if request_data.tag_filter is not None:
-            grpc_request_kwargs["tag_filter_json"] = json.dumps(request_data.tag_filter)
-        if request_data.agg is not None:
-            grpc_request_kwargs["agg"] = request_data.agg
-        if request_data.viz is not None:
-            grpc_request_kwargs["viz"] = request_data.viz
-        if request_data.step is not None:
-            grpc_request_kwargs["step"] = request_data.step
         if request_data.statusClass is not None:
             grpc_request_kwargs["status_class"] = request_data.statusClass
         if request_data.search is not None:
@@ -303,16 +281,6 @@ async def update_dashboard_panel(
             grpc_request_kwargs["has_error"] = request_data.has_error
         if request_data.limit is not None:
             grpc_request_kwargs["limit"] = request_data.limit
-        if request_data.metric_name is not None:
-            grpc_request_kwargs["metric_name"] = request_data.metric_name
-        if request_data.tag_filter is not None:
-            grpc_request_kwargs["tag_filter_json"] = json.dumps(request_data.tag_filter)
-        if request_data.agg is not None:
-            grpc_request_kwargs["agg"] = request_data.agg
-        if request_data.viz is not None:
-            grpc_request_kwargs["viz"] = request_data.viz
-        if request_data.step is not None:
-            grpc_request_kwargs["step"] = request_data.step
         if request_data.statusClass is not None:
             grpc_request_kwargs["status_class"] = request_data.statusClass
         if request_data.search is not None:
