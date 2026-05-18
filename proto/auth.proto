@@ -56,12 +56,15 @@ service AuthService {
   rpc UpdateAlertRule(UpdateAlertRuleRequest) returns (UpdateAlertRuleResponse);
   rpc DeleteAlertRule(DeleteAlertRuleRequest) returns (DeleteAlertRuleResponse);
 
-  // Alert channel operations
-  rpc ListAlertChannels(ListAlertChannelsRequest) returns (ListAlertChannelsResponse);
-  rpc GetAlertChannel(GetAlertChannelRequest) returns (GetAlertChannelResponse);
-  rpc CreateAlertChannel(CreateAlertChannelRequest) returns (CreateAlertChannelResponse);
-  rpc UpdateAlertChannel(UpdateAlertChannelRequest) returns (UpdateAlertChannelResponse);
-  rpc DeleteAlertChannel(DeleteAlertChannelRequest) returns (DeleteAlertChannelResponse);
+  // Connector operations (account-wide)
+  rpc ListConnectors(ListConnectorsRequest) returns (ListConnectorsResponse);
+  rpc GetConnector(GetConnectorRequest) returns (GetConnectorResponse);
+  rpc CreateConnector(CreateConnectorRequest) returns (CreateConnectorResponse);
+  rpc UpdateConnector(UpdateConnectorRequest) returns (UpdateConnectorResponse);
+  rpc DeleteConnector(DeleteConnectorRequest) returns (DeleteConnectorResponse);
+
+  // Alert event history
+  rpc ListAlertEvents(ListAlertEventsRequest) returns (ListAlertEventsResponse);
 
   // Notification preferences (alert-specific)
   rpc GetAlertNotificationPreferences(GetAlertNotificationPreferencesRequest) returns (GetAlertNotificationPreferencesResponse);
@@ -547,10 +550,9 @@ message AlertRule {
   string metric = 5;
   string comparator = 7;
   double threshold = 8;
-  int32 window_seconds = 9;
-  int32 cooldown_seconds = 10;
+  string unit = 9;
   int32 severity = 11;
-  string channels = 12;  // JSON array of channel ids
+  repeated int64 connector_ids = 12;
   optional string last_fired_at = 13;
   string last_state = 14;
   string created_at = 15;
@@ -581,9 +583,9 @@ message CreateAlertRuleRequest {
   string metric = 3;
   string comparator = 5;
   double threshold = 6;
-  int32 window_seconds = 7;
-  int32 cooldown_seconds = 8;
+  string unit = 7;
   int32 severity = 9;
+  repeated int64 connector_ids = 10;
 }
 
 message CreateAlertRuleResponse {
@@ -596,8 +598,12 @@ message UpdateAlertRuleRequest {
   optional string name = 3;
   optional bool enabled = 4;
   optional double threshold = 5;
-  optional int32 cooldown_seconds = 6;
-  optional string channels = 7;  // JSON array
+  optional string unit = 6;
+  optional int32 severity = 7;
+  optional string comparator = 8;
+  optional string metric = 9;
+  repeated int64 connector_ids = 10;
+  optional bool update_connectors = 11;
 }
 
 message UpdateAlertRuleResponse {
@@ -613,68 +619,95 @@ message DeleteAlertRuleResponse {
   bool success = 1;
 }
 
-// ==================== Alert Channel Messages ====================
+// ==================== Connector Messages ====================
 
-message AlertChannel {
+message Connector {
   int64 id = 1;
-  int64 project_id = 2;
-  int64 user_id = 3;
-  string kind = 4;
-  string name = 5;
-  string config = 6;  // JSON string (without hmac_secret in responses)
-  bool enabled = 7;
-  string created_at = 8;
+  int64 account_id = 2;
+  string kind = 3;
+  string name = 4;
+  string config = 5;  // JSON string (without hmac_secret in responses)
+  bool enabled = 6;
+  string created_at = 7;
 }
 
-message ListAlertChannelsRequest {
-  int64 project_id = 1;
+message ListConnectorsRequest {
+  int64 account_id = 1;
 }
 
-message ListAlertChannelsResponse {
-  repeated AlertChannel channels = 1;
+message ListConnectorsResponse {
+  repeated Connector connectors = 1;
 }
 
-message GetAlertChannelRequest {
-  int64 channel_id = 1;
-  int64 project_id = 2;
+message GetConnectorRequest {
+  int64 connector_id = 1;
+  int64 account_id = 2;
 }
 
-message GetAlertChannelResponse {
-  AlertChannel channel = 1;
+message GetConnectorResponse {
+  Connector connector = 1;
   bool found = 2;
 }
 
-message CreateAlertChannelRequest {
-  int64 project_id = 1;
-  int64 user_id = 2;
-  string kind = 3;
-  string name = 4;
-  string config = 5;  // JSON string
+message CreateConnectorRequest {
+  int64 account_id = 1;
+  string kind = 2;
+  string name = 3;
+  string config = 4;  // JSON string
 }
 
-message CreateAlertChannelResponse {
-  AlertChannel channel = 1;
+message CreateConnectorResponse {
+  Connector connector = 1;
 }
 
-message UpdateAlertChannelRequest {
-  int64 channel_id = 1;
-  int64 project_id = 2;
+message UpdateConnectorRequest {
+  int64 connector_id = 1;
+  int64 account_id = 2;
   optional string name = 3;
   optional bool enabled = 4;
   optional string config = 5;  // JSON string
 }
 
-message UpdateAlertChannelResponse {
-  AlertChannel channel = 1;
+message UpdateConnectorResponse {
+  Connector connector = 1;
 }
 
-message DeleteAlertChannelRequest {
-  int64 channel_id = 1;
-  int64 project_id = 2;
+message DeleteConnectorRequest {
+  int64 connector_id = 1;
+  int64 account_id = 2;
 }
 
-message DeleteAlertChannelResponse {
+message DeleteConnectorResponse {
   bool success = 1;
+}
+
+// ==================== Alert Event Messages ====================
+
+message AlertEvent {
+  int64 id = 1;
+  optional int64 rule_id = 2;
+  int64 project_id = 3;
+  string rule_name = 4;
+  string metric = 5;
+  string comparator = 6;
+  double threshold = 7;
+  string unit = 8;
+  double value = 9;
+  int32 severity = 10;
+  string state = 11;
+  string connectors_sent = 12;  // JSON array of {id,kind,name}
+  string fired_at = 13;
+}
+
+message ListAlertEventsRequest {
+  int64 project_id = 1;
+  int32 limit = 2;
+  optional int64 before_id = 3;
+}
+
+message ListAlertEventsResponse {
+  repeated AlertEvent events = 1;
+  bool has_more = 2;
 }
 
 // ==================== Alert Notification Preferences Messages ====================

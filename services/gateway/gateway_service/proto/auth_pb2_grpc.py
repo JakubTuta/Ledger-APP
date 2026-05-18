@@ -219,30 +219,35 @@ class AuthServiceStub(object):
                 request_serializer=auth__pb2.DeleteAlertRuleRequest.SerializeToString,
                 response_deserializer=auth__pb2.DeleteAlertRuleResponse.FromString,
                 _registered_method=True)
-        self.ListAlertChannels = channel.unary_unary(
-                '/auth.AuthService/ListAlertChannels',
-                request_serializer=auth__pb2.ListAlertChannelsRequest.SerializeToString,
-                response_deserializer=auth__pb2.ListAlertChannelsResponse.FromString,
+        self.ListConnectors = channel.unary_unary(
+                '/auth.AuthService/ListConnectors',
+                request_serializer=auth__pb2.ListConnectorsRequest.SerializeToString,
+                response_deserializer=auth__pb2.ListConnectorsResponse.FromString,
                 _registered_method=True)
-        self.GetAlertChannel = channel.unary_unary(
-                '/auth.AuthService/GetAlertChannel',
-                request_serializer=auth__pb2.GetAlertChannelRequest.SerializeToString,
-                response_deserializer=auth__pb2.GetAlertChannelResponse.FromString,
+        self.GetConnector = channel.unary_unary(
+                '/auth.AuthService/GetConnector',
+                request_serializer=auth__pb2.GetConnectorRequest.SerializeToString,
+                response_deserializer=auth__pb2.GetConnectorResponse.FromString,
                 _registered_method=True)
-        self.CreateAlertChannel = channel.unary_unary(
-                '/auth.AuthService/CreateAlertChannel',
-                request_serializer=auth__pb2.CreateAlertChannelRequest.SerializeToString,
-                response_deserializer=auth__pb2.CreateAlertChannelResponse.FromString,
+        self.CreateConnector = channel.unary_unary(
+                '/auth.AuthService/CreateConnector',
+                request_serializer=auth__pb2.CreateConnectorRequest.SerializeToString,
+                response_deserializer=auth__pb2.CreateConnectorResponse.FromString,
                 _registered_method=True)
-        self.UpdateAlertChannel = channel.unary_unary(
-                '/auth.AuthService/UpdateAlertChannel',
-                request_serializer=auth__pb2.UpdateAlertChannelRequest.SerializeToString,
-                response_deserializer=auth__pb2.UpdateAlertChannelResponse.FromString,
+        self.UpdateConnector = channel.unary_unary(
+                '/auth.AuthService/UpdateConnector',
+                request_serializer=auth__pb2.UpdateConnectorRequest.SerializeToString,
+                response_deserializer=auth__pb2.UpdateConnectorResponse.FromString,
                 _registered_method=True)
-        self.DeleteAlertChannel = channel.unary_unary(
-                '/auth.AuthService/DeleteAlertChannel',
-                request_serializer=auth__pb2.DeleteAlertChannelRequest.SerializeToString,
-                response_deserializer=auth__pb2.DeleteAlertChannelResponse.FromString,
+        self.DeleteConnector = channel.unary_unary(
+                '/auth.AuthService/DeleteConnector',
+                request_serializer=auth__pb2.DeleteConnectorRequest.SerializeToString,
+                response_deserializer=auth__pb2.DeleteConnectorResponse.FromString,
+                _registered_method=True)
+        self.ListAlertEvents = channel.unary_unary(
+                '/auth.AuthService/ListAlertEvents',
+                request_serializer=auth__pb2.ListAlertEventsRequest.SerializeToString,
+                response_deserializer=auth__pb2.ListAlertEventsResponse.FromString,
                 _registered_method=True)
         self.GetAlertNotificationPreferences = channel.unary_unary(
                 '/auth.AuthService/GetAlertNotificationPreferences',
@@ -489,33 +494,40 @@ class AuthServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def ListAlertChannels(self, request, context):
-        """Alert channel operations
+    def ListConnectors(self, request, context):
+        """Connector operations (account-wide)
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def GetAlertChannel(self, request, context):
+    def GetConnector(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def CreateAlertChannel(self, request, context):
+    def CreateConnector(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def UpdateAlertChannel(self, request, context):
+    def UpdateConnector(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def DeleteAlertChannel(self, request, context):
+    def DeleteConnector(self, request, context):
         """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListAlertEvents(self, request, context):
+        """Alert event history
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -721,30 +733,35 @@ def add_AuthServiceServicer_to_server(servicer, server):
                     request_deserializer=auth__pb2.DeleteAlertRuleRequest.FromString,
                     response_serializer=auth__pb2.DeleteAlertRuleResponse.SerializeToString,
             ),
-            'ListAlertChannels': grpc.unary_unary_rpc_method_handler(
-                    servicer.ListAlertChannels,
-                    request_deserializer=auth__pb2.ListAlertChannelsRequest.FromString,
-                    response_serializer=auth__pb2.ListAlertChannelsResponse.SerializeToString,
+            'ListConnectors': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListConnectors,
+                    request_deserializer=auth__pb2.ListConnectorsRequest.FromString,
+                    response_serializer=auth__pb2.ListConnectorsResponse.SerializeToString,
             ),
-            'GetAlertChannel': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetAlertChannel,
-                    request_deserializer=auth__pb2.GetAlertChannelRequest.FromString,
-                    response_serializer=auth__pb2.GetAlertChannelResponse.SerializeToString,
+            'GetConnector': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetConnector,
+                    request_deserializer=auth__pb2.GetConnectorRequest.FromString,
+                    response_serializer=auth__pb2.GetConnectorResponse.SerializeToString,
             ),
-            'CreateAlertChannel': grpc.unary_unary_rpc_method_handler(
-                    servicer.CreateAlertChannel,
-                    request_deserializer=auth__pb2.CreateAlertChannelRequest.FromString,
-                    response_serializer=auth__pb2.CreateAlertChannelResponse.SerializeToString,
+            'CreateConnector': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateConnector,
+                    request_deserializer=auth__pb2.CreateConnectorRequest.FromString,
+                    response_serializer=auth__pb2.CreateConnectorResponse.SerializeToString,
             ),
-            'UpdateAlertChannel': grpc.unary_unary_rpc_method_handler(
-                    servicer.UpdateAlertChannel,
-                    request_deserializer=auth__pb2.UpdateAlertChannelRequest.FromString,
-                    response_serializer=auth__pb2.UpdateAlertChannelResponse.SerializeToString,
+            'UpdateConnector': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateConnector,
+                    request_deserializer=auth__pb2.UpdateConnectorRequest.FromString,
+                    response_serializer=auth__pb2.UpdateConnectorResponse.SerializeToString,
             ),
-            'DeleteAlertChannel': grpc.unary_unary_rpc_method_handler(
-                    servicer.DeleteAlertChannel,
-                    request_deserializer=auth__pb2.DeleteAlertChannelRequest.FromString,
-                    response_serializer=auth__pb2.DeleteAlertChannelResponse.SerializeToString,
+            'DeleteConnector': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteConnector,
+                    request_deserializer=auth__pb2.DeleteConnectorRequest.FromString,
+                    response_serializer=auth__pb2.DeleteConnectorResponse.SerializeToString,
+            ),
+            'ListAlertEvents': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListAlertEvents,
+                    request_deserializer=auth__pb2.ListAlertEventsRequest.FromString,
+                    response_serializer=auth__pb2.ListAlertEventsResponse.SerializeToString,
             ),
             'GetAlertNotificationPreferences': grpc.unary_unary_rpc_method_handler(
                     servicer.GetAlertNotificationPreferences,
@@ -1767,7 +1784,7 @@ class AuthService(object):
             _registered_method=True)
 
     @staticmethod
-    def ListAlertChannels(request,
+    def ListConnectors(request,
             target,
             options=(),
             channel_credentials=None,
@@ -1780,9 +1797,9 @@ class AuthService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/auth.AuthService/ListAlertChannels',
-            auth__pb2.ListAlertChannelsRequest.SerializeToString,
-            auth__pb2.ListAlertChannelsResponse.FromString,
+            '/auth.AuthService/ListConnectors',
+            auth__pb2.ListConnectorsRequest.SerializeToString,
+            auth__pb2.ListConnectorsResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1794,7 +1811,7 @@ class AuthService(object):
             _registered_method=True)
 
     @staticmethod
-    def GetAlertChannel(request,
+    def GetConnector(request,
             target,
             options=(),
             channel_credentials=None,
@@ -1807,9 +1824,9 @@ class AuthService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/auth.AuthService/GetAlertChannel',
-            auth__pb2.GetAlertChannelRequest.SerializeToString,
-            auth__pb2.GetAlertChannelResponse.FromString,
+            '/auth.AuthService/GetConnector',
+            auth__pb2.GetConnectorRequest.SerializeToString,
+            auth__pb2.GetConnectorResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1821,7 +1838,7 @@ class AuthService(object):
             _registered_method=True)
 
     @staticmethod
-    def CreateAlertChannel(request,
+    def CreateConnector(request,
             target,
             options=(),
             channel_credentials=None,
@@ -1834,9 +1851,9 @@ class AuthService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/auth.AuthService/CreateAlertChannel',
-            auth__pb2.CreateAlertChannelRequest.SerializeToString,
-            auth__pb2.CreateAlertChannelResponse.FromString,
+            '/auth.AuthService/CreateConnector',
+            auth__pb2.CreateConnectorRequest.SerializeToString,
+            auth__pb2.CreateConnectorResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1848,7 +1865,7 @@ class AuthService(object):
             _registered_method=True)
 
     @staticmethod
-    def UpdateAlertChannel(request,
+    def UpdateConnector(request,
             target,
             options=(),
             channel_credentials=None,
@@ -1861,9 +1878,9 @@ class AuthService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/auth.AuthService/UpdateAlertChannel',
-            auth__pb2.UpdateAlertChannelRequest.SerializeToString,
-            auth__pb2.UpdateAlertChannelResponse.FromString,
+            '/auth.AuthService/UpdateConnector',
+            auth__pb2.UpdateConnectorRequest.SerializeToString,
+            auth__pb2.UpdateConnectorResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1875,7 +1892,7 @@ class AuthService(object):
             _registered_method=True)
 
     @staticmethod
-    def DeleteAlertChannel(request,
+    def DeleteConnector(request,
             target,
             options=(),
             channel_credentials=None,
@@ -1888,9 +1905,36 @@ class AuthService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/auth.AuthService/DeleteAlertChannel',
-            auth__pb2.DeleteAlertChannelRequest.SerializeToString,
-            auth__pb2.DeleteAlertChannelResponse.FromString,
+            '/auth.AuthService/DeleteConnector',
+            auth__pb2.DeleteConnectorRequest.SerializeToString,
+            auth__pb2.DeleteConnectorResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListAlertEvents(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/ListAlertEvents',
+            auth__pb2.ListAlertEventsRequest.SerializeToString,
+            auth__pb2.ListAlertEventsResponse.FromString,
             options,
             channel_credentials,
             insecure,

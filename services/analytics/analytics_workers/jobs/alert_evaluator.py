@@ -5,12 +5,24 @@ import json
 import time
 import typing
 
+import email.message
+
 import aiohttp
+import aiosmtplib
+
+import analytics_workers.config as config
 import analytics_workers.database as database
+import analytics_workers.redis_client as redis_client
 import analytics_workers.utils.logging as logging
 import sqlalchemy as sa
 
 logger = logging.get_logger("jobs.alert_evaluator")
+
+_SEVERITY_TO_LEVEL: dict[str, str] = {
+    "critical": "critical",
+    "warning": "error",
+    "info": "error",
+}
 
 _COMPARATORS: dict[str, typing.Callable[[float, float], bool]] = {
     ">":  lambda v, t: v > t,
@@ -18,6 +30,9 @@ _COMPARATORS: dict[str, typing.Callable[[float, float], bool]] = {
     ">=": lambda v, t: v >= t,
     "<=": lambda v, t: v <= t,
 }
+
+_LOOKBACK_MINUTES = 10
+_LATENCY_LOOKBACK_MINUTES = 60
 
 
 async def evaluate_alert_rules() -> None:
@@ -28,9 +43,8 @@ async def evaluate_alert_rules() -> None:
             rules_result = await auth_session.execute(
                 sa.text(
                     """
-                    SELECT id, project_id, name, metric, comparator,
-                           threshold, window_seconds, cooldown_seconds, severity,
-                           channels, last_fired_at, last_state
+                    SELECT id, project_id, name, metric_type, comparator,
+                           threshold, unit, severity, state
                     FROM alert_rules
                     WHERE enabled = TRUE
                     ORDER BY id
@@ -42,13 +56,13 @@ async def evaluate_alert_rules() -> None:
         if not rules:
             return
 
-        async with database.get_logs_session() as logs_session:
-            async with database.get_auth_session() as auth_session:
-                for rule in rules:
-                    try:
+        for rule in rules:
+            try:
+                async with database.get_logs_session() as logs_session:
+                    async with database.get_auth_session() as auth_session:
                         await _evaluate_rule(rule, logs_session, auth_session)
-                    except Exception as e:
-                        logger.error(f"Rule {rule[0]} evaluation failed: {e}", exc_info=True)
+            except Exception as e:
+                logger.error(f"Rule {rule[0]} evaluation failed: {e}", exc_info=True)
 
         elapsed = time.perf_counter() - start
         logger.info(f"Alert evaluation done in {elapsed:.2f}s for {len(rules)} rules")
@@ -69,14 +83,11 @@ async def _evaluate_rule(
     metric = rule[3]
     comparator = rule[4]
     threshold = rule[5]
-    window_seconds = rule[6]
-    cooldown_seconds = rule[7]
-    severity = rule[8]
-    channels = rule[9] or []
-    last_fired_at = rule[10]
-    last_state = rule[11]
+    unit = rule[6]
+    severity = rule[7]
+    state = rule[8]
 
-    value = await _query_metric(metric, project_id, window_seconds, logs_session)
+    value = await _query_metric(metric, project_id, logs_session)
     if value is None:
         return
 
@@ -85,51 +96,104 @@ async def _evaluate_rule(
         logger.warning(f"Unknown comparator '{comparator}' for rule {rule_id}")
         return
 
-    breached = compare_fn(value, threshold)
+    normalized_threshold = _normalize_threshold(metric, threshold, unit)
+    breached = compare_fn(value, normalized_threshold)
     now = datetime.datetime.now(datetime.timezone.utc)
 
-    if breached and last_state == "ok":
-        cooldown_ok = (
-            last_fired_at is None
-            or (now - last_fired_at).total_seconds() >= cooldown_seconds
-        )
-        if cooldown_ok:
-            await _fire_rule(rule_id, project_id, rule_name, metric, value, threshold,
-                             severity, channels, auth_session)
-            await auth_session.execute(
-                sa.text(
-                    "UPDATE alert_rules SET last_state = 'firing', last_fired_at = :now, "
-                    "updated_at = :now WHERE id = :id"
-                ),
-                {"now": now, "id": rule_id},
-            )
-            await auth_session.commit()
+    logger.info(
+        f"Rule {rule_id} '{rule_name}' project={project_id} metric={metric} "
+        f"value={value:.4f} {comparator} threshold={normalized_threshold:.4f} "
+        f"breached={breached} state={state}"
+    )
 
-    elif not breached and last_state == "firing":
-        await _resolve_rule(rule_id, project_id, rule_name, metric, value, threshold,
-                             severity, channels, auth_session)
+    if breached and state == "ok":
+        await _record_and_dispatch(
+            rule_id, project_id, rule_name, metric, comparator, threshold,
+            unit, value, severity, "firing", auth_session,
+        )
         await auth_session.execute(
             sa.text(
-                "UPDATE alert_rules SET last_state = 'ok', updated_at = :now WHERE id = :id"
+                "UPDATE alert_rules SET state = 'firing', last_fired_at = :now, "
+                "fired_value = :val, updated_at = :now WHERE id = :id"
+            ),
+            {"now": now, "val": value, "id": rule_id},
+        )
+        await auth_session.commit()
+
+    elif not breached and state == "firing":
+        await _record_and_dispatch(
+            rule_id, project_id, rule_name, metric, comparator, threshold,
+            unit, value, severity, "resolved", auth_session,
+        )
+        await auth_session.execute(
+            sa.text(
+                "UPDATE alert_rules SET state = 'ok', updated_at = :now WHERE id = :id"
             ),
             {"now": now, "id": rule_id},
         )
         await auth_session.commit()
 
 
+def _normalize_threshold(metric: str, threshold: float, unit: str) -> float:
+    if metric in ("p95_latency", "p99_latency"):
+        if unit == "s":
+            return threshold * 1000.0
+        return threshold
+    return threshold
+
+
 async def _query_metric(
     metric: str,
     project_id: int,
-    window_seconds: int,
     session: sa.ext.asyncio.AsyncSession,
 ) -> float | None:
-    since = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=window_seconds)
+    now = datetime.datetime.now(datetime.timezone.utc)
+    since = now - datetime.timedelta(minutes=_LOOKBACK_MINUTES)
+    latency_since = now - datetime.timedelta(minutes=_LATENCY_LOOKBACK_MINUTES)
 
-    if metric == "error_rate":
+    if metric in ("p95_latency", "p99_latency"):
+        pct = 0.95 if metric == "p95_latency" else 0.99
         result = await session.execute(
             sa.text(
                 """
-                SELECT COALESCE(SUM(errors)::float / NULLIF(SUM(total), 0), 0)
+                SELECT COALESCE(
+                    PERCENTILE_CONT(:pct) WITHIN GROUP (
+                        ORDER BY (attributes->'endpoint'->>'duration_ms')::float
+                    ), 0)
+                FROM logs
+                WHERE project_id = :pid
+                  AND timestamp >= :since
+                  AND log_type = 'endpoint'
+                  AND attributes->'endpoint'->>'duration_ms' IS NOT NULL
+                """
+            ),
+            {"pid": project_id, "since": latency_since, "pct": pct},
+        )
+        val = result.scalar()
+        return float(val) if val is not None else None
+
+    if metric in ("error_rate_5xx", "error_rate_4xx"):
+        low, high = (500, 599) if metric == "error_rate_5xx" else (400, 499)
+        result = await session.execute(
+            sa.text(
+                """
+                SELECT COALESCE(
+                    100.0 * count(*) FILTER (WHERE status_code BETWEEN :low AND :high)
+                    / NULLIF(count(*) FILTER (WHERE status_code IS NOT NULL), 0), 0)
+                FROM logs
+                WHERE project_id = :pid AND timestamp >= :since
+                """
+            ),
+            {"pid": project_id, "since": since, "low": low, "high": high},
+        )
+        val = result.scalar()
+        return float(val) if val is not None else None
+
+    if metric == "error_rate_all":
+        result = await session.execute(
+            sa.text(
+                """
+                SELECT COALESCE(100.0 * SUM(errors)::float / NULLIF(SUM(total), 0), 0)
                 FROM error_rate_5m
                 WHERE project_id = :pid AND bucket >= :since
                 """
@@ -139,7 +203,7 @@ async def _query_metric(
         val = result.scalar()
         return float(val) if val is not None else None
 
-    if metric == "log_volume":
+    if metric == "request_volume":
         result = await session.execute(
             sa.text(
                 """
@@ -153,157 +217,251 @@ async def _query_metric(
         val = result.scalar()
         return float(val) if val is not None else None
 
-    if metric == "endpoint_p95":
-        result = await session.execute(
-            sa.text(
-                """
-                SELECT COALESCE(AVG(p95_ms), 0)
-                FROM endpoint_latency_1h
-                WHERE project_id = :pid AND bucket >= :since
-                """
-            ),
-            {"pid": project_id, "since": since},
-        )
-        val = result.scalar()
-        return float(val) if val is not None else None
-
     logger.warning(f"Unknown metric type: {metric}")
     return None
 
 
-async def _fire_rule(
+async def _record_and_dispatch(
     rule_id: int,
     project_id: int,
     rule_name: str,
     metric: str,
-    value: float,
+    comparator: str,
     threshold: float,
-    severity: int,
-    channels: list,
-    auth_session: sa.ext.asyncio.AsyncSession,
-) -> None:
-    payload = {
-        "rule_id": rule_id,
-        "name": rule_name,
-        "metric": metric,
-        "value": value,
-        "threshold": threshold,
-        "fired_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-    }
-    await _dispatch(rule_id, project_id, "alert_firing", severity, payload, channels, auth_session)
-
-
-async def _resolve_rule(
-    rule_id: int,
-    project_id: int,
-    rule_name: str,
-    metric: str,
+    unit: str,
     value: float,
-    threshold: float,
-    severity: int,
-    channels: list,
+    severity: str,
+    state: str,
     auth_session: sa.ext.asyncio.AsyncSession,
 ) -> None:
-    payload = {
-        "rule_id": rule_id,
-        "name": rule_name,
-        "metric": metric,
-        "value": value,
-        "threshold": threshold,
-        "resolved_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-    }
-    await _dispatch(rule_id, project_id, "alert_resolved", severity, payload, channels, auth_session)
-
-
-async def _dispatch(
-    rule_id: int,
-    project_id: int,
-    kind: str,
-    severity: int,
-    payload: dict,
-    channel_ids: list,
-    auth_session: sa.ext.asyncio.AsyncSession,
-) -> None:
-    if not channel_ids:
-        return
-
-    channels_result = await auth_session.execute(
+    connectors_result = await auth_session.execute(
         sa.text(
             """
-            SELECT ac.id, ac.user_id, ac.kind, ac.config
-            FROM alert_channels ac
-            WHERE ac.id = ANY(:ids) AND ac.enabled = TRUE
+            SELECT c.id, c.kind, c.name, c.config
+            FROM alert_rule_connectors arc
+            JOIN connectors c ON c.id = arc.connector_id
+            WHERE arc.rule_id = :rid AND c.enabled = TRUE
             """
         ),
-        {"ids": channel_ids},
+        {"rid": rule_id},
     )
-    channels = channels_result.fetchall()
+    connectors = connectors_result.fetchall()
 
-    for channel in channels:
-        channel_id = channel[0]
-        user_id = channel[1]
-        channel_kind = channel[2]
-        channel_config = channel[3] or {}
+    owner_result = await auth_session.execute(
+        sa.text("SELECT account_id FROM projects WHERE id = :pid"),
+        {"pid": project_id},
+    )
+    owner_row = owner_result.fetchone()
+    owner_id = owner_row[0] if owner_row else None
 
-        muted = await _is_muted(user_id, project_id, rule_id, severity, auth_session)
-        if muted:
-            continue
+    kind = "alert_firing" if state == "firing" else "alert_resolved"
+    now = datetime.datetime.now(datetime.timezone.utc)
+    payload = {
+        "rule_id": rule_id,
+        "name": rule_name,
+        "metric": metric,
+        "comparator": comparator,
+        "threshold": threshold,
+        "unit": unit,
+        "value": value,
+        "state": state,
+        "fired_at": now.isoformat(),
+    }
 
-        if channel_kind == "in_app":
-            await auth_session.execute(
-                sa.text(
-                    """
-                    INSERT INTO notifications (user_id, project_id, kind, severity, payload)
-                    VALUES (:user_id, :project_id, :kind, :severity, :payload::jsonb)
-                    """
-                ),
-                {
-                    "user_id": user_id,
-                    "project_id": project_id,
-                    "kind": kind,
-                    "severity": severity,
-                    "payload": json.dumps(payload),
-                },
-            )
+    connectors_sent: list[dict] = []
+    for connector in connectors:
+        connector_id = connector[0]
+        connector_kind = connector[1]
+        connector_name = connector[2]
+        connector_config = connector[3] or {}
 
-        elif channel_kind == "webhook":
-            url = channel_config.get("url")
-            secret = channel_config.get("hmac_secret", "")
+        if connector_kind == "in_app":
+            if owner_id is not None:
+                await auth_session.execute(
+                    sa.text(
+                        """
+                        INSERT INTO notifications
+                            (user_id, project_id, kind, severity, payload)
+                        VALUES (:user_id, :project_id, :kind, :severity, :payload::jsonb)
+                        """
+                    ),
+                    {
+                        "user_id": owner_id,
+                        "project_id": project_id,
+                        "kind": kind,
+                        "severity": severity,
+                        "payload": json.dumps(payload),
+                    },
+                )
+                await _publish_in_app(
+                    project_id, rule_name, metric, comparator,
+                    threshold, unit, value, severity, state, now,
+                )
+        elif connector_kind == "webhook":
+            url = connector_config.get("url")
+            secret = connector_config.get("hmac_secret", "")
             if url:
                 await _post_webhook(url, secret, payload)
+        elif connector_kind == "email":
+            address = connector_config.get("address")
+            if address:
+                await _send_email(
+                    address, rule_name, metric, comparator,
+                    threshold, unit, value, severity, state,
+                )
 
-        elif channel_kind == "email":
-            logger.info(
-                f"[email stub] Would send alert '{kind}' to {channel_config.get('email')} "
-                f"for rule {rule_id}"
-            )
+        connectors_sent.append(
+            {"id": connector_id, "kind": connector_kind, "name": connector_name}
+        )
 
+    await auth_session.execute(
+        sa.text(
+            """
+            INSERT INTO alert_events
+                (rule_id, project_id, rule_name, metric_type, comparator,
+                 threshold, unit, value, severity, state, connectors_sent, fired_at)
+            VALUES
+                (:rule_id, :project_id, :rule_name, :metric, :comparator,
+                 :threshold, :unit, :value, :severity, :state,
+                 :connectors_sent::jsonb, :fired_at)
+            """
+        ),
+        {
+            "rule_id": rule_id,
+            "project_id": project_id,
+            "rule_name": rule_name,
+            "metric": metric,
+            "comparator": comparator,
+            "threshold": threshold,
+            "unit": unit,
+            "value": value,
+            "severity": severity,
+            "state": state,
+            "connectors_sent": json.dumps(connectors_sent),
+            "fired_at": now,
+        },
+    )
     await auth_session.commit()
 
 
-async def _is_muted(
-    user_id: int,
+async def _publish_in_app(
     project_id: int,
-    rule_id: int,
-    severity: int,
-    auth_session: sa.ext.asyncio.AsyncSession,
-) -> bool:
-    result = await auth_session.execute(
-        sa.text(
-            """
-            SELECT muted FROM notification_preferences
-            WHERE user_id = :user_id
-              AND project_id = :project_id
-              AND (rule_id IS NULL OR rule_id = :rule_id)
-              AND (severity IS NULL OR severity = :severity)
-            ORDER BY rule_id NULLS LAST
-            LIMIT 1
-            """
-        ),
-        {"user_id": user_id, "project_id": project_id, "rule_id": rule_id, "severity": severity},
+    rule_name: str,
+    metric: str,
+    comparator: str,
+    threshold: float,
+    unit: str,
+    value: float,
+    severity: str,
+    state: str,
+    now: datetime.datetime,
+) -> None:
+    fmt_threshold = f"{threshold:g}{unit if unit != 'count' else ''}".strip()
+    if state == "firing":
+        message = (
+            f"Alert firing: {rule_name} "
+            f"({metric} {comparator} {fmt_threshold}, now {value:g})"
+        )
+        error_type = "Alert firing"
+    else:
+        message = f"Alert resolved: {rule_name}"
+        error_type = "Alert resolved"
+
+    notification = {
+        "project_id": project_id,
+        "level": _SEVERITY_TO_LEVEL.get(severity, "error"),
+        "log_type": "alert",
+        "message": message,
+        "error_type": error_type,
+        "timestamp": now.isoformat(),
+        "alert_state": state,
+        "severity": severity,
+    }
+
+    try:
+        published = await redis_client.get_redis().publish(
+            f"notifications:errors:{project_id}", json.dumps(notification)
+        )
+        logger.info(
+            f"Published in_app alert to {published} SSE subscribers "
+            f"(project {project_id}, state {state})"
+        )
+    except Exception as e:
+        logger.warning(f"Failed to publish in_app alert to Redis: {e}")
+
+
+async def _send_email(
+    address: str,
+    rule_name: str,
+    metric: str,
+    comparator: str,
+    threshold: float,
+    unit: str,
+    value: float,
+    severity: str,
+    state: str,
+) -> None:
+    settings = config.get_settings()
+
+    if not settings.EMAIL_ENABLED:
+        logger.info(
+            f"Email disabled (EMAIL_ENABLED=false); skipped alert to {address}"
+        )
+        return
+
+    if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
+        logger.warning("SMTP credentials not configured; cannot send email alert")
+        return
+
+    fmt_threshold = f"{threshold:g}{unit if unit != 'count' else ''}".strip()
+    if state == "firing":
+        subject = f"[Ledger] {severity.upper()} alert firing: {rule_name}"
+        body = (
+            f"Alert rule '{rule_name}' is firing.\n\n"
+            f"Metric: {metric}\n"
+            f"Condition: {metric} {comparator} {fmt_threshold}\n"
+            f"Current value: {value:g}\n"
+            f"Severity: {severity}\n"
+        )
+    else:
+        subject = f"[Ledger] Alert resolved: {rule_name}"
+        body = (
+            f"Alert rule '{rule_name}' has resolved.\n\n"
+            f"Metric: {metric}\n"
+            f"Current value: {value:g}\n"
+        )
+
+    body += (
+        "\n—\n"
+        "Ledger automated alert. Do not reply.\n"
+        "Manage rules: https://ledger.jtuta.cloud/alerts\n"
     )
-    row = result.fetchone()
-    return bool(row[0]) if row else False
+
+    message = email.message.EmailMessage()
+    message["From"] = settings.SMTP_FROM or settings.SMTP_USER
+    message["To"] = address
+    message["Subject"] = subject
+    message.set_content(body)
+
+    tls_kwargs: dict = {}
+    if settings.SMTP_PORT == 465:
+        tls_kwargs["use_tls"] = True
+    else:
+        tls_kwargs["start_tls"] = settings.SMTP_USE_TLS
+
+    try:
+        await aiosmtplib.send(
+            message,
+            hostname=settings.SMTP_HOST,
+            port=settings.SMTP_PORT,
+            username=settings.SMTP_USER,
+            password=settings.SMTP_PASSWORD,
+            timeout=15,
+            **tls_kwargs,
+        )
+        logger.info(f"Sent email alert to {address} (state {state})")
+    except Exception as e:
+        logger.warning(f"Email delivery failed to {address}: {e}")
 
 
 async def _post_webhook(url: str, secret: str, payload: dict) -> None:

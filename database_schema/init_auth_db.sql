@@ -191,54 +191,85 @@ ALTER TABLE notifications
 -- ============================================
 
 CREATE TABLE alert_rules (
-    id               BIGSERIAL PRIMARY KEY,
-    project_id       BIGINT NOT NULL,
-    name             TEXT NOT NULL,
-    enabled          BOOLEAN NOT NULL DEFAULT TRUE,
-    metric           TEXT NOT NULL,
-    comparator       TEXT NOT NULL,
-    threshold        DOUBLE PRECISION NOT NULL,
-    window_seconds   INTEGER NOT NULL,
-    cooldown_seconds INTEGER NOT NULL DEFAULT 600,
-    severity         SMALLINT NOT NULL DEFAULT 2,
-    channels         JSONB NOT NULL DEFAULT '[]'::jsonb,
-    last_fired_at    TIMESTAMPTZ,
-    last_state       TEXT NOT NULL DEFAULT 'ok',
-    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id            BIGSERIAL PRIMARY KEY,
+    project_id    BIGINT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    name          VARCHAR(255) NOT NULL,
+    metric_type   VARCHAR(50) NOT NULL,
+    comparator    VARCHAR(4) NOT NULL,
+    threshold     DOUBLE PRECISION NOT NULL,
+    unit          VARCHAR(8) NOT NULL DEFAULT 'count',
+    severity      VARCHAR(20) NOT NULL DEFAULT 'warning',
+    enabled       BOOLEAN NOT NULL DEFAULT TRUE,
+    state         VARCHAR(10) NOT NULL DEFAULT 'ok',
+    last_fired_at TIMESTAMPTZ,
+    fired_value   DOUBLE PRECISION,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_alert_rules_project ON alert_rules (project_id);
-CREATE INDEX idx_alert_rules_enabled ON alert_rules (enabled) WHERE enabled = TRUE;
+CREATE INDEX idx_alert_rules_project_id ON alert_rules (project_id);
+CREATE INDEX idx_alert_rules_enabled ON alert_rules (project_id, enabled) WHERE enabled = TRUE;
 
 ALTER TABLE alert_rules
     ADD CONSTRAINT check_alert_comparator
     CHECK (comparator IN ('>', '<', '>=', '<='));
 ALTER TABLE alert_rules
     ADD CONSTRAINT check_alert_severity
-    CHECK (severity IN (1, 2, 3));
+    CHECK (severity IN ('critical', 'warning', 'info'));
 ALTER TABLE alert_rules
     ADD CONSTRAINT check_alert_state
-    CHECK (last_state IN ('ok', 'firing'));
+    CHECK (state IN ('ok', 'firing'));
+ALTER TABLE alert_rules
+    ADD CONSTRAINT check_alert_unit
+    CHECK (unit IN ('ms', 's', '%', 'count'));
 
-CREATE TABLE alert_channels (
+CREATE TABLE connectors (
     id          BIGSERIAL PRIMARY KEY,
-    project_id  BIGINT NOT NULL,
-    user_id     BIGINT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-    kind        TEXT NOT NULL,
-    name        TEXT NOT NULL,
+    account_id  BIGINT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    kind        VARCHAR(20) NOT NULL,
+    name        VARCHAR(255) NOT NULL,
     config      JSONB NOT NULL DEFAULT '{}'::jsonb,
     enabled     BOOLEAN NOT NULL DEFAULT TRUE,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_alert_channels_project ON alert_channels (project_id);
-CREATE INDEX idx_alert_channels_user ON alert_channels (user_id);
+CREATE INDEX idx_connectors_account_id ON connectors (account_id);
 
-ALTER TABLE alert_channels
-    ADD CONSTRAINT check_channel_kind
+ALTER TABLE connectors
+    ADD CONSTRAINT check_connector_kind
     CHECK (kind IN ('in_app', 'email', 'webhook'));
+
+CREATE TABLE alert_rule_connectors (
+    rule_id      BIGINT NOT NULL REFERENCES alert_rules(id) ON DELETE CASCADE,
+    connector_id BIGINT NOT NULL REFERENCES connectors(id) ON DELETE CASCADE,
+    PRIMARY KEY (rule_id, connector_id)
+);
+
+CREATE INDEX idx_alert_rule_connectors_connector ON alert_rule_connectors (connector_id);
+
+CREATE TABLE alert_events (
+    id              BIGSERIAL PRIMARY KEY,
+    rule_id         BIGINT REFERENCES alert_rules(id) ON DELETE SET NULL,
+    project_id      BIGINT NOT NULL,
+    rule_name       VARCHAR(255) NOT NULL,
+    metric_type     VARCHAR(50) NOT NULL,
+    comparator      VARCHAR(4) NOT NULL,
+    threshold       DOUBLE PRECISION NOT NULL,
+    unit            VARCHAR(8) NOT NULL DEFAULT 'count',
+    value           DOUBLE PRECISION NOT NULL,
+    severity        VARCHAR(20) NOT NULL DEFAULT 'warning',
+    state           VARCHAR(10) NOT NULL,
+    connectors_sent JSONB NOT NULL DEFAULT '[]'::jsonb,
+    fired_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_alert_events_project_fired ON alert_events (project_id, fired_at);
+CREATE INDEX idx_alert_events_rule_id ON alert_events (rule_id);
+
+ALTER TABLE alert_events
+    ADD CONSTRAINT check_alert_event_state
+    CHECK (state IN ('firing', 'resolved'));
 
 CREATE TABLE notification_preferences (
     user_id     BIGINT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,

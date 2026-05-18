@@ -620,10 +620,9 @@ class AlertRule(database.Base):
     metric_type: Mapped[str] = mapped_column(VARCHAR(50), nullable=False)
     comparator: Mapped[str] = mapped_column(VARCHAR(4), nullable=False)
     threshold: Mapped[float] = mapped_column(nullable=False)
-    window_minutes: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
+    unit: Mapped[str] = mapped_column(VARCHAR(8), default="count", nullable=False)
     severity: Mapped[str] = mapped_column(VARCHAR(20), default="warning", nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    cooldown_minutes: Mapped[int] = mapped_column(Integer, default=60, nullable=False)
     state: Mapped[str] = mapped_column(VARCHAR(10), default="ok", nullable=False)
     last_fired_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -642,10 +641,10 @@ class AlertRule(database.Base):
         nullable=False,
     )
 
-    channels: Mapped[list["AlertChannel"]] = relationship(
-        "AlertChannel",
-        back_populates="rule",
-        cascade="all, delete-orphan",
+    connectors: Mapped[list["Connector"]] = relationship(
+        "Connector",
+        secondary="alert_rule_connectors",
+        backref="alert_rules",
     )
 
     __table_args__ = (
@@ -669,8 +668,8 @@ class AlertRule(database.Base):
             name="check_alert_state",
         ),
         CheckConstraint(
-            "window_minutes >= 1",
-            name="check_alert_window_minutes",
+            "unit IN ('ms', 's', '%', 'count')",
+            name="check_alert_unit",
         ),
     )
 
@@ -678,38 +677,107 @@ class AlertRule(database.Base):
         return f"<AlertRule(id={self.id}, project_id={self.project_id}, name={self.name}, state={self.state})>"
 
 
-class AlertChannel(database.Base):
-    __tablename__ = "alert_channels"
+class Connector(database.Base):
+    __tablename__ = "connectors"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
 
-    rule_id: Mapped[int] = mapped_column(
+    account_id: Mapped[int] = mapped_column(
         BigInteger,
-        ForeignKey("alert_rules.id", ondelete="CASCADE"),
+        ForeignKey("accounts.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
     kind: Mapped[str] = mapped_column(VARCHAR(20), nullable=False)
+    name: Mapped[str] = mapped_column(VARCHAR(255), nullable=False)
     config: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         default=datetime.datetime.now(datetime.timezone.utc),
         nullable=False,
     )
-
-    rule: Mapped["AlertRule"] = relationship("AlertRule", back_populates="channels")
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.datetime.now(datetime.timezone.utc),
+        onupdate=datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
 
     __table_args__ = (
-        Index("idx_alert_channels_rule_id", "rule_id"),
+        Index("idx_connectors_account_id", "account_id"),
         CheckConstraint(
             "kind IN ('in_app', 'email', 'webhook')",
-            name="check_alert_channel_kind",
+            name="check_connector_kind",
         ),
     )
 
     def __repr__(self) -> str:
-        return f"<AlertChannel(id={self.id}, rule_id={self.rule_id}, kind={self.kind})>"
+        return f"<Connector(id={self.id}, account_id={self.account_id}, kind={self.kind})>"
+
+
+class AlertRuleConnector(database.Base):
+    __tablename__ = "alert_rule_connectors"
+
+    rule_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("alert_rules.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    connector_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("connectors.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+
+    __table_args__ = (
+        Index("idx_alert_rule_connectors_connector", "connector_id"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<AlertRuleConnector(rule_id={self.rule_id}, connector_id={self.connector_id})>"
+
+
+class AlertEvent(database.Base):
+    __tablename__ = "alert_events"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+
+    rule_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("alert_rules.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    project_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    rule_name: Mapped[str] = mapped_column(VARCHAR(255), nullable=False)
+    metric_type: Mapped[str] = mapped_column(VARCHAR(50), nullable=False)
+    comparator: Mapped[str] = mapped_column(VARCHAR(4), nullable=False)
+    threshold: Mapped[float] = mapped_column(nullable=False)
+    unit: Mapped[str] = mapped_column(VARCHAR(8), default="count", nullable=False)
+    value: Mapped[float] = mapped_column(nullable=False)
+    severity: Mapped[str] = mapped_column(VARCHAR(20), default="warning", nullable=False)
+    state: Mapped[str] = mapped_column(VARCHAR(10), nullable=False)
+    connectors_sent: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+
+    fired_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+        index=True,
+    )
+
+    __table_args__ = (
+        Index("idx_alert_events_project_fired", "project_id", "fired_at"),
+        CheckConstraint(
+            "state IN ('firing', 'resolved')",
+            name="check_alert_event_state",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return f"<AlertEvent(id={self.id}, rule_id={self.rule_id}, state={self.state})>"
 
 
 class NotificationPreference(database.Base):

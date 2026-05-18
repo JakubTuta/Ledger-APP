@@ -146,6 +146,41 @@ class Settings(pydantic_settings.BaseSettings):
             return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
+    EMAIL_ENABLED: bool = pydantic.Field(
+        default=False,
+        description="Enable outbound email alert delivery",
+    )
+
+    SMTP_HOST: str = pydantic.Field(
+        default="smtp.gmail.com",
+        description="SMTP server hostname",
+    )
+
+    SMTP_PORT: int = pydantic.Field(
+        default=587,
+        description="SMTP server port (587 = STARTTLS)",
+    )
+
+    SMTP_USER: str = pydantic.Field(
+        default="",
+        description="SMTP username (Gmail address)",
+    )
+
+    SMTP_PASSWORD: str = pydantic.Field(
+        default="",
+        description="SMTP password (Gmail App Password, not account password)",
+    )
+
+    SMTP_FROM: str = pydantic.Field(
+        default="",
+        description="From address; falls back to SMTP_USER when empty",
+    )
+
+    SMTP_USE_TLS: bool = pydantic.Field(
+        default=True,
+        description="Use STARTTLS for SMTP connection",
+    )
+
     ANALYTICS_ERROR_RATE_CRON: str = pydantic.Field(
         default="*/10 * * * *",
         description="Error rate aggregation cron schedule (minute hour day month day_of_week)",

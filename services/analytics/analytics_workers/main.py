@@ -14,13 +14,7 @@ import apscheduler.triggers.cron as cron_trigger
 logger = logging_utils.setup_logging()
 settings = config.get_settings()
 
-scheduler = async_scheduler.AsyncIOScheduler(
-    job_defaults={
-        "coalesce": True,
-        "max_instances": 1,
-        "misfire_grace_time": settings.ANALYTICS_JOB_MISFIRE_GRACE_TIME,
-    }
-)
+scheduler: async_scheduler.AsyncIOScheduler | None = None
 
 
 async def startup() -> None:
@@ -41,7 +35,8 @@ async def shutdown(sig: signal.Signals | None = None) -> None:
         logger.info("Shutting down...")
 
     try:
-        scheduler.shutdown(wait=True)
+        if scheduler is not None:
+            scheduler.shutdown(wait=True)
 
         await database.close_db()
 
@@ -207,7 +202,17 @@ def _parse_cron_expression(cron_expr: str) -> dict:
 
 
 async def main() -> None:
+    global scheduler
+
     await startup()
+
+    scheduler = async_scheduler.AsyncIOScheduler(
+        job_defaults={
+            "coalesce": True,
+            "max_instances": 1,
+            "misfire_grace_time": settings.ANALYTICS_JOB_MISFIRE_GRACE_TIME,
+        }
+    )
 
     setup_jobs()
     scheduler.start()

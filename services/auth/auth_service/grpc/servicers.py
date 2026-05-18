@@ -1102,9 +1102,13 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     )
                 )
                 rules = result.scalars().all()
-                return auth_pb2.ListAlertRulesResponse(
-                    rules=[_alert_rule_to_proto(r) for r in rules]
-                )
+                proto_rules = [
+                    _alert_rule_to_proto(
+                        r, await _connector_ids_for_rule(session, r.id)
+                    )
+                    for r in rules
+                ]
+                return auth_pb2.ListAlertRulesResponse(rules=proto_rules)
         except Exception as e:
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f"Internal error: {str(e)}")
@@ -1126,8 +1130,9 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                 rule = result.scalar_one_or_none()
                 if not rule:
                     return auth_pb2.GetAlertRuleResponse(found=False)
+                connector_ids = await _connector_ids_for_rule(session, rule.id)
                 return auth_pb2.GetAlertRuleResponse(
-                    rule=_alert_rule_to_proto(rule), found=True
+                    rule=_alert_rule_to_proto(rule, connector_ids), found=True
                 )
         except Exception as e:
             context.set_code(grpc.StatusCode.INTERNAL)
@@ -1141,23 +1146,31 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
     ) -> auth_pb2.CreateAlertRuleResponse:
         try:
             async with database.get_session() as session:
-                severity_map = {0: "info", 1: "warning", 2: "critical"}
                 rule = models.AlertRule(
                     project_id=request.project_id,
                     name=request.name,
                     metric_type=request.metric,
                     comparator=request.comparator,
                     threshold=request.threshold,
-                    window_minutes=max(1, request.window_seconds // 60),
-                    cooldown_minutes=max(1, request.cooldown_seconds // 60),
-                    severity=severity_map.get(request.severity, "warning"),
+                    unit=request.unit or "count",
+                    severity=_SEVERITY_INT_TO_STR.get(request.severity, "warning"),
                     enabled=True,
                     state="ok",
                 )
                 session.add(rule)
+                await session.flush()
+                connector_ids = list(request.connector_ids)
+                for cid in connector_ids:
+                    session.add(
+                        models.AlertRuleConnector(
+                            rule_id=rule.id, connector_id=cid
+                        )
+                    )
                 await session.commit()
                 await session.refresh(rule)
-                return auth_pb2.CreateAlertRuleResponse(rule=_alert_rule_to_proto(rule))
+                return auth_pb2.CreateAlertRuleResponse(
+                    rule=_alert_rule_to_proto(rule, connector_ids)
+                )
         except Exception as e:
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f"Internal error: {str(e)}")
@@ -1187,11 +1200,34 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     rule.enabled = request.enabled
                 if request.HasField("threshold"):
                     rule.threshold = request.threshold
-                if request.HasField("cooldown_seconds"):
-                    rule.cooldown_minutes = max(1, request.cooldown_seconds // 60)
+                if request.HasField("unit"):
+                    rule.unit = request.unit
+                if request.HasField("severity"):
+                    rule.severity = _SEVERITY_INT_TO_STR.get(
+                        request.severity, rule.severity
+                    )
+                if request.HasField("comparator"):
+                    rule.comparator = request.comparator
+                if request.HasField("metric"):
+                    rule.metric_type = request.metric
+                if request.HasField("update_connectors") and request.update_connectors:
+                    await session.execute(
+                        sa.delete(models.AlertRuleConnector).where(
+                            models.AlertRuleConnector.rule_id == rule.id
+                        )
+                    )
+                    for cid in request.connector_ids:
+                        session.add(
+                            models.AlertRuleConnector(
+                                rule_id=rule.id, connector_id=cid
+                            )
+                        )
                 await session.commit()
                 await session.refresh(rule)
-                return auth_pb2.UpdateAlertRuleResponse(rule=_alert_rule_to_proto(rule))
+                connector_ids = await _connector_ids_for_rule(session, rule.id)
+                return auth_pb2.UpdateAlertRuleResponse(
+                    rule=_alert_rule_to_proto(rule, connector_ids)
+                )
         except Exception as e:
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f"Internal error: {str(e)}")
@@ -1217,163 +1253,182 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
             context.set_details(f"Internal error: {str(e)}")
             return auth_pb2.DeleteAlertRuleResponse(success=False)
 
-    # ==================== Alert Channel Operations ====================
+    # ==================== Connector Operations ====================
 
-    async def ListAlertChannels(
+    async def ListConnectors(
         self,
-        request: auth_pb2.ListAlertChannelsRequest,
+        request: auth_pb2.ListConnectorsRequest,
         context: grpc.aio.ServicerContext,
-    ) -> auth_pb2.ListAlertChannelsResponse:
+    ) -> auth_pb2.ListConnectorsResponse:
         try:
             async with database.get_session() as session:
                 result = await session.execute(
-                    sa.select(models.AlertChannel, models.AlertRule.project_id)
-                    .join(
-                        models.AlertRule,
-                        models.AlertChannel.rule_id == models.AlertRule.id,
-                    )
-                    .where(models.AlertRule.project_id == request.project_id)
+                    sa.select(models.Connector)
+                    .where(models.Connector.account_id == request.account_id)
+                    .where(models.Connector.kind == "in_app")
+                    .limit(1)
                 )
-                rows = result.all()
-                channels = [
-                    _alert_channel_to_proto(ch, proj_id) for ch, proj_id in rows
-                ]
-                return auth_pb2.ListAlertChannelsResponse(channels=channels)
-        except Exception as e:
-            context.set_code(grpc.StatusCode.INTERNAL)
-            context.set_details(f"Internal error: {str(e)}")
-            return auth_pb2.ListAlertChannelsResponse()
-
-    async def GetAlertChannel(
-        self,
-        request: auth_pb2.GetAlertChannelRequest,
-        context: grpc.aio.ServicerContext,
-    ) -> auth_pb2.GetAlertChannelResponse:
-        try:
-            async with database.get_session() as session:
+                if result.scalar_one_or_none() is None:
+                    session.add(
+                        models.Connector(
+                            account_id=request.account_id,
+                            kind="in_app",
+                            name="In-app",
+                            config={},
+                            enabled=True,
+                        )
+                    )
+                    await session.commit()
                 result = await session.execute(
-                    sa.select(models.AlertChannel, models.AlertRule.project_id)
-                    .join(
-                        models.AlertRule,
-                        models.AlertChannel.rule_id == models.AlertRule.id,
-                    )
-                    .where(
-                        models.AlertChannel.id == request.channel_id,
-                        models.AlertRule.project_id == request.project_id,
-                    )
+                    sa.select(models.Connector)
+                    .where(models.Connector.account_id == request.account_id)
+                    .order_by(models.Connector.id)
                 )
-                row = result.first()
-                if not row:
-                    return auth_pb2.GetAlertChannelResponse(found=False)
-                ch, proj_id = row
-                return auth_pb2.GetAlertChannelResponse(
-                    channel=_alert_channel_to_proto(ch, proj_id), found=True
+                connectors = result.scalars().all()
+                return auth_pb2.ListConnectorsResponse(
+                    connectors=[_connector_to_proto(c) for c in connectors]
                 )
         except Exception as e:
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f"Internal error: {str(e)}")
-            return auth_pb2.GetAlertChannelResponse(found=False)
+            return auth_pb2.ListConnectorsResponse()
 
-    async def CreateAlertChannel(
+    async def GetConnector(
         self,
-        request: auth_pb2.CreateAlertChannelRequest,
+        request: auth_pb2.GetConnectorRequest,
         context: grpc.aio.ServicerContext,
-    ) -> auth_pb2.CreateAlertChannelResponse:
+    ) -> auth_pb2.GetConnectorResponse:
         try:
             async with database.get_session() as session:
                 result = await session.execute(
-                    sa.select(models.AlertRule.id).where(
-                        models.AlertRule.project_id == request.project_id
-                    ).limit(1)
+                    sa.select(models.Connector).where(
+                        models.Connector.id == request.connector_id,
+                        models.Connector.account_id == request.account_id,
+                    )
                 )
-                rule_id = result.scalar_one_or_none()
-                if rule_id is None:
-                    context.set_code(grpc.StatusCode.FAILED_PRECONDITION)
-                    context.set_details("No alert rules exist for this project")
-                    return auth_pb2.CreateAlertChannelResponse()
+                connector = result.scalar_one_or_none()
+                if not connector:
+                    return auth_pb2.GetConnectorResponse(found=False)
+                return auth_pb2.GetConnectorResponse(
+                    connector=_connector_to_proto(connector), found=True
+                )
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.GetConnectorResponse(found=False)
+
+    async def CreateConnector(
+        self,
+        request: auth_pb2.CreateConnectorRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.CreateConnectorResponse:
+        try:
+            async with database.get_session() as session:
                 config_dict = json.loads(request.config) if request.config else {}
-                channel = models.AlertChannel(
-                    rule_id=rule_id,
+                connector = models.Connector(
+                    account_id=request.account_id,
                     kind=request.kind,
+                    name=request.name or request.kind,
                     config=config_dict,
+                    enabled=True,
                 )
-                session.add(channel)
+                session.add(connector)
                 await session.commit()
-                await session.refresh(channel)
-                return auth_pb2.CreateAlertChannelResponse(
-                    channel=_alert_channel_to_proto(channel, request.project_id)
+                await session.refresh(connector)
+                return auth_pb2.CreateConnectorResponse(
+                    connector=_connector_to_proto(connector)
                 )
         except Exception as e:
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f"Internal error: {str(e)}")
-            return auth_pb2.CreateAlertChannelResponse()
+            return auth_pb2.CreateConnectorResponse()
 
-    async def UpdateAlertChannel(
+    async def UpdateConnector(
         self,
-        request: auth_pb2.UpdateAlertChannelRequest,
+        request: auth_pb2.UpdateConnectorRequest,
         context: grpc.aio.ServicerContext,
-    ) -> auth_pb2.UpdateAlertChannelResponse:
+    ) -> auth_pb2.UpdateConnectorResponse:
         try:
             async with database.get_session() as session:
                 result = await session.execute(
-                    sa.select(models.AlertChannel, models.AlertRule.project_id)
-                    .join(
-                        models.AlertRule,
-                        models.AlertChannel.rule_id == models.AlertRule.id,
-                    )
-                    .where(
-                        models.AlertChannel.id == request.channel_id,
-                        models.AlertRule.project_id == request.project_id,
+                    sa.select(models.Connector).where(
+                        models.Connector.id == request.connector_id,
+                        models.Connector.account_id == request.account_id,
                     )
                 )
-                row = result.first()
-                if not row:
+                connector = result.scalar_one_or_none()
+                if not connector:
                     context.set_code(grpc.StatusCode.NOT_FOUND)
-                    context.set_details("Alert channel not found")
-                    return auth_pb2.UpdateAlertChannelResponse()
-                ch, proj_id = row
+                    context.set_details("Connector not found")
+                    return auth_pb2.UpdateConnectorResponse()
+                if request.HasField("name"):
+                    connector.name = request.name
+                if request.HasField("enabled"):
+                    connector.enabled = request.enabled
                 if request.HasField("config"):
-                    ch.config = json.loads(request.config)
+                    new_config = json.loads(request.config) if request.config else {}
+                    existing = dict(connector.config or {})
+                    if "hmac_secret" in existing and "hmac_secret" not in new_config:
+                        new_config["hmac_secret"] = existing["hmac_secret"]
+                    connector.config = new_config
                 await session.commit()
-                await session.refresh(ch)
-                return auth_pb2.UpdateAlertChannelResponse(
-                    channel=_alert_channel_to_proto(ch, proj_id)
+                await session.refresh(connector)
+                return auth_pb2.UpdateConnectorResponse(
+                    connector=_connector_to_proto(connector)
                 )
         except Exception as e:
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f"Internal error: {str(e)}")
-            return auth_pb2.UpdateAlertChannelResponse()
+            return auth_pb2.UpdateConnectorResponse()
 
-    async def DeleteAlertChannel(
+    async def DeleteConnector(
         self,
-        request: auth_pb2.DeleteAlertChannelRequest,
+        request: auth_pb2.DeleteConnectorRequest,
         context: grpc.aio.ServicerContext,
-    ) -> auth_pb2.DeleteAlertChannelResponse:
+    ) -> auth_pb2.DeleteConnectorResponse:
         try:
             async with database.get_session() as session:
-                subq = (
-                    sa.select(models.AlertChannel.id)
-                    .join(
-                        models.AlertRule,
-                        models.AlertChannel.rule_id == models.AlertRule.id,
-                    )
-                    .where(
-                        models.AlertChannel.id == request.channel_id,
-                        models.AlertRule.project_id == request.project_id,
-                    )
-                    .scalar_subquery()
-                )
                 await session.execute(
-                    sa.delete(models.AlertChannel).where(
-                        models.AlertChannel.id == subq
+                    sa.delete(models.Connector).where(
+                        models.Connector.id == request.connector_id,
+                        models.Connector.account_id == request.account_id,
                     )
                 )
                 await session.commit()
-                return auth_pb2.DeleteAlertChannelResponse(success=True)
+                return auth_pb2.DeleteConnectorResponse(success=True)
         except Exception as e:
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f"Internal error: {str(e)}")
-            return auth_pb2.DeleteAlertChannelResponse(success=False)
+            return auth_pb2.DeleteConnectorResponse(success=False)
+
+    # ==================== Alert Event History ====================
+
+    async def ListAlertEvents(
+        self,
+        request: auth_pb2.ListAlertEventsRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.ListAlertEventsResponse:
+        try:
+            limit = request.limit if request.limit > 0 else 25
+            async with database.get_session() as session:
+                query = sa.select(models.AlertEvent).where(
+                    models.AlertEvent.project_id == request.project_id
+                )
+                if request.HasField("before_id"):
+                    query = query.where(models.AlertEvent.id < request.before_id)
+                query = query.order_by(models.AlertEvent.id.desc()).limit(limit + 1)
+                result = await session.execute(query)
+                events = result.scalars().all()
+                has_more = len(events) > limit
+                events = events[:limit]
+                return auth_pb2.ListAlertEventsResponse(
+                    events=[_alert_event_to_proto(e) for e in events],
+                    has_more=has_more,
+                )
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.ListAlertEventsResponse()
 
     # ==================== Alert Notification Preference Operations ====================
 
@@ -1496,7 +1551,9 @@ def _notification_to_proto(n: models.Notification) -> auth_pb2.NotificationItem:
     return item
 
 
-def _alert_rule_to_proto(r: models.AlertRule) -> auth_pb2.AlertRule:
+def _alert_rule_to_proto(
+    r: models.AlertRule, connector_ids: list[int]
+) -> auth_pb2.AlertRule:
     rule = auth_pb2.AlertRule(
         id=r.id,
         project_id=r.project_id,
@@ -1505,10 +1562,9 @@ def _alert_rule_to_proto(r: models.AlertRule) -> auth_pb2.AlertRule:
         metric=r.metric_type,
         comparator=r.comparator,
         threshold=r.threshold,
-        window_seconds=r.window_minutes * 60,
-        cooldown_seconds=r.cooldown_minutes * 60,
+        unit=r.unit,
         severity=_severity_str_to_int(r.severity),
-        channels="[]",
+        connector_ids=connector_ids,
         last_state=r.state,
         created_at=r.created_at.isoformat(),
         updated_at=r.updated_at.isoformat(),
@@ -1518,21 +1574,52 @@ def _alert_rule_to_proto(r: models.AlertRule) -> auth_pb2.AlertRule:
     return rule
 
 
-def _alert_channel_to_proto(
-    ch: models.AlertChannel, project_id: int
-) -> auth_pb2.AlertChannel:
-    config_safe = dict(ch.config or {})
+def _connector_to_proto(c: models.Connector) -> auth_pb2.Connector:
+    config_safe = dict(c.config or {})
     config_safe.pop("hmac_secret", None)
-    return auth_pb2.AlertChannel(
-        id=ch.id,
-        project_id=project_id,
-        user_id=0,
-        kind=ch.kind,
-        name=ch.kind,
+    return auth_pb2.Connector(
+        id=c.id,
+        account_id=c.account_id,
+        kind=c.kind,
+        name=c.name,
         config=json.dumps(config_safe),
-        enabled=True,
-        created_at=ch.created_at.isoformat(),
+        enabled=c.enabled,
+        created_at=c.created_at.isoformat(),
     )
+
+
+def _alert_event_to_proto(e: models.AlertEvent) -> auth_pb2.AlertEvent:
+    event = auth_pb2.AlertEvent(
+        id=e.id,
+        project_id=e.project_id,
+        rule_name=e.rule_name,
+        metric=e.metric_type,
+        comparator=e.comparator,
+        threshold=e.threshold,
+        unit=e.unit,
+        value=e.value,
+        severity=_severity_str_to_int(e.severity),
+        state=e.state,
+        connectors_sent=json.dumps(e.connectors_sent or []),
+        fired_at=e.fired_at.isoformat(),
+    )
+    if e.rule_id is not None:
+        event.rule_id = e.rule_id
+    return event
+
+
+_SEVERITY_INT_TO_STR = {0: "info", 1: "warning", 2: "critical"}
+
+
+async def _connector_ids_for_rule(
+    session: "sa.ext.asyncio.AsyncSession", rule_id: int
+) -> list[int]:
+    result = await session.execute(
+        sa.select(models.AlertRuleConnector.connector_id).where(
+            models.AlertRuleConnector.rule_id == rule_id
+        )
+    )
+    return [row[0] for row in result.all()]
 
 
 def _notif_pref_to_proto(
