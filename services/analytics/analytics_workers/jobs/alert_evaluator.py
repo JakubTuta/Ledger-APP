@@ -98,33 +98,30 @@ async def _evaluate_rule(
 
     normalized_threshold = _normalize_threshold(metric, threshold, unit)
     breached = compare_fn(value, normalized_threshold)
+    display_value = _to_display_value(metric, value, unit)
     now = datetime.datetime.now(datetime.timezone.utc)
 
     logger.info(
         f"Rule {rule_id} '{rule_name}' project={project_id} metric={metric} "
         f"value={value:.4f} {comparator} threshold={normalized_threshold:.4f} "
-        f"breached={breached} state={state}"
+        f"breached={breached}"
     )
 
     if breached and state == "ok":
         await _record_and_dispatch(
             rule_id, project_id, rule_name, metric, comparator, threshold,
-            unit, value, severity, "firing", auth_session,
+            unit, display_value, severity, auth_session,
         )
         await auth_session.execute(
             sa.text(
                 "UPDATE alert_rules SET state = 'firing', last_fired_at = :now, "
                 "fired_value = :val, updated_at = :now WHERE id = :id"
             ),
-            {"now": now, "val": value, "id": rule_id},
+            {"now": now, "val": display_value, "id": rule_id},
         )
         await auth_session.commit()
 
     elif not breached and state == "firing":
-        await _record_and_dispatch(
-            rule_id, project_id, rule_name, metric, comparator, threshold,
-            unit, value, severity, "resolved", auth_session,
-        )
         await auth_session.execute(
             sa.text(
                 "UPDATE alert_rules SET state = 'ok', updated_at = :now WHERE id = :id"
@@ -140,6 +137,12 @@ def _normalize_threshold(metric: str, threshold: float, unit: str) -> float:
             return threshold * 1000.0
         return threshold
     return threshold
+
+
+def _to_display_value(metric: str, value: float, unit: str) -> float:
+    if metric in ("p95_latency", "p99_latency") and unit == "s":
+        return value / 1000.0
+    return value
 
 
 async def _query_metric(
@@ -231,7 +234,6 @@ async def _record_and_dispatch(
     unit: str,
     value: float,
     severity: str,
-    state: str,
     auth_session: sa.ext.asyncio.AsyncSession,
 ) -> None:
     connectors_result = await auth_session.execute(
@@ -254,7 +256,6 @@ async def _record_and_dispatch(
     owner_row = owner_result.fetchone()
     owner_id = owner_row[0] if owner_row else None
 
-    kind = "alert_firing" if state == "firing" else "alert_resolved"
     now = datetime.datetime.now(datetime.timezone.utc)
     payload = {
         "rule_id": rule_id,
@@ -264,7 +265,6 @@ async def _record_and_dispatch(
         "threshold": threshold,
         "unit": unit,
         "value": value,
-        "state": state,
         "fired_at": now.isoformat(),
     }
 
@@ -282,20 +282,19 @@ async def _record_and_dispatch(
                         """
                         INSERT INTO notifications
                             (user_id, project_id, kind, severity, payload)
-                        VALUES (:user_id, :project_id, :kind, :severity, :payload::jsonb)
+                        VALUES (:user_id, :project_id, 'alert_firing', :severity, CAST(:payload AS jsonb))
                         """
                     ),
                     {
                         "user_id": owner_id,
                         "project_id": project_id,
-                        "kind": kind,
                         "severity": severity,
                         "payload": json.dumps(payload),
                     },
                 )
                 await _publish_in_app(
                     project_id, rule_name, metric, comparator,
-                    threshold, unit, value, severity, state, now,
+                    threshold, unit, value, severity, now,
                 )
         elif connector_kind == "webhook":
             url = connector_config.get("url")
@@ -307,7 +306,7 @@ async def _record_and_dispatch(
             if address:
                 await _send_email(
                     address, rule_name, metric, comparator,
-                    threshold, unit, value, severity, state,
+                    threshold, unit, value, severity,
                 )
 
         connectors_sent.append(
@@ -322,8 +321,8 @@ async def _record_and_dispatch(
                  threshold, unit, value, severity, state, connectors_sent, fired_at)
             VALUES
                 (:rule_id, :project_id, :rule_name, :metric, :comparator,
-                 :threshold, :unit, :value, :severity, :state,
-                 :connectors_sent::jsonb, :fired_at)
+                 :threshold, :unit, :value, :severity, 'firing',
+                 CAST(:connectors_sent AS jsonb), :fired_at)
             """
         ),
         {
@@ -336,7 +335,6 @@ async def _record_and_dispatch(
             "unit": unit,
             "value": value,
             "severity": severity,
-            "state": state,
             "connectors_sent": json.dumps(connectors_sent),
             "fired_at": now,
         },
@@ -353,28 +351,21 @@ async def _publish_in_app(
     unit: str,
     value: float,
     severity: str,
-    state: str,
     now: datetime.datetime,
 ) -> None:
     fmt_threshold = f"{threshold:g}{unit if unit != 'count' else ''}".strip()
-    if state == "firing":
-        message = (
-            f"Alert firing: {rule_name} "
-            f"({metric} {comparator} {fmt_threshold}, now {value:g})"
-        )
-        error_type = "Alert firing"
-    else:
-        message = f"Alert resolved: {rule_name}"
-        error_type = "Alert resolved"
+    message = (
+        f"Alert firing: {rule_name} "
+        f"({metric} {comparator} {fmt_threshold}, now {value:g})"
+    )
 
     notification = {
         "project_id": project_id,
         "level": _SEVERITY_TO_LEVEL.get(severity, "error"),
         "log_type": "alert",
         "message": message,
-        "error_type": error_type,
+        "error_type": "Alert firing",
         "timestamp": now.isoformat(),
-        "alert_state": state,
         "severity": severity,
     }
 
@@ -384,7 +375,7 @@ async def _publish_in_app(
         )
         logger.info(
             f"Published in_app alert to {published} SSE subscribers "
-            f"(project {project_id}, state {state})"
+            f"(project {project_id})"
         )
     except Exception as e:
         logger.warning(f"Failed to publish in_app alert to Redis: {e}")
@@ -399,7 +390,6 @@ async def _send_email(
     unit: str,
     value: float,
     severity: str,
-    state: str,
 ) -> None:
     settings = config.get_settings()
 
@@ -414,24 +404,13 @@ async def _send_email(
         return
 
     fmt_threshold = f"{threshold:g}{unit if unit != 'count' else ''}".strip()
-    if state == "firing":
-        subject = f"[Ledger] {severity.upper()} alert firing: {rule_name}"
-        body = (
-            f"Alert rule '{rule_name}' is firing.\n\n"
-            f"Metric: {metric}\n"
-            f"Condition: {metric} {comparator} {fmt_threshold}\n"
-            f"Current value: {value:g}\n"
-            f"Severity: {severity}\n"
-        )
-    else:
-        subject = f"[Ledger] Alert resolved: {rule_name}"
-        body = (
-            f"Alert rule '{rule_name}' has resolved.\n\n"
-            f"Metric: {metric}\n"
-            f"Current value: {value:g}\n"
-        )
-
-    body += (
+    subject = f"[Ledger] {severity.upper()} alert firing: {rule_name}"
+    body = (
+        f"Alert rule '{rule_name}' is firing.\n\n"
+        f"Metric: {metric}\n"
+        f"Condition: {metric} {comparator} {fmt_threshold}\n"
+        f"Current value: {value:g}\n"
+        f"Severity: {severity}\n"
         "\n—\n"
         "Ledger automated alert. Do not reply.\n"
         "Manage rules: https://ledger.jtuta.cloud/alerts\n"
@@ -459,7 +438,7 @@ async def _send_email(
             timeout=15,
             **tls_kwargs,
         )
-        logger.info(f"Sent email alert to {address} (state {state})")
+        logger.info(f"Sent email alert to {address}")
     except Exception as e:
         logger.warning(f"Email delivery failed to {address}: {e}")
 

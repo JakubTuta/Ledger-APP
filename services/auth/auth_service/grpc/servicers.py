@@ -1565,7 +1565,6 @@ def _alert_rule_to_proto(
         unit=r.unit,
         severity=_severity_str_to_int(r.severity),
         connector_ids=connector_ids,
-        last_state=r.state,
         created_at=r.created_at.isoformat(),
         updated_at=r.updated_at.isoformat(),
     )
@@ -1599,7 +1598,6 @@ def _alert_event_to_proto(e: models.AlertEvent) -> auth_pb2.AlertEvent:
         unit=e.unit,
         value=e.value,
         severity=_severity_str_to_int(e.severity),
-        state=e.state,
         connectors_sent=json.dumps(e.connectors_sent or []),
         fired_at=e.fired_at.isoformat(),
     )

@@ -554,7 +554,6 @@ message AlertRule {
   int32 severity = 11;
   repeated int64 connector_ids = 12;
   optional string last_fired_at = 13;
-  string last_state = 14;
   string created_at = 15;
   string updated_at = 16;
 }
@@ -694,7 +693,6 @@ message AlertEvent {
   string unit = 8;
   double value = 9;
   int32 severity = 10;
-  string state = 11;
   string connectors_sent = 12;  // JSON array of {id,kind,name}
   string fired_at = 13;
 }

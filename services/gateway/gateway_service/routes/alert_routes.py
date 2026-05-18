@@ -56,7 +56,6 @@ class AlertRuleResponse(BaseModel):
     severity: int
     connector_ids: list[int]
     last_fired_at: str | None
-    last_state: str
     created_at: str
     updated_at: str
 
@@ -94,7 +93,6 @@ class AlertEventResponse(BaseModel):
     unit: str
     value: float
     severity: int
-    state: str
     connectors_sent: str
     fired_at: str
 
@@ -132,7 +130,6 @@ def _proto_rule_to_response(r) -> AlertRuleResponse:
         severity=r.severity,
         connector_ids=list(r.connector_ids),
         last_fired_at=r.last_fired_at if r.HasField("last_fired_at") else None,
-        last_state=r.last_state,
         created_at=r.created_at,
         updated_at=r.updated_at,
     )
@@ -150,7 +147,6 @@ def _proto_event_to_response(e) -> AlertEventResponse:
         unit=e.unit,
         value=e.value,
         severity=e.severity,
-        state=e.state,
         connectors_sent=e.connectors_sent,
         fired_at=e.fired_at,
     )

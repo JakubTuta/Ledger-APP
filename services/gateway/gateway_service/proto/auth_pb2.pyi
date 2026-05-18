@@ -776,7 +776,7 @@ class CreateNotificationResponse(_message.Message):
     def __init__(self, notification: _Optional[_Union[NotificationItem, _Mapping]] = ...) -> None: ...
 
 class AlertRule(_message.Message):
-    __slots__ = ("id", "project_id", "name", "enabled", "metric", "comparator", "threshold", "unit", "severity", "connector_ids", "last_fired_at", "last_state", "created_at", "updated_at")
+    __slots__ = ("id", "project_id", "name", "enabled", "metric", "comparator", "threshold", "unit", "severity", "connector_ids", "last_fired_at", "created_at", "updated_at")
     ID_FIELD_NUMBER: _ClassVar[int]
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
@@ -788,7 +788,6 @@ class AlertRule(_message.Message):
     SEVERITY_FIELD_NUMBER: _ClassVar[int]
     CONNECTOR_IDS_FIELD_NUMBER: _ClassVar[int]
     LAST_FIRED_AT_FIELD_NUMBER: _ClassVar[int]
-    LAST_STATE_FIELD_NUMBER: _ClassVar[int]
     CREATED_AT_FIELD_NUMBER: _ClassVar[int]
     UPDATED_AT_FIELD_NUMBER: _ClassVar[int]
     id: int
@@ -802,10 +801,9 @@ class AlertRule(_message.Message):
     severity: int
     connector_ids: _containers.RepeatedScalarFieldContainer[int]
     last_fired_at: str
-    last_state: str
     created_at: str
     updated_at: str
-    def __init__(self, id: _Optional[int] = ..., project_id: _Optional[int] = ..., name: _Optional[str] = ..., enabled: bool = ..., metric: _Optional[str] = ..., comparator: _Optional[str] = ..., threshold: _Optional[float] = ..., unit: _Optional[str] = ..., severity: _Optional[int] = ..., connector_ids: _Optional[_Iterable[int]] = ..., last_fired_at: _Optional[str] = ..., last_state: _Optional[str] = ..., created_at: _Optional[str] = ..., updated_at: _Optional[str] = ...) -> None: ...
+    def __init__(self, id: _Optional[int] = ..., project_id: _Optional[int] = ..., name: _Optional[str] = ..., enabled: bool = ..., metric: _Optional[str] = ..., comparator: _Optional[str] = ..., threshold: _Optional[float] = ..., unit: _Optional[str] = ..., severity: _Optional[int] = ..., connector_ids: _Optional[_Iterable[int]] = ..., last_fired_at: _Optional[str] = ..., created_at: _Optional[str] = ..., updated_at: _Optional[str] = ...) -> None: ...
 
 class ListAlertRulesRequest(_message.Message):
     __slots__ = ("project_id",)
@@ -1006,7 +1004,7 @@ class DeleteConnectorResponse(_message.Message):
     def __init__(self, success: bool = ...) -> None: ...
 
 class AlertEvent(_message.Message):
-    __slots__ = ("id", "rule_id", "project_id", "rule_name", "metric", "comparator", "threshold", "unit", "value", "severity", "state", "connectors_sent", "fired_at")
+    __slots__ = ("id", "rule_id", "project_id", "rule_name", "metric", "comparator", "threshold", "unit", "value", "severity", "connectors_sent", "fired_at")
     ID_FIELD_NUMBER: _ClassVar[int]
     RULE_ID_FIELD_NUMBER: _ClassVar[int]
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
@@ -1017,7 +1015,6 @@ class AlertEvent(_message.Message):
     UNIT_FIELD_NUMBER: _ClassVar[int]
     VALUE_FIELD_NUMBER: _ClassVar[int]
     SEVERITY_FIELD_NUMBER: _ClassVar[int]
-    STATE_FIELD_NUMBER: _ClassVar[int]
     CONNECTORS_SENT_FIELD_NUMBER: _ClassVar[int]
     FIRED_AT_FIELD_NUMBER: _ClassVar[int]
     id: int
@@ -1030,10 +1027,9 @@ class AlertEvent(_message.Message):
     unit: str
     value: float
     severity: int
-    state: str
     connectors_sent: str
     fired_at: str
-    def __init__(self, id: _Optional[int] = ..., rule_id: _Optional[int] = ..., project_id: _Optional[int] = ..., rule_name: _Optional[str] = ..., metric: _Optional[str] = ..., comparator: _Optional[str] = ..., threshold: _Optional[float] = ..., unit: _Optional[str] = ..., value: _Optional[float] = ..., severity: _Optional[int] = ..., state: _Optional[str] = ..., connectors_sent: _Optional[str] = ..., fired_at: _Optional[str] = ...) -> None: ...
+    def __init__(self, id: _Optional[int] = ..., rule_id: _Optional[int] = ..., project_id: _Optional[int] = ..., rule_name: _Optional[str] = ..., metric: _Optional[str] = ..., comparator: _Optional[str] = ..., threshold: _Optional[float] = ..., unit: _Optional[str] = ..., value: _Optional[float] = ..., severity: _Optional[int] = ..., connectors_sent: _Optional[str] = ..., fired_at: _Optional[str] = ...) -> None: ...
 
 class ListAlertEventsRequest(_message.Message):
     __slots__ = ("project_id", "limit", "before_id")
