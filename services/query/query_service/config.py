@@ -65,13 +65,6 @@ class Settings(pydantic_settings.BaseSettings):
         description="Max overflow connections",
     )
 
-    QUERY_TIMEOUT: int = pydantic.Field(
-        default=30,
-        ge=10,
-        le=300,
-        description="Query timeout in seconds",
-    )
-
     @property
     def LOGS_DATABASE_URL(self) -> str:
         return (
@@ -135,12 +128,12 @@ class Settings(pydantic_settings.BaseSettings):
         description="Maximum search results",
     )
 
-    GRPC_SERVER_HOST: str = pydantic.Field(
+    QUERY_HOST: str = pydantic.Field(
         default="0.0.0.0",
         description="gRPC server host",
     )
 
-    GRPC_SERVER_PORT: int = pydantic.Field(
+    QUERY_GRPC_PORT: int = pydantic.Field(
         default=50053,
         ge=1024,
         le=65535,

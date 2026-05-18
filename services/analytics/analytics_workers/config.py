@@ -90,13 +90,6 @@ class Settings(pydantic_settings.BaseSettings):
         description="Max overflow connections",
     )
 
-    QUERY_TIMEOUT: int = pydantic.Field(
-        default=60,
-        ge=10,
-        le=300,
-        description="Query timeout in seconds",
-    )
-
     @property
     def LOGS_DATABASE_URL(self) -> str:
         return (
@@ -181,14 +174,9 @@ class Settings(pydantic_settings.BaseSettings):
         description="Use STARTTLS for SMTP connection",
     )
 
-    ANALYTICS_ERROR_RATE_CRON: str = pydantic.Field(
+    ANALYTICS_LOG_METRICS_CRON: str = pydantic.Field(
         default="*/10 * * * *",
-        description="Error rate aggregation cron schedule (minute hour day month day_of_week)",
-    )
-
-    ANALYTICS_LOG_VOLUME_CRON: str = pydantic.Field(
-        default="*/10 * * * *",
-        description="Log volume aggregation cron schedule",
+        description="Combined log volume + error rate aggregation cron schedule (minute hour day month day_of_week)",
     )
 
     ANALYTICS_TOP_ERRORS_CRON: str = pydantic.Field(
@@ -217,18 +205,18 @@ class Settings(pydantic_settings.BaseSettings):
     )
 
     ANALYTICS_LOG_VOLUME_1H_ROLLUP_CRON: str = pydantic.Field(
-        default="*/5 * * * *",
-        description="log_volume_1h rollup cron schedule",
+        default="*/10 * * * *",
+        description="log_volume_1h rollup cron schedule (aligned to log_volume_5m source freq)",
     )
 
     ANALYTICS_LOG_VOLUME_1D_ROLLUP_CRON: str = pydantic.Field(
-        default="0 * * * *",
-        description="log_volume_1d rollup cron schedule",
+        default="5 * * * *",
+        description="log_volume_1d rollup cron schedule (staggered off the hour boundary)",
     )
 
     ANALYTICS_PARTITION_MANAGER_CRON: str = pydantic.Field(
-        default="0 * * * *",
-        description="Partition manager cron schedule",
+        default="10 * * * *",
+        description="Partition manager cron schedule (staggered off the hour boundary)",
     )
 
     ANALYTICS_SPAN_LATENCY_1H_CRON: str = pydantic.Field(

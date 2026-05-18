@@ -44,7 +44,7 @@ async def serve():
     )
 
     server.add_insecure_port(
-        f"{config.settings.GRPC_SERVER_HOST}:{config.settings.GRPC_SERVER_PORT}"
+        f"{config.settings.QUERY_HOST}:{config.settings.QUERY_GRPC_PORT}"
     )
 
     await server.start()

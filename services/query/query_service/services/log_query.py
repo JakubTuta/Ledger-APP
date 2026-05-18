@@ -197,7 +197,10 @@ async def get_error_list(
             models.Log.project_id == project_id,
             models.Log.timestamp >= start_time,
             models.Log.timestamp <= end_time,
-            models.Log.level.in_(["error", "critical"]),
+            sa.or_(
+                models.Log.level.in_(["error", "critical"]),
+                models.Log.status_code >= 400,
+            ),
         ]
 
         if search:

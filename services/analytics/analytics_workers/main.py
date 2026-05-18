@@ -47,8 +47,7 @@ async def shutdown(sig: signal.Signals | None = None) -> None:
 
 
 def setup_jobs() -> None:
-    error_rate_cron = _parse_cron_expression(settings.ANALYTICS_ERROR_RATE_CRON)
-    log_volume_cron = _parse_cron_expression(settings.ANALYTICS_LOG_VOLUME_CRON)
+    log_metrics_cron = _parse_cron_expression(settings.ANALYTICS_LOG_METRICS_CRON)
     top_errors_cron = _parse_cron_expression(settings.ANALYTICS_TOP_ERRORS_CRON)
     usage_stats_cron = _parse_cron_expression(settings.ANALYTICS_USAGE_STATS_CRON)
     hourly_metrics_cron = _parse_cron_expression(settings.ANALYTICS_HOURLY_METRICS_CRON)
@@ -66,18 +65,10 @@ def setup_jobs() -> None:
     notif_cleanup_cron = _parse_cron_expression(settings.ANALYTICS_NOTIFICATION_CLEANUP_CRON)
 
     scheduler.add_job(
-        jobs.aggregate_error_rates,
-        trigger=cron_trigger.CronTrigger(**error_rate_cron),
-        id="aggregate_error_rates",
-        name="Aggregate Error Rates",
-        replace_existing=True,
-    )
-
-    scheduler.add_job(
-        jobs.aggregate_log_volumes,
-        trigger=cron_trigger.CronTrigger(**log_volume_cron),
-        id="aggregate_log_volumes",
-        name="Aggregate Log Volumes",
+        jobs.aggregate_log_metrics,
+        trigger=cron_trigger.CronTrigger(**log_metrics_cron),
+        id="aggregate_log_metrics",
+        name="Aggregate Log Metrics",
         replace_existing=True,
     )
 
@@ -170,8 +161,7 @@ def setup_jobs() -> None:
     )
 
     logger.info("Scheduled jobs with cron expressions:")
-    logger.info(f"  - Aggregate Error Rates: {settings.ANALYTICS_ERROR_RATE_CRON}")
-    logger.info(f"  - Aggregate Log Volumes: {settings.ANALYTICS_LOG_VOLUME_CRON}")
+    logger.info(f"  - Aggregate Log Metrics: {settings.ANALYTICS_LOG_METRICS_CRON}")
     logger.info(f"  - Compute Top Errors: {settings.ANALYTICS_TOP_ERRORS_CRON}")
     logger.info(f"  - Generate Usage Stats: {settings.ANALYTICS_USAGE_STATS_CRON}")
     logger.info(f"  - Aggregate Hourly Metrics: {settings.ANALYTICS_HOURLY_METRICS_CRON}")

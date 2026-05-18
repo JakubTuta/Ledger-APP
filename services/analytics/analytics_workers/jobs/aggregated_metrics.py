@@ -180,7 +180,13 @@ async def _aggregate_exception_metrics(
                 COUNT(*) AS error_count
             FROM logs
             WHERE
-                log_type = 'exception'
+                (
+                    log_type = 'exception'
+                    OR (
+                        log_type IN ('endpoint', 'network')
+                        AND status_code >= 400
+                    )
+                )
                 AND timestamp >= :start_time
                 AND timestamp < :end_time
             GROUP BY

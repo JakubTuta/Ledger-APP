@@ -2,10 +2,9 @@ from analytics_workers.jobs.aggregated_metrics import aggregate_hourly_metrics
 from analytics_workers.jobs.alert_evaluator import evaluate_alert_rules
 from analytics_workers.jobs.available_routes import update_available_routes
 from analytics_workers.jobs.bottleneck_metrics import aggregate_bottleneck_metrics
-from analytics_workers.jobs.error_rates import aggregate_error_rates
+from analytics_workers.jobs.log_metrics import aggregate_log_metrics
 from analytics_workers.jobs.log_volume_1d_rollup import rollup_log_volume_1d
 from analytics_workers.jobs.log_volume_1h_rollup import rollup_log_volume_1h
-from analytics_workers.jobs.log_volumes import aggregate_log_volumes
 from analytics_workers.jobs.notification_cleanup import cleanup_expired_notifications
 from analytics_workers.jobs.partition_manager import manage_partitions
 from analytics_workers.jobs.span_latency_1h import rollup_span_latency_1h
@@ -13,8 +12,7 @@ from analytics_workers.jobs.top_errors import compute_top_errors
 from analytics_workers.jobs.usage_stats import generate_usage_stats
 
 __all__ = [
-    "aggregate_error_rates",
-    "aggregate_log_volumes",
+    "aggregate_log_metrics",
     "compute_top_errors",
     "generate_usage_stats",
     "aggregate_hourly_metrics",

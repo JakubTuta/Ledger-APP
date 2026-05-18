@@ -2,6 +2,7 @@ import datetime
 import time
 
 import analytics_workers.database as database
+import analytics_workers.jobs.rollup_state as rollup_state
 import analytics_workers.utils.logging as logging
 import sqlalchemy as sa
 
@@ -11,38 +12,14 @@ _JOB_NAME = "log_volume_1d_rollup"
 _DEFAULT_LOOKBACK = datetime.timedelta(days=35)
 
 
-async def _get_last_bucket(session: sa.ext.asyncio.AsyncSession) -> datetime.datetime:
-    result = await session.execute(
-        sa.text("SELECT last_bucket FROM rollup_job_state WHERE job_name = :name"),
-        {"name": _JOB_NAME},
-    )
-    row = result.fetchone()
-    if row:
-        return row[0]
-    return datetime.datetime.now(datetime.timezone.utc) - _DEFAULT_LOOKBACK
-
-
-async def _set_last_bucket(
-    session: sa.ext.asyncio.AsyncSession, bucket: datetime.datetime
-) -> None:
-    await session.execute(
-        sa.text(
-            """
-            INSERT INTO rollup_job_state (job_name, last_bucket)
-            VALUES (:name, :bucket)
-            ON CONFLICT (job_name) DO UPDATE SET last_bucket = EXCLUDED.last_bucket
-            """
-        ),
-        {"name": _JOB_NAME, "bucket": bucket},
-    )
-
-
 async def rollup_log_volume_1d() -> None:
     start = time.perf_counter()
 
     try:
         async with database.get_logs_session() as session:
-            last_bucket = await _get_last_bucket(session)
+            last_bucket = await rollup_state.get_last_bucket(
+                session, _JOB_NAME, _DEFAULT_LOOKBACK
+            )
 
             upsert = sa.text(
                 """
@@ -67,7 +44,9 @@ async def rollup_log_volume_1d() -> None:
             )
             max_bucket_row = max_result.fetchone()
             if max_bucket_row and max_bucket_row[0] is not None:
-                await _set_last_bucket(session, max_bucket_row[0])
+                await rollup_state.set_last_bucket(
+                    session, _JOB_NAME, max_bucket_row[0]
+                )
 
             await session.commit()
 
