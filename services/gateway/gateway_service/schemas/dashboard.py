@@ -360,6 +360,28 @@ class UpdatePanelRequest(pydantic.BaseModel):
     )
 
 
+class DashboardTabSchema(pydantic.BaseModel):
+    id: str = pydantic.Field(..., min_length=1)
+    name: str = pydantic.Field(..., min_length=1, max_length=255)
+    templateId: str | None = None
+    panelIds: list[str] = pydantic.Field(default_factory=list)
+    projectId: str | None = None
+
+
+class GetDashboardTabsResponse(pydantic.BaseModel):
+    tabs: list[DashboardTabSchema]
+    active_tab_id: str | None = None
+
+
+class SaveDashboardTabsRequest(pydantic.BaseModel):
+    tabs: list[DashboardTabSchema]
+    active_tab_id: str | None = None
+
+
+class SaveDashboardTabsResponse(pydantic.BaseModel):
+    success: bool
+
+
 class DeletePanelResponse(pydantic.BaseModel):
     """Response confirming panel deletion."""
 

@@ -534,6 +534,18 @@ class UserDashboard(database.Base):
         nullable=False,
     )
 
+    tabs: Mapped[list] = mapped_column(
+        JSONB,
+        default=list,
+        nullable=False,
+        server_default="[]",
+    )
+
+    active_tab_id: Mapped[str | None] = mapped_column(
+        String,
+        nullable=True,
+    )
+
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         default=datetime.datetime.now(datetime.timezone.utc),

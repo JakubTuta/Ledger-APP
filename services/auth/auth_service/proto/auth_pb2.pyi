@@ -661,6 +661,50 @@ class DeleteDashboardPanelResponse(_message.Message):
     success: bool
     def __init__(self, success: bool = ...) -> None: ...
 
+class DashboardTab(_message.Message):
+    __slots__ = ("id", "name", "template_id", "panel_ids", "project_id")
+    ID_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    TEMPLATE_ID_FIELD_NUMBER: _ClassVar[int]
+    PANEL_IDS_FIELD_NUMBER: _ClassVar[int]
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    name: str
+    template_id: str
+    panel_ids: _containers.RepeatedScalarFieldContainer[str]
+    project_id: str
+    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., template_id: _Optional[str] = ..., panel_ids: _Optional[_Iterable[str]] = ..., project_id: _Optional[str] = ...) -> None: ...
+
+class GetDashboardTabsRequest(_message.Message):
+    __slots__ = ("user_id",)
+    USER_ID_FIELD_NUMBER: _ClassVar[int]
+    user_id: int
+    def __init__(self, user_id: _Optional[int] = ...) -> None: ...
+
+class GetDashboardTabsResponse(_message.Message):
+    __slots__ = ("tabs", "active_tab_id")
+    TABS_FIELD_NUMBER: _ClassVar[int]
+    ACTIVE_TAB_ID_FIELD_NUMBER: _ClassVar[int]
+    tabs: _containers.RepeatedCompositeFieldContainer[DashboardTab]
+    active_tab_id: str
+    def __init__(self, tabs: _Optional[_Iterable[_Union[DashboardTab, _Mapping]]] = ..., active_tab_id: _Optional[str] = ...) -> None: ...
+
+class SaveDashboardTabsRequest(_message.Message):
+    __slots__ = ("user_id", "tabs", "active_tab_id")
+    USER_ID_FIELD_NUMBER: _ClassVar[int]
+    TABS_FIELD_NUMBER: _ClassVar[int]
+    ACTIVE_TAB_ID_FIELD_NUMBER: _ClassVar[int]
+    user_id: int
+    tabs: _containers.RepeatedCompositeFieldContainer[DashboardTab]
+    active_tab_id: str
+    def __init__(self, user_id: _Optional[int] = ..., tabs: _Optional[_Iterable[_Union[DashboardTab, _Mapping]]] = ..., active_tab_id: _Optional[str] = ...) -> None: ...
+
+class SaveDashboardTabsResponse(_message.Message):
+    __slots__ = ("success",)
+    SUCCESS_FIELD_NUMBER: _ClassVar[int]
+    success: bool
+    def __init__(self, success: bool = ...) -> None: ...
+
 class NotificationItem(_message.Message):
     __slots__ = ("id", "user_id", "project_id", "kind", "severity", "payload", "created_at", "read_at", "expires_at")
     ID_FIELD_NUMBER: _ClassVar[int]

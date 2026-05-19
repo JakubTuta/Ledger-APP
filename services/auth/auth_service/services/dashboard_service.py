@@ -313,6 +313,49 @@ class DashboardService:
 
         return True
 
+    async def get_dashboard_tabs(
+        self,
+        session: AsyncSession,
+        user_id: int,
+    ) -> tuple[list[dict], str | None]:
+        result = await session.execute(
+            select(models.UserDashboard).where(models.UserDashboard.user_id == user_id)
+        )
+        dashboard = result.scalar_one_or_none()
+
+        if not dashboard:
+            return [], None
+
+        return dashboard.tabs, dashboard.active_tab_id
+
+    async def save_dashboard_tabs(
+        self,
+        session: AsyncSession,
+        user_id: int,
+        tabs: list[dict],
+        active_tab_id: str | None,
+    ) -> bool:
+        result = await session.execute(
+            select(models.UserDashboard).where(models.UserDashboard.user_id == user_id)
+        )
+        dashboard = result.scalar_one_or_none()
+
+        if not dashboard:
+            dashboard = models.UserDashboard(
+                user_id=user_id,
+                panels=[],
+                tabs=tabs,
+                active_tab_id=active_tab_id,
+            )
+            session.add(dashboard)
+        else:
+            dashboard.tabs = tabs
+            dashboard.active_tab_id = active_tab_id
+            dashboard.updated_at = datetime.now(timezone.utc)
+
+        await session.commit()
+        return True
+
     def _validate_panel_type(self, panel_type: str) -> bool:
         valid_types = {
             "logs", "errors", "metrics", "error_list", "bottleneck", "error_heatmap",

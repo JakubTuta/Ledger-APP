@@ -44,6 +44,29 @@ def _panel_dict_to_proto(panel: dict) -> auth_pb2.Panel:
     return auth_pb2.Panel(**kwargs)
 
 
+def _tab_dict_to_proto(tab: dict) -> auth_pb2.DashboardTab:
+    kwargs: dict = {
+        "id": tab["id"],
+        "name": tab["name"],
+        "panel_ids": tab.get("panelIds", []),
+    }
+    if tab.get("templateId") is not None:
+        kwargs["template_id"] = tab["templateId"]
+    if tab.get("projectId") is not None:
+        kwargs["project_id"] = tab["projectId"]
+    return auth_pb2.DashboardTab(**kwargs)
+
+
+def _tab_proto_to_dict(tab: auth_pb2.DashboardTab) -> dict:
+    return {
+        "id": tab.id,
+        "name": tab.name,
+        "templateId": tab.template_id if tab.HasField("template_id") else None,
+        "panelIds": list(tab.panel_ids),
+        "projectId": tab.project_id if tab.HasField("project_id") else None,
+    }
+
+
 class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
     """Implements all Auth Service RPC methods."""
 
@@ -940,6 +963,55 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f"Internal error: {str(e)}")
             return auth_pb2.DeleteDashboardPanelResponse(success=False)
+
+    # ==================== Dashboard Tab Operations ====================
+
+    async def GetDashboardTabs(
+        self,
+        request: auth_pb2.GetDashboardTabsRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.GetDashboardTabsResponse:
+        try:
+            async with database.get_session() as session:
+                tabs, active_tab_id = await self.dashboard_service.get_dashboard_tabs(
+                    session=session,
+                    user_id=request.user_id,
+                )
+
+                tab_messages = [_tab_dict_to_proto(tab) for tab in tabs]
+                response = auth_pb2.GetDashboardTabsResponse(tabs=tab_messages)
+                if active_tab_id is not None:
+                    response.active_tab_id = active_tab_id
+                return response
+
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.GetDashboardTabsResponse()
+
+    async def SaveDashboardTabs(
+        self,
+        request: auth_pb2.SaveDashboardTabsRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.SaveDashboardTabsResponse:
+        try:
+            async with database.get_session() as session:
+                tabs = [_tab_proto_to_dict(tab) for tab in request.tabs]
+                active_tab_id = request.active_tab_id if request.HasField("active_tab_id") else None
+
+                success = await self.dashboard_service.save_dashboard_tabs(
+                    session=session,
+                    user_id=request.user_id,
+                    tabs=tabs,
+                    active_tab_id=active_tab_id,
+                )
+
+                return auth_pb2.SaveDashboardTabsResponse(success=success)
+
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.SaveDashboardTabsResponse(success=False)
 
     # ==================== Notification Inbox Operations ====================
 

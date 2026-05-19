@@ -142,6 +142,8 @@ CREATE TABLE user_dashboards (
     id BIGSERIAL PRIMARY KEY,
     user_id BIGINT NOT NULL,
     panels JSONB NOT NULL DEFAULT '[]'::jsonb,
+    tabs JSONB NOT NULL DEFAULT '[]'::jsonb,
+    active_tab_id VARCHAR,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     CONSTRAINT uq_user_dashboard UNIQUE(user_id)

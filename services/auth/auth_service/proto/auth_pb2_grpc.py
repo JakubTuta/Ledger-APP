@@ -164,6 +164,16 @@ class AuthServiceStub(object):
                 request_serializer=auth__pb2.DeleteDashboardPanelRequest.SerializeToString,
                 response_deserializer=auth__pb2.DeleteDashboardPanelResponse.FromString,
                 _registered_method=True)
+        self.GetDashboardTabs = channel.unary_unary(
+                '/auth.AuthService/GetDashboardTabs',
+                request_serializer=auth__pb2.GetDashboardTabsRequest.SerializeToString,
+                response_deserializer=auth__pb2.GetDashboardTabsResponse.FromString,
+                _registered_method=True)
+        self.SaveDashboardTabs = channel.unary_unary(
+                '/auth.AuthService/SaveDashboardTabs',
+                request_serializer=auth__pb2.SaveDashboardTabsRequest.SerializeToString,
+                response_deserializer=auth__pb2.SaveDashboardTabsResponse.FromString,
+                _registered_method=True)
         self.ListNotifications = channel.unary_unary(
                 '/auth.AuthService/ListNotifications',
                 request_serializer=auth__pb2.ListNotificationsRequest.SerializeToString,
@@ -426,6 +436,19 @@ class AuthServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetDashboardTabs(self, request, context):
+        """Dashboard tab operations
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SaveDashboardTabs(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def ListNotifications(self, request, context):
         """Notification inbox operations
         """
@@ -677,6 +700,16 @@ def add_AuthServiceServicer_to_server(servicer, server):
                     servicer.DeleteDashboardPanel,
                     request_deserializer=auth__pb2.DeleteDashboardPanelRequest.FromString,
                     response_serializer=auth__pb2.DeleteDashboardPanelResponse.SerializeToString,
+            ),
+            'GetDashboardTabs': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetDashboardTabs,
+                    request_deserializer=auth__pb2.GetDashboardTabsRequest.FromString,
+                    response_serializer=auth__pb2.GetDashboardTabsResponse.SerializeToString,
+            ),
+            'SaveDashboardTabs': grpc.unary_unary_rpc_method_handler(
+                    servicer.SaveDashboardTabs,
+                    request_deserializer=auth__pb2.SaveDashboardTabsRequest.FromString,
+                    response_serializer=auth__pb2.SaveDashboardTabsResponse.SerializeToString,
             ),
             'ListNotifications': grpc.unary_unary_rpc_method_handler(
                     servicer.ListNotifications,
@@ -1476,6 +1509,60 @@ class AuthService(object):
             '/auth.AuthService/DeleteDashboardPanel',
             auth__pb2.DeleteDashboardPanelRequest.SerializeToString,
             auth__pb2.DeleteDashboardPanelResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetDashboardTabs(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/GetDashboardTabs',
+            auth__pb2.GetDashboardTabsRequest.SerializeToString,
+            auth__pb2.GetDashboardTabsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SaveDashboardTabs(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/SaveDashboardTabs',
+            auth__pb2.SaveDashboardTabsRequest.SerializeToString,
+            auth__pb2.SaveDashboardTabsResponse.FromString,
             options,
             channel_credentials,
             insecure,

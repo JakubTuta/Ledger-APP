@@ -404,3 +404,119 @@ async def delete_dashboard_panel(
             status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error",
         )
+
+
+@router.get(
+    "/dashboard/tabs",
+    response_model=schemas.GetDashboardTabsResponse,
+    summary="Get dashboard tabs",
+    description="Retrieve all dashboard tabs for the authenticated user",
+)
+async def get_dashboard_tabs(
+    account_id: int = fastapi.Depends(dependencies.get_current_account_id),
+    grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
+):
+    try:
+        stub = grpc_pool.get_stub("auth", auth_pb2_grpc.AuthServiceStub)
+
+        grpc_request = auth_pb2.GetDashboardTabsRequest(user_id=account_id)
+
+        response = await asyncio.wait_for(
+            stub.GetDashboardTabs(grpc_request), timeout=5.0
+        )
+
+        tabs = [
+            schemas.DashboardTabSchema(
+                id=tab.id,
+                name=tab.name,
+                templateId=tab.template_id if tab.HasField("template_id") else None,
+                panelIds=list(tab.panel_ids),
+                projectId=tab.project_id if tab.HasField("project_id") else None,
+            )
+            for tab in response.tabs
+        ]
+
+        return schemas.GetDashboardTabsResponse(
+            tabs=tabs,
+            active_tab_id=response.active_tab_id if response.HasField("active_tab_id") else None,
+        )
+
+    except asyncio.TimeoutError:
+        logger.error("Auth Service timeout getting dashboard tabs")
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Service timeout, please try again",
+        )
+
+    except grpc.RpcError as e:
+        logger.error(f"gRPC error getting dashboard tabs: {e.code()} - {e.details()}")
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get dashboard tabs",
+        )
+
+    except Exception as e:
+        logger.error(f"Unexpected error getting dashboard tabs: {e}", exc_info=True)
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error",
+        )
+
+
+@router.put(
+    "/dashboard/tabs",
+    response_model=schemas.SaveDashboardTabsResponse,
+    summary="Save dashboard tabs",
+    description="Save all dashboard tabs for the authenticated user",
+)
+async def save_dashboard_tabs(
+    body: schemas.SaveDashboardTabsRequest,
+    account_id: int = fastapi.Depends(dependencies.get_current_account_id),
+    grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
+):
+    try:
+        stub = grpc_pool.get_stub("auth", auth_pb2_grpc.AuthServiceStub)
+
+        tab_protos = [
+            auth_pb2.DashboardTab(
+                id=tab.id,
+                name=tab.name,
+                panel_ids=tab.panelIds,
+                **({} if tab.templateId is None else {"template_id": tab.templateId}),
+                **({} if tab.projectId is None else {"project_id": tab.projectId}),
+            )
+            for tab in body.tabs
+        ]
+
+        grpc_request = auth_pb2.SaveDashboardTabsRequest(
+            user_id=account_id,
+            tabs=tab_protos,
+            **({} if body.active_tab_id is None else {"active_tab_id": body.active_tab_id}),
+        )
+
+        response = await asyncio.wait_for(
+            stub.SaveDashboardTabs(grpc_request), timeout=5.0
+        )
+
+        return schemas.SaveDashboardTabsResponse(success=response.success)
+
+    except asyncio.TimeoutError:
+        logger.error("Auth Service timeout saving dashboard tabs")
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Service timeout, please try again",
+        )
+
+    except grpc.RpcError as e:
+        logger.error(f"gRPC error saving dashboard tabs: {e.code()} - {e.details()}")
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to save dashboard tabs",
+        )
+
+    except Exception as e:
+        logger.error(f"Unexpected error saving dashboard tabs: {e}", exc_info=True)
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error",
+        )

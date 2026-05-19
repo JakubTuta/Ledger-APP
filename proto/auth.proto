@@ -41,6 +41,10 @@ service AuthService {
   rpc UpdateDashboardPanel(UpdateDashboardPanelRequest) returns (UpdateDashboardPanelResponse);
   rpc DeleteDashboardPanel(DeleteDashboardPanelRequest) returns (DeleteDashboardPanelResponse);
 
+  // Dashboard tab operations
+  rpc GetDashboardTabs(GetDashboardTabsRequest) returns (GetDashboardTabsResponse);
+  rpc SaveDashboardTabs(SaveDashboardTabsRequest) returns (SaveDashboardTabsResponse);
+
   // Notification inbox operations
   rpc ListNotifications(ListNotificationsRequest) returns (ListNotificationsResponse);
   rpc GetUnreadNotificationCount(GetUnreadNotificationCountRequest) returns (GetUnreadNotificationCountResponse);
@@ -465,6 +469,35 @@ message DeleteDashboardPanelRequest {
 }
 
 message DeleteDashboardPanelResponse {
+  bool success = 1;
+}
+
+// ==================== Dashboard Tab Messages ====================
+
+message DashboardTab {
+  string id = 1;
+  string name = 2;
+  optional string template_id = 3;
+  repeated string panel_ids = 4;
+  optional string project_id = 5;
+}
+
+message GetDashboardTabsRequest {
+  int64 user_id = 1;
+}
+
+message GetDashboardTabsResponse {
+  repeated DashboardTab tabs = 1;
+  optional string active_tab_id = 2;
+}
+
+message SaveDashboardTabsRequest {
+  int64 user_id = 1;
+  repeated DashboardTab tabs = 2;
+  optional string active_tab_id = 3;
+}
+
+message SaveDashboardTabsResponse {
   bool success = 1;
 }
 

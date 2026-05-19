@@ -19,11 +19,15 @@ from gateway_service.schemas.auth import (
     UpdateAccountNameResponse,
 )
 from gateway_service.schemas.dashboard import (
+    DashboardTabSchema,
     DeletePanelResponse,
+    GetDashboardTabsResponse,
     PanelLayout,
     PanelListResponse,
     PanelRequest,
     PanelResponse,
+    SaveDashboardTabsRequest,
+    SaveDashboardTabsResponse,
     UpdatePanelRequest,
 )
 from gateway_service.schemas.health import (
@@ -102,6 +106,10 @@ __all__ = [
     "PanelListResponse",
     "UpdatePanelRequest",
     "DeletePanelResponse",
+    "DashboardTabSchema",
+    "GetDashboardTabsResponse",
+    "SaveDashboardTabsRequest",
+    "SaveDashboardTabsResponse",
     # Health schemas
     "HealthThresholds",
     "HealthSummary",

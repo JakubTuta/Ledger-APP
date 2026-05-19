@@ -155,6 +155,27 @@ async def _aggregate_exception_metrics(
     async with database.get_logs_session() as session:
         query = sa.text(
             """
+            WITH all_logs AS (
+                SELECT project_id, COUNT(*) AS total_count
+                FROM logs
+                WHERE timestamp >= :start_time AND timestamp < :end_time
+                GROUP BY project_id
+            ),
+            error_logs AS (
+                SELECT project_id, COUNT(*) AS error_count
+                FROM logs
+                WHERE
+                    (
+                        log_type = 'exception'
+                        OR (
+                            log_type IN ('endpoint', 'network')
+                            AND status_code >= 400
+                        )
+                    )
+                    AND timestamp >= :start_time
+                    AND timestamp < :end_time
+                GROUP BY project_id
+            )
             INSERT INTO aggregated_metrics (
                 project_id,
                 date,
@@ -168,7 +189,7 @@ async def _aggregate_exception_metrics(
                 error_count
             )
             SELECT
-                project_id,
+                a.project_id,
                 :date_str AS date,
                 :hour AS hour,
                 'exception' AS metric_type,
@@ -176,21 +197,10 @@ async def _aggregate_exception_metrics(
                 NULL AS endpoint_path,
                 NULL AS log_level,
                 NULL AS log_type,
-                COUNT(*) AS log_count,
-                COUNT(*) AS error_count
-            FROM logs
-            WHERE
-                (
-                    log_type = 'exception'
-                    OR (
-                        log_type IN ('endpoint', 'network')
-                        AND status_code >= 400
-                    )
-                )
-                AND timestamp >= :start_time
-                AND timestamp < :end_time
-            GROUP BY
-                project_id
+                a.total_count AS log_count,
+                COALESCE(e.error_count, 0) AS error_count
+            FROM all_logs a
+            LEFT JOIN error_logs e ON a.project_id = e.project_id
             ON CONFLICT (
                 project_id,
                 date,
