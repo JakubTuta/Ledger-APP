@@ -276,6 +276,13 @@ class Settings(pydantic_settings.BaseSettings):
         description="Usage stats cache TTL (seconds)",
     )
 
+    DEFAULT_DAILY_QUOTA: int = pydantic.Field(
+        default=100_000,
+        ge=1_000,
+        le=100_000,
+        description="Default daily log quota",
+    )
+
     ANALYTICS_JOB_MISFIRE_GRACE_TIME: int = pydantic.Field(
         default=60,
         ge=10,

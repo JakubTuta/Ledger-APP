@@ -60,7 +60,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     "per_hour": auth_data.get("rate_limit_per_hour", 50000),
                 },
             )
-            request.state.daily_quota = auth_data.get("daily_quota", 1000000)
+            request.state.daily_quota = auth_data.get(
+                "daily_quota", config.settings.DEFAULT_DAILY_QUOTA
+            )
 
             return await call_next(request)
 

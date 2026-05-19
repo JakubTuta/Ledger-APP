@@ -265,6 +265,7 @@ class AuthService:
             name=name,
             slug=slug,
             environment=environment,
+            daily_quota=config.settings.DEFAULT_DAILY_QUOTA,
         )
         session.add(project)
         await session.flush()

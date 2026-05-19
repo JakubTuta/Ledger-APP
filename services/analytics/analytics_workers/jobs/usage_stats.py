@@ -23,7 +23,9 @@ async def generate_usage_stats() -> None:
         upsert_params: list[dict] = []
 
         for project_id, date, log_count in log_rows:
-            daily_quota = projects_map.get(project_id, 1_000_000)
+            daily_quota = projects_map.get(
+                project_id, settings.DEFAULT_DAILY_QUOTA
+            )
             quota_used_percent = (
                 round((log_count / daily_quota * 100), 2) if daily_quota > 0 else 0
             )

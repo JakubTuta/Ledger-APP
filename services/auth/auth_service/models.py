@@ -197,7 +197,7 @@ class Project(database.Base):
         SmallInteger, default=30, nullable=False
     )
     daily_quota: Mapped[int] = mapped_column(
-        BigInteger, default=1_000_000, nullable=False
+        BigInteger, default=100_000, nullable=False
     )
 
     available_routes: Mapped[list[str]] = mapped_column(

@@ -200,9 +200,9 @@ class Settings(pydantic_settings.BaseSettings):
     )
 
     DEFAULT_DAILY_QUOTA: int = pydantic.Field(
-        default=1_000_000,
+        default=100_000,
         ge=1_000,
-        le=100_000_000,
+        le=100_000,
         description="Default daily log quota",
     )
 

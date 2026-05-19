@@ -306,7 +306,7 @@ GATEWAY_PORT=8000
 # Rate limits (adjust based on your needs)
 DEFAULT_RATE_LIMIT_PER_MINUTE=1000
 DEFAULT_RATE_LIMIT_PER_HOUR=50000
-DEFAULT_DAILY_QUOTA=1000000
+DEFAULT_DAILY_QUOTA=100000
 
 # Database connections (defaults work for Docker)
 REDIS_HOST=redis

@@ -295,6 +295,13 @@ class Settings(pydantic_settings.BaseSettings):
 
     # ==================== Properties ====================
 
+    DEFAULT_DAILY_QUOTA: int = pydantic.Field(
+        default=100_000,
+        ge=1_000,
+        le=100_000,
+        description="Default daily log quota",
+    )
+
     @property
     def is_production(self) -> bool:
         return self.ENV.lower() == "production"
