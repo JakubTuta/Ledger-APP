@@ -35,8 +35,6 @@ def _panel_dict_to_proto(panel: dict) -> auth_pb2.Panel:
         kwargs["min_duration_ms"] = panel["min_duration_ms"]
     if panel.get("has_error") is not None:
         kwargs["has_error"] = panel["has_error"]
-    if panel.get("limit") is not None:
-        kwargs["limit"] = panel["limit"]
     if panel.get("status_class") is not None:
         kwargs["status_class"] = panel["status_class"]
     if panel.get("logs_search") is not None:
@@ -872,7 +870,6 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     operation_filter=request.operation_filter if request.HasField("operation_filter") else None,
                     min_duration_ms=request.min_duration_ms if request.HasField("min_duration_ms") else None,
                     has_error=request.has_error if request.HasField("has_error") else None,
-                    limit=request.limit if request.HasField("limit") else None,
                     status_class=request.status_class if request.HasField("status_class") else None,
                     logs_search=request.logs_search if request.HasField("logs_search") else None,
                 )
@@ -921,7 +918,6 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     operation_filter=request.operation_filter if request.HasField("operation_filter") else None,
                     min_duration_ms=request.min_duration_ms if request.HasField("min_duration_ms") else None,
                     has_error=request.has_error if request.HasField("has_error") else None,
-                    limit=request.limit if request.HasField("limit") else None,
                     status_class=request.status_class if request.HasField("status_class") else None,
                     logs_search=request.logs_search if request.HasField("logs_search") else None,
                 )

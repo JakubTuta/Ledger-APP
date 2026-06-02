@@ -40,7 +40,6 @@ def _panel_proto_to_response(panel) -> schemas.PanelResponse:
         operation_filter=panel.operation_filter if panel.HasField("operation_filter") else None,
         min_duration_ms=panel.min_duration_ms if panel.HasField("min_duration_ms") else None,
         has_error=panel.has_error if panel.HasField("has_error") else None,
-        limit=panel.limit if panel.HasField("limit") else None,
         statusClass=panel.status_class if panel.HasField("status_class") else None,
         search=panel.logs_search if panel.HasField("logs_search") else None,
     )
@@ -168,8 +167,6 @@ async def create_dashboard_panel(
             grpc_request_kwargs["min_duration_ms"] = request_data.min_duration_ms
         if request_data.has_error is not None:
             grpc_request_kwargs["has_error"] = request_data.has_error
-        if request_data.limit is not None:
-            grpc_request_kwargs["limit"] = request_data.limit
         if request_data.statusClass is not None:
             grpc_request_kwargs["status_class"] = request_data.statusClass
         if request_data.search is not None:
@@ -279,8 +276,6 @@ async def update_dashboard_panel(
             grpc_request_kwargs["min_duration_ms"] = request_data.min_duration_ms
         if request_data.has_error is not None:
             grpc_request_kwargs["has_error"] = request_data.has_error
-        if request_data.limit is not None:
-            grpc_request_kwargs["limit"] = request_data.limit
         if request_data.statusClass is not None:
             grpc_request_kwargs["status_class"] = request_data.statusClass
         if request_data.search is not None:

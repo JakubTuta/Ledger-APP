@@ -88,7 +88,6 @@ class DashboardService:
         operation_filter: str | None = None,
         min_duration_ms: int | None = None,
         has_error: bool | None = None,
-        limit: int | None = None,
         status_class: str | None = None,
         logs_search: str | None = None,
     ) -> dict:
@@ -142,7 +141,6 @@ class DashboardService:
             "operation_filter": operation_filter,
             "min_duration_ms": min_duration_ms,
             "has_error": has_error,
-            "limit": limit,
             "status_class": status_class,
             "logs_search": logs_search,
         }
@@ -193,7 +191,6 @@ class DashboardService:
         operation_filter: str | None = None,
         min_duration_ms: int | None = None,
         has_error: bool | None = None,
-        limit: int | None = None,
         status_class: str | None = None,
         logs_search: str | None = None,
     ) -> dict:
@@ -258,7 +255,6 @@ class DashboardService:
                     "operation_filter": operation_filter,
                     "min_duration_ms": min_duration_ms,
                     "has_error": has_error,
-                    "limit": limit,
                     "status_class": status_class,
                     "logs_search": logs_search,
                 }

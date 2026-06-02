@@ -71,7 +71,6 @@ class PanelRequest(pydantic.BaseModel):
     operation_filter: str | None = pydantic.Field(None, description="Operation name filter (trace_list panels)")
     min_duration_ms: int | None = pydantic.Field(None, description="Minimum span duration filter in ms (trace_list panels)")
     has_error: bool | None = pydantic.Field(None, description="Error-only filter (trace_list panels)")
-    limit: int | None = pydantic.Field(None, description="Max results (trace_list panels)")
     statusClass: str | None = pydantic.Field(None, description="HTTP status class filter (logs panels): 2xx, 4xx, 5xx")
     search: str | None = pydantic.Field(None, max_length=200, description="Path/method substring filter (logs panels)")
 
@@ -150,7 +149,6 @@ class PanelResponse(pydantic.BaseModel):
     operation_filter: str | None = pydantic.Field(None)
     min_duration_ms: int | None = pydantic.Field(None)
     has_error: bool | None = pydantic.Field(None)
-    limit: int | None = pydantic.Field(None)
     statusClass: str | None = pydantic.Field(None)
     search: str | None = pydantic.Field(None)
 
@@ -297,7 +295,6 @@ class UpdatePanelRequest(pydantic.BaseModel):
     operation_filter: str | None = pydantic.Field(None, description="Operation name filter (trace_list panels)")
     min_duration_ms: int | None = pydantic.Field(None, description="Minimum span duration filter in ms (trace_list panels)")
     has_error: bool | None = pydantic.Field(None, description="Error-only filter (trace_list panels)")
-    limit: int | None = pydantic.Field(None, description="Max results (trace_list panels)")
     statusClass: str | None = pydantic.Field(None, description="HTTP status class filter (logs panels): 2xx, 4xx, 5xx")
     search: str | None = pydantic.Field(None, max_length=200, description="Path/method substring filter (logs panels)")
 

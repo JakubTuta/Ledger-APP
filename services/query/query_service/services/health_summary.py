@@ -34,15 +34,20 @@ async def _compute_project_summary(project_id: int, period: str) -> dict:
     start_str = start_date.strftime("%Y%m%d")
     end_str = end_date.strftime("%Y%m%d")
 
+    period_start = datetime.datetime.combine(
+        start_date, datetime.time.min, tzinfo=timezone.utc
+    )
+    period_end = datetime.datetime.combine(
+        end_date, datetime.time.min, tzinfo=timezone.utc
+    ) + datetime.timedelta(days=1)
+
     now = datetime.datetime.now(timezone.utc)
-    sparkline_cutoff = (now - datetime.timedelta(hours=23)).strftime("%Y%m%d%H")
 
     async with database.get_logs_session() as session:
         agg_query = sa.text("""
             SELECT
                 SUM(log_count) AS total_logs,
-                SUM(error_count) AS total_errors,
-                MAX(p95_duration_ms) AS p95_ms
+                SUM(error_count) AS total_errors
             FROM aggregated_metrics
             WHERE
                 project_id = :project_id
@@ -58,7 +63,28 @@ async def _compute_project_summary(project_id: int, period: str) -> dict:
 
         total_logs = row[0] or 0
         total_errors = row[1] or 0
-        p95_ms = float(row[2] or 0)
+
+        p95_query = sa.text("""
+            SELECT PERCENTILE_CONT(0.95) WITHIN GROUP (
+                ORDER BY (attributes->'endpoint'->>'duration_ms')::FLOAT
+            ) AS p95_ms
+            FROM logs
+            WHERE
+                project_id = :project_id
+                AND log_type = 'endpoint'
+                AND timestamp >= :period_start
+                AND timestamp < :period_end
+                AND attributes->'endpoint'->>'duration_ms' IS NOT NULL
+        """)
+        p95_result = await session.execute(
+            p95_query,
+            {
+                "project_id": project_id,
+                "period_start": period_start,
+                "period_end": period_end,
+            },
+        )
+        p95_ms = float(p95_result.scalar() or 0)
 
         error_rate = total_errors / total_logs if total_logs > 0 else 0.0
         rps = total_logs / _period_seconds(start_date, end_date)
