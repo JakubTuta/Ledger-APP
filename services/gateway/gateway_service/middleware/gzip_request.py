@@ -26,4 +26,9 @@ class GzipRequestMiddleware(BaseHTTPMiddleware):
         async def receive():
             return {"type": "http.request", "body": decompressed, "more_body": False}
 
-        return await call_next(Request(request.scope, receive))
+        modified_scope = dict(request.scope)
+        modified_scope["headers"] = [
+            (k, v) for k, v in request.scope["headers"]
+            if k.lower() != b"content-encoding"
+        ]
+        return await call_next(Request(modified_scope, receive))
