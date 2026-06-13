@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import fastapi
 import gateway_service.proto.query_pb2 as query_pb2
 import grpc
+from gateway_service import dependencies
 from pydantic import BaseModel
 
 router = fastapi.APIRouter(tags=["Tracing"])
@@ -100,7 +101,7 @@ class SpanLatencyResponse(BaseModel):
 )
 async def get_span_latency(
     request: fastapi.Request,
-    project_id: int = fastapi.Query(...),
+    project_id: int = fastapi.Depends(dependencies.require_project_member),
     service: str | None = fastapi.Query(None),
     name: str | None = fastapi.Query(None),
     from_time: str | None = fastapi.Query(None),
@@ -147,7 +148,7 @@ async def get_span_latency(
 )
 async def list_traces(
     request: fastapi.Request,
-    project_id: int = fastapi.Query(...),
+    project_id: int = fastapi.Depends(dependencies.require_project_member),
     service: str | None = fastapi.Query(None),
     operation: str | None = fastapi.Query(None),
     min_duration_ms: int | None = fastapi.Query(None),
@@ -208,7 +209,7 @@ async def list_traces(
 async def get_trace(
     request: fastapi.Request,
     trace_id: str,
-    project_id: int = fastapi.Query(...),
+    project_id: int = fastapi.Depends(dependencies.require_project_member),
 ) -> TraceResponse:
     grpc_pool = request.app.state.grpc_pool
 

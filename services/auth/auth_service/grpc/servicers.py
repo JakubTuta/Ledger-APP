@@ -555,7 +555,6 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     retention_days=info["retention_days"],
                     rate_limit_per_minute=info["rate_limit_per_minute"],
                     rate_limit_per_hour=info["rate_limit_per_hour"],
-                    current_usage=info.get("current_usage", 0),
                 )
 
         except Exception as e:

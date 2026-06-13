@@ -174,18 +174,45 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 detail="Authentication failed",
             )
 
+    _NEGATIVE_CACHE_TTL = 30
+
     async def _validate_api_key(self, api_key: str) -> typing.Dict:
         cached_data = await self.redis.get_cached_api_key(api_key)
 
         if cached_data:
+            if cached_data.get("__invalid__"):
+                self._auth_failures += 1
+                raise fastapi.HTTPException(
+                    status_code=fastapi.status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid or expired API key",
+                )
             self._cache_hits += 1
             return cached_data
 
         self._cache_misses += 1
 
-        auth_data = await self._fetch_from_auth_service(api_key)
+        try:
+            auth_data = await self._fetch_from_auth_service(api_key)
+        except fastapi.HTTPException as exc:
+            if exc.status_code == fastapi.status.HTTP_401_UNAUTHORIZED:
+                task = asyncio.create_task(
+                    self.redis.set_cached_api_key(
+                        api_key, {"__invalid__": True}, ttl=self._NEGATIVE_CACHE_TTL
+                    )
+                )
+                task.add_done_callback(
+                    lambda t: logger.error("Negative cache write failed: %s", t.exception())
+                    if not t.cancelled() and t.exception()
+                    else None
+                )
+            raise
 
-        asyncio.create_task(self.redis.set_cached_api_key(api_key, auth_data))
+        task = asyncio.create_task(self.redis.set_cached_api_key(api_key, auth_data))
+        task.add_done_callback(
+            lambda t: logger.error("Cache write failed: %s", t.exception())
+            if not t.cancelled() and t.exception()
+            else None
+        )
 
         return auth_data
 
@@ -210,7 +237,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 "rate_limit_per_minute": response.rate_limit_per_minute,
                 "rate_limit_per_hour": response.rate_limit_per_hour,
                 "daily_quota": response.daily_quota,
-                "current_usage": response.current_usage,
             }
 
             return auth_data

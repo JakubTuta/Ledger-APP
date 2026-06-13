@@ -59,7 +59,7 @@ class LogResponse(pydantic.BaseModel):
 
 class LogsQueryResponse(pydantic.BaseModel):
     logs: list[LogResponse]
-    total: int
+    total: int | None = None
     has_more: bool
 
 

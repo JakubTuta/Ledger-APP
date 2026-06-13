@@ -30,119 +30,120 @@ class StorageWorker:
         self.processed_count = 0
         self.failed_count = 0
 
+    @staticmethod
+    def _build_log_record(log_data: dict) -> tuple[dict, datetime.date]:
+        timestamp = datetime.datetime.fromisoformat(log_data["timestamp"])
+
+        method = None
+        path = None
+        status_code = None
+        duration_ms = None
+        attributes = log_data.get("attributes")
+        if log_data.get("log_type") in ("endpoint", "network") and attributes:
+            ep = attributes.get("endpoint") or {}
+            method = ep.get("method")
+            path = ep.get("path")
+            raw_status = ep.get("status_code")
+            raw_duration = ep.get("duration_ms")
+            if raw_status is not None:
+                try:
+                    status_code = int(raw_status)
+                except (TypeError, ValueError):
+                    pass
+            if raw_duration is not None:
+                try:
+                    duration_ms = round(float(raw_duration))
+                except (TypeError, ValueError):
+                    pass
+
+        record = {
+            "project_id": log_data["project_id"],
+            "timestamp": timestamp,
+            "ingested_at": datetime.datetime.fromisoformat(log_data["ingested_at"]),
+            "level": log_data["level"],
+            "log_type": log_data["log_type"],
+            "importance": log_data["importance"],
+            "environment": log_data.get("environment"),
+            "release": log_data.get("release"),
+            "message": log_data.get("message"),
+            "error_type": log_data.get("error_type"),
+            "error_message": log_data.get("error_message"),
+            "stack_trace": log_data.get("stack_trace"),
+            "attributes": attributes,
+            "sdk_version": log_data.get("sdk_version"),
+            "platform": log_data.get("platform"),
+            "platform_version": log_data.get("platform_version"),
+            "error_fingerprint": log_data.get("error_fingerprint"),
+            "method": method,
+            "path": path,
+            "status_code": status_code,
+            "duration_ms": duration_ms,
+        }
+        return record, timestamp.date()
+
     async def process_logs_batch(self, logs: list[dict]) -> None:
         if not logs:
             return
 
-        async with database.get_session() as session:
-            try:
-                log_records = []
-                required_partitions = set()
+        log_records: list[dict] = []
+        required_partitions: set[datetime.date] = set()
+        error_groups: dict[tuple[int, str], dict] = {}
 
-                for log_data in logs:
-                    timestamp = datetime.datetime.fromisoformat(log_data["timestamp"])
+        for log_data in logs:
+            record, partition_date = self._build_log_record(log_data)
+            log_records.append(record)
+            required_partitions.add(partition_date)
 
-                    method = None
-                    path = None
-                    status_code = None
-                    duration_ms = None
-                    attributes = log_data.get("attributes")
-                    if log_data.get("log_type") in ("endpoint", "network") and attributes:
-                        ep = attributes.get("endpoint") or {}
-                        method = ep.get("method")
-                        path = ep.get("path")
-                        raw_status = ep.get("status_code")
-                        raw_duration = ep.get("duration_ms")
-                        if raw_status is not None:
-                            try:
-                                status_code = int(raw_status)
-                            except (TypeError, ValueError):
-                                pass
-                        if raw_duration is not None:
-                            try:
-                                duration_ms = round(float(raw_duration))
-                            except (TypeError, ValueError):
-                                pass
-
-                    log_record = {
+            fp = log_data.get("error_fingerprint")
+            if fp:
+                key = (log_data["project_id"], fp)
+                ts = datetime.datetime.fromisoformat(log_data["timestamp"])
+                if key not in error_groups:
+                    error_groups[key] = {
                         "project_id": log_data["project_id"],
-                        "timestamp": timestamp,
-                        "ingested_at": datetime.datetime.fromisoformat(
-                            log_data["ingested_at"]
-                        ),
-                        "level": log_data["level"],
-                        "log_type": log_data["log_type"],
-                        "importance": log_data["importance"],
-                        "environment": log_data.get("environment"),
-                        "release": log_data.get("release"),
-                        "message": log_data.get("message"),
-                        "error_type": log_data.get("error_type"),
+                        "fingerprint": fp,
+                        "error_type": log_data.get("error_type", "UnknownError"),
                         "error_message": log_data.get("error_message"),
-                        "stack_trace": log_data.get("stack_trace"),
-                        "attributes": attributes,
-                        "sdk_version": log_data.get("sdk_version"),
-                        "platform": log_data.get("platform"),
-                        "platform_version": log_data.get("platform_version"),
-                        "error_fingerprint": log_data.get("error_fingerprint"),
-                        "method": method,
-                        "path": path,
-                        "status_code": status_code,
-                        "duration_ms": duration_ms,
+                        "first_seen": ts,
+                        "last_seen": ts,
+                        "occurrence_count": 1,
+                        "sample_stack_trace": log_data.get("stack_trace"),
                     }
-                    log_records.append(log_record)
-                    required_partitions.add(timestamp.date())
+                else:
+                    eg = error_groups[key]
+                    eg["occurrence_count"] += 1
+                    if ts < eg["first_seen"]:
+                        eg["first_seen"] = ts
+                    if ts > eg["last_seen"]:
+                        eg["last_seen"] = ts
 
-                for partition_date in required_partitions:
-                    await partition_manager.ensure_partition_for_date(
-                        session, "logs", partition_date
-                    )
-
-                await session.execute(insert(models.Log).values(log_records))
-
-                for log_data in logs:
-                    if log_data.get("error_fingerprint"):
-                        await self.upsert_error_group(session, log_data)
-
-                await session.commit()
-                self.processed_count += len(logs)
-
-            except Exception as e:
-                await session.rollback()
-                self.failed_count += len(logs)
-                logger.error(
-                    f"Worker {self.worker_id}: Failed to insert logs batch: {e}",
-                    exc_info=True,
+        async with database.get_session() as session:
+            for partition_date in required_partitions:
+                await partition_manager.ensure_partition_for_date(
+                    session, "logs", partition_date
                 )
-                raise
 
-    async def upsert_error_group(self, session, log_data: dict) -> None:
-        try:
-            stmt = pg_insert(models.ErrorGroup).values(
-                project_id=log_data["project_id"],
-                fingerprint=log_data["error_fingerprint"],
-                error_type=log_data.get("error_type", "UnknownError"),
-                error_message=log_data.get("error_message"),
-                first_seen=datetime.datetime.fromisoformat(log_data["timestamp"]),
-                last_seen=datetime.datetime.fromisoformat(log_data["timestamp"]),
-                occurrence_count=1,
-                sample_stack_trace=log_data.get("stack_trace"),
-            )
+            await session.execute(insert(models.Log).values(log_records))
 
-            stmt = stmt.on_conflict_do_update(
-                index_elements=["project_id", "fingerprint"],
-                set_={
-                    "last_seen": datetime.datetime.fromisoformat(log_data["timestamp"]),
-                    "occurrence_count": models.ErrorGroup.occurrence_count + 1,
-                    "updated_at": datetime.datetime.now(datetime.timezone.utc),
-                },
-            )
+            if error_groups:
+                await self._upsert_error_groups_batch(session, list(error_groups.values()))
 
-            await session.execute(stmt)
+            await session.commit()
+            self.processed_count += len(logs)
 
-        except Exception as e:
-            logger.error(
-                f"Worker {self.worker_id}: Failed to upsert error group: {e}",
-            )
+    async def _upsert_error_groups_batch(self, session, groups: list[dict]) -> None:
+        stmt = pg_insert(models.ErrorGroup).values(groups)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["project_id", "fingerprint"],
+            set_={
+                "last_seen": stmt.excluded.last_seen,
+                "occurrence_count": (
+                    models.ErrorGroup.occurrence_count + stmt.excluded.occurrence_count
+                ),
+                "updated_at": datetime.datetime.now(datetime.timezone.utc),
+            },
+        )
+        await session.execute(stmt)
 
     async def _flush_batch(
         self,
@@ -157,11 +158,18 @@ class StorageWorker:
             )
         except Exception as e:
             logger.error(
-                f"Worker {self.worker_id}: Batch of {len(messages)} failed, sending to DLQ: {e}",
+                f"Worker {self.worker_id}: Batch of {len(messages)} failed, falling back to per-message: {e}",
             )
-            self.failed_count += len(messages)
-            for message in messages:
-                await message.nack(requeue=False)
+            for message, payload in zip(messages, payloads):
+                try:
+                    await self.process_logs_batch([payload])
+                    await message.ack()
+                except Exception as per_msg_err:
+                    logger.error(
+                        f"Worker {self.worker_id}: Single message failed, sending to DLQ: {per_msg_err}",
+                    )
+                    self.failed_count += 1
+                    await message.nack(requeue=False)
 
     async def run(self) -> None:
         self.running = True
@@ -278,11 +286,9 @@ async def main():
 
     manager = WorkerManager(worker_count=config.settings.WORKER_COUNT)
 
-    def signal_handler(sig, frame):
-        asyncio.create_task(shutdown(manager))
-
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
+    loop = asyncio.get_event_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, lambda: asyncio.ensure_future(shutdown(manager)))
 
     await manager.start()
 

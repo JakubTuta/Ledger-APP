@@ -2,11 +2,16 @@ import logging
 import typing
 
 from fastapi import HTTPException, Request, status
+from gateway_service import config
 from gateway_service.services import redis_client
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
 logger = logging.getLogger(__name__)
+
+_SESSION_RATE_LIMIT_PER_MINUTE = 300
+_SESSION_RATE_LIMIT_PER_HOUR = 10_000
+_NEGATIVE_KEY_CACHE_TTL = 30
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -40,6 +45,18 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         try:
             project_id = request.state.project_id
+
+            if project_id is None:
+                account_id = getattr(request.state, "account_id", None)
+                if account_id:
+                    await self._check_rate_limits(
+                        account_id,
+                        _SESSION_RATE_LIMIT_PER_MINUTE,
+                        _SESSION_RATE_LIMIT_PER_HOUR,
+                        key_prefix="session",
+                    )
+                return await call_next(request)
+
             rate_limits = request.state.rate_limits
             daily_quota = request.state.daily_quota
 
@@ -71,10 +88,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return path in self.EXEMPT_PATHS
 
     async def _check_rate_limits(
-        self, project_id: int, limit_per_minute: int, limit_per_hour: int
+        self,
+        entity_id: int,
+        limit_per_minute: int,
+        limit_per_hour: int,
+        key_prefix: str = "project",
     ):
         allowed, metadata = await self.redis.check_rate_limit(
-            project_id, limit_per_minute, limit_per_hour
+            entity_id, limit_per_minute, limit_per_hour, key_prefix=key_prefix
         )
 
         if not allowed:
@@ -97,7 +118,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     f"Limit: {metadata['minute_limit']}"
                 )
 
-            logger.warning(f"Rate limit exceeded for project {project_id}: {detail}")
+            logger.warning(f"Rate limit exceeded for {key_prefix}:{entity_id}: {detail}")
 
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -150,61 +171,3 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         }
 
 
-class RateLimitExceeded(Exception):
-    def __init__(self, metadata: typing.Dict):
-        self.metadata = metadata
-        super().__init__("Rate limit exceeded")
-
-
-def rate_limit(
-    per_minute: typing.Optional[int] = None, per_hour: typing.Optional[int] = None
-):
-    """
-    Decorator for endpoint-specific rate limiting.
-
-    Usage:
-        @router.post("/expensive-operation")
-        @rate_limit(per_minute=10, per_hour=100)
-        async def expensive_op():
-            ...
-
-    Allows fine-grained control without global middleware overhead.
-    """
-
-    def decorator(func):
-        async def wrapper(*args, **kwargs):
-            request = kwargs.get("request")
-            if not request:
-                for arg in args:
-                    if isinstance(arg, Request):
-                        request = arg
-                        break
-
-            if not request:
-                return await func(*args, **kwargs)
-
-            redis = request.app.state.redis_client
-            project_id = getattr(request.state, "project_id", None)
-
-            if not project_id:
-                return await func(*args, **kwargs)
-
-            minute_limit = per_minute or request.state.rate_limits["per_minute"]
-            hour_limit = per_hour or request.state.rate_limits["per_hour"]
-
-            allowed, metadata = await redis.check_rate_limit(
-                project_id, minute_limit, hour_limit
-            )
-
-            if not allowed:
-                raise HTTPException(
-                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail="Rate limit exceeded for this endpoint",
-                    headers={"Retry-After": "60"},
-                )
-
-            return await func(*args, **kwargs)
-
-        return wrapper
-
-    return decorator

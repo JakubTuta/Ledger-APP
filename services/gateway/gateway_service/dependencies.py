@@ -1,6 +1,7 @@
 import typing
 
 import fastapi
+from gateway_service.proto import auth_pb2, auth_pb2_grpc
 from gateway_service.services import grpc_pool, redis_client
 
 # ==================== SINGLETON DEPENDENCIES ====================
@@ -115,6 +116,110 @@ def get_auth_context(request: fastapi.Request) -> typing.Dict:
         "rate_limits": request.state.rate_limits,
         "daily_quota": request.state.daily_quota,
     }
+
+
+# ==================== PROJECT ACCESS DEPENDENCIES ====================
+
+
+async def _get_project_role(
+    request: fastapi.Request,
+    project_id: int,
+) -> typing.Tuple[bool, str]:
+    """Return (is_member, role) for the authenticated account, with Redis caching."""
+    account_id: int = request.state.account_id
+    redis_client_inst: redis_client.RedisClient = request.app.state.redis_client
+
+    cached = await redis_client_inst.get_cached_project_access(account_id, project_id)
+    if cached is not None:
+        return (cached, "")
+
+    grpc_mgr: grpc_pool.GRPCPoolManager = request.app.state.grpc_pool
+    stub = grpc_mgr.get_stub("auth", auth_pb2_grpc.AuthServiceStub)
+
+    try:
+        response = await stub.GetProjectRole(
+            auth_pb2.GetProjectRoleRequest(
+                project_id=project_id, account_id=account_id
+            ),
+            timeout=5.0,
+        )
+    except Exception as exc:
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Auth service unavailable",
+        ) from exc
+
+    await redis_client_inst.set_cached_project_access(
+        account_id, project_id, response.is_member
+    )
+    return (response.is_member, response.role)
+
+
+async def require_project_member(
+    request: fastapi.Request,
+    project_id: int = fastapi.Query(..., gt=0),
+) -> int:
+    if not hasattr(request.state, "account_id"):
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
+    is_member, _ = await _get_project_role(request, project_id)
+    if not is_member:
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_403_FORBIDDEN,
+            detail="Not a member of this project",
+        )
+    return project_id
+
+
+async def require_project_owner(
+    request: fastapi.Request,
+    project_id: int,
+) -> int:
+    if not hasattr(request.state, "account_id"):
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
+    account_id: int = request.state.account_id
+    redis_inst: redis_client.RedisClient = request.app.state.redis_client
+
+    cached = await redis_inst.get_cached_project_access(account_id, project_id)
+    if cached is False:
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_403_FORBIDDEN,
+            detail="Not a member of this project",
+        )
+
+    grpc_mgr: grpc_pool.GRPCPoolManager = request.app.state.grpc_pool
+    stub = grpc_mgr.get_stub("auth", auth_pb2_grpc.AuthServiceStub)
+    try:
+        response = await stub.GetProjectRole(
+            auth_pb2.GetProjectRoleRequest(
+                project_id=project_id, account_id=account_id
+            ),
+            timeout=5.0,
+        )
+    except Exception as exc:
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Auth service unavailable",
+        ) from exc
+
+    await redis_inst.set_cached_project_access(account_id, project_id, response.is_member)
+
+    if not response.is_member:
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_403_FORBIDDEN,
+            detail="Not a member of this project",
+        )
+    if response.role != "owner":
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_403_FORBIDDEN,
+            detail="Only project owners can perform this action",
+        )
+    return project_id
 
 
 # ==================== PAGINATION DEPENDENCIES ====================

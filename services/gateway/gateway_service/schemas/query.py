@@ -162,7 +162,7 @@ class ErrorListResponse(pydantic.BaseModel):
 class LogsListResponse(pydantic.BaseModel):
     project_id: int = pydantic.Field(description="Project ID")
     logs: list[LogEntryResponse] = pydantic.Field(description="List of log entries")
-    total: int = pydantic.Field(description="Total number of logs matching filters")
+    total: int | None = pydantic.Field(default=None, description="Total count — omitted when using limit+1 pagination")
     has_more: bool = pydantic.Field(description="Whether there are more logs to fetch")
 
 

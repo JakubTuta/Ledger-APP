@@ -6,6 +6,7 @@ import gateway_service.proto.auth_pb2 as auth_pb2
 import gateway_service.proto.auth_pb2_grpc as auth_pb2_grpc
 import grpc
 import httpx
+from gateway_service import dependencies
 from pydantic import BaseModel, Field
 
 router = fastapi.APIRouter(tags=["Alerts"])
@@ -330,7 +331,7 @@ async def test_connector(
 )
 async def list_alert_rules(
     request: fastapi.Request,
-    project_id: int = fastapi.Query(...),
+    project_id: int = fastapi.Depends(dependencies.require_project_member),
 ) -> list[AlertRuleResponse]:
     _require_account(request)
     try:
@@ -350,7 +351,7 @@ async def list_alert_rules(
 async def get_alert_rule(
     request: fastapi.Request,
     rule_id: int,
-    project_id: int = fastapi.Query(...),
+    project_id: int = fastapi.Depends(dependencies.require_project_member),
 ) -> AlertRuleResponse:
     _require_account(request)
     try:
@@ -404,7 +405,7 @@ async def update_alert_rule(
     rule_id: int,
     payload: UpdateAlertRuleRequest,
     request: fastapi.Request,
-    project_id: int = fastapi.Query(...),
+    project_id: int = fastapi.Depends(dependencies.require_project_member),
 ) -> AlertRuleResponse:
     _require_account(request)
     proto_req = auth_pb2.UpdateAlertRuleRequest(
@@ -442,7 +443,7 @@ async def update_alert_rule(
 async def delete_alert_rule(
     rule_id: int,
     request: fastapi.Request,
-    project_id: int = fastapi.Query(...),
+    project_id: int = fastapi.Depends(dependencies.require_project_member),
 ) -> None:
     _require_account(request)
     try:
@@ -464,7 +465,7 @@ async def delete_alert_rule(
 )
 async def list_alert_history(
     request: fastapi.Request,
-    project_id: int = fastapi.Query(...),
+    project_id: int = fastapi.Depends(dependencies.require_project_member),
     limit: int = fastapi.Query(25, ge=1, le=100),
     before_id: int | None = fastapi.Query(None),
 ) -> AlertEventListResponse:

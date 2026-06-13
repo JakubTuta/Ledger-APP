@@ -57,21 +57,18 @@ async def query_logs(
             )
 
         query = query.order_by(models.Log.timestamp.desc())
-
-        count_query = sa.select(sa.func.count()).select_from(query.subquery())
-        total_result = await session.execute(count_query)
-        total = total_result.scalar() or 0
-
-        query = query.limit(pagination.limit).offset(pagination.offset)
+        query = query.limit(pagination.limit + 1).offset(pagination.offset)
 
         result = await session.execute(query)
         logs = result.scalars().all()
 
-        has_more = (pagination.offset + len(logs)) < total
+        has_more = len(logs) > pagination.limit
+        if has_more:
+            logs = logs[: pagination.limit]
 
         return schemas.LogsQueryResponse(
             logs=[schemas.LogResponse.model_validate(log) for log in logs],
-            total=total,
+            total=None,
             has_more=has_more,
         )
 
@@ -99,21 +96,18 @@ async def search_logs(
         query = query.where(search_filter)
 
         query = query.order_by(models.Log.timestamp.desc())
-
-        count_query = sa.select(sa.func.count()).select_from(query.subquery())
-        total_result = await session.execute(count_query)
-        total = total_result.scalar() or 0
-
-        query = query.limit(pagination.limit).offset(pagination.offset)
+        query = query.limit(pagination.limit + 1).offset(pagination.offset)
 
         result = await session.execute(query)
         logs = result.scalars().all()
 
-        has_more = (pagination.offset + len(logs)) < total
+        has_more = len(logs) > pagination.limit
+        if has_more:
+            logs = logs[: pagination.limit]
 
         return schemas.LogsQueryResponse(
             logs=[schemas.LogResponse.model_validate(log) for log in logs],
-            total=total,
+            total=None,
             has_more=has_more,
         )
 

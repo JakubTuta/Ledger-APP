@@ -13,38 +13,6 @@ logger = logging.getLogger(__name__)
 router = fastapi.APIRouter(tags=["Sharing"])
 
 
-async def _require_project_owner(
-    project_id: int,
-    account_id: int,
-    stub: auth_pb2_grpc.AuthServiceStub,
-) -> None:
-    response = await asyncio.wait_for(
-        stub.GetProjectRole(
-            auth_pb2.GetProjectRoleRequest(project_id=project_id, account_id=account_id)
-        ),
-        timeout=5.0,
-    )
-    if not response.is_member:
-        raise fastapi.HTTPException(status_code=fastapi.status.HTTP_403_FORBIDDEN, detail="Not a member of this project")
-    if response.role != "owner":
-        raise fastapi.HTTPException(status_code=fastapi.status.HTTP_403_FORBIDDEN, detail="Only project owners can perform this action")
-
-
-async def _require_project_member(
-    project_id: int,
-    account_id: int,
-    stub: auth_pb2_grpc.AuthServiceStub,
-) -> None:
-    response = await asyncio.wait_for(
-        stub.GetProjectRole(
-            auth_pb2.GetProjectRoleRequest(project_id=project_id, account_id=account_id)
-        ),
-        timeout=5.0,
-    )
-    if not response.is_member:
-        raise fastapi.HTTPException(status_code=fastapi.status.HTTP_403_FORBIDDEN, detail="Not a member of this project")
-
-
 @router.post(
     "/projects/{project_id}/invite-code",
     response_model=schemas.GenerateInviteCodeResponse,
@@ -58,6 +26,7 @@ async def _require_project_member(
     },
 )
 async def generate_invite_code(
+    request: fastapi.Request,
     project_id: int = fastapi.Path(..., description="Project ID"),
     account_id: int = fastapi.Depends(dependencies.get_current_account_id),
     grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
@@ -65,7 +34,7 @@ async def generate_invite_code(
     try:
         stub = grpc_pool.get_stub("auth", auth_pb2_grpc.AuthServiceStub)
 
-        await _require_project_owner(project_id, account_id, stub)
+        await dependencies.require_project_owner(request, project_id)
 
         response = await asyncio.wait_for(
             stub.GenerateInviteCode(
@@ -163,6 +132,7 @@ async def accept_invite_code(
     },
 )
 async def list_project_members(
+    request: fastapi.Request,
     project_id: int = fastapi.Path(..., description="Project ID"),
     account_id: int = fastapi.Depends(dependencies.get_current_account_id),
     grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
@@ -170,7 +140,7 @@ async def list_project_members(
     try:
         stub = grpc_pool.get_stub("auth", auth_pb2_grpc.AuthServiceStub)
 
-        await _require_project_member(project_id, account_id, stub)
+        await dependencies.require_project_member(request, project_id)
 
         response = await asyncio.wait_for(
             stub.ListProjectMembers(
@@ -224,6 +194,7 @@ async def list_project_members(
     },
 )
 async def remove_project_member(
+    request: fastapi.Request,
     project_id: int = fastapi.Path(..., description="Project ID"),
     target_account_id: int = fastapi.Path(..., description="Account ID of member to remove"),
     account_id: int = fastapi.Depends(dependencies.get_current_account_id),
@@ -232,7 +203,7 @@ async def remove_project_member(
     try:
         stub = grpc_pool.get_stub("auth", auth_pb2_grpc.AuthServiceStub)
 
-        await _require_project_owner(project_id, account_id, stub)
+        await dependencies.require_project_owner(request, project_id)
 
         response = await asyncio.wait_for(
             stub.RemoveProjectMember(

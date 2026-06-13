@@ -7,6 +7,7 @@ import fastapi
 import gateway_service.proto.query_pb2 as query_pb2
 import gateway_service.schemas as schemas
 import grpc
+from gateway_service import dependencies
 
 router = fastapi.APIRouter(tags=["Query"])
 logger = logging.getLogger(__name__)
@@ -148,11 +149,7 @@ def _calculate_time_range_for_period(
 async def get_log_by_id(
     log_id: int,
     request: fastapi.Request,
-    project_id: int = fastapi.Query(
-        ...,
-        description="The project ID to retrieve the log from",
-        gt=0,
-    ),
+    project_id: int = fastapi.Depends(dependencies.require_project_member),
 ) -> schemas.LogEntryResponse:
     """
     Retrieve a complete log entry by its unique ID.
@@ -307,11 +304,7 @@ async def get_log_by_id(
 )
 async def query_logs(
     request: fastapi.Request,
-    project_id: int = fastapi.Query(
-        ...,
-        description="The project ID to retrieve logs from",
-        gt=0,
-    ),
+    project_id: int = fastapi.Depends(dependencies.require_project_member),
     period: typing.Optional[
         typing.Literal[
             "today",
@@ -601,11 +594,7 @@ async def query_logs(
 )
 async def get_aggregated_metrics(
     request: fastapi.Request,
-    project_id: int = fastapi.Query(
-        ...,
-        description="The project ID to retrieve metrics for",
-        gt=0,
-    ),
+    project_id: int = fastapi.Depends(dependencies.require_project_member),
     type: typing.Literal["exception", "endpoint", "log_volume"] = fastapi.Query(
         ...,
         description="Metric type to retrieve (exception for error tracking, endpoint for API monitoring, log_volume for log volume metrics)",
@@ -970,11 +959,7 @@ async def get_aggregated_metrics(
 )
 async def get_error_list(
     request: fastapi.Request,
-    project_id: int = fastapi.Query(
-        ...,
-        description="The project ID to retrieve errors from",
-        gt=0,
-    ),
+    project_id: int = fastapi.Depends(dependencies.require_project_member),
     period: typing.Optional[
         typing.Literal[
             "today",
@@ -1125,7 +1110,7 @@ async def get_error_list(
 )
 async def get_bottleneck_list(
     request: fastapi.Request,
-    project_id: int = fastapi.Query(..., gt=0),
+    project_id: int = fastapi.Depends(dependencies.require_project_member),
     statistic: typing.Literal["min", "max", "avg", "median"] = fastapi.Query("avg"),
     sort: typing.Literal["asc", "desc"] = fastapi.Query("desc"),
     period: typing.Optional[str] = fastapi.Query(None),

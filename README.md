@@ -21,41 +21,30 @@
 Ledger is a self-hosted log analytics platform that gives you everything you need:
 
 ```python
-# Just add 3 lines to your code
-from ledger_sdk import LedgerClient
+from ledger import LedgerClient
 
-client = LedgerClient(api_key="your_key")
-client.log.info("User signed up", attributes={"user_id": "123"})
-
-# That's it. Logs are captured, stored, and searchable in milliseconds.
+ledger = LedgerClient(api_key="your_key", base_url="http://localhost:8000")
+ledger.log_info("User signed up", attributes={"user_id": "123"})
 ```
 
-Then watch your logs in real-time on a beautiful web dashboard. Search through millions of logs. Track errors automatically. All for free.
+Logs are captured, stored, and searchable in milliseconds. Watch them in real-time on the web dashboard.
 
 ## What You Get
 
 - **Lightning Fast** - Query 10,000+ logs/second, get results in <50ms
 - **Automatic Error Grouping** - Like Sentry, but free (no per-error pricing)
 - **Distributed Tracing** - End-to-end trace visibility across services
-- **Custom Metrics** - Track any numeric metric with tags and time-series queries
 - **Alert Rules** - Threshold-based alerts delivered via in-app, email, or webhook
 - **Beautiful Web Dashboard** - Real-time streaming, charts, and analytics
-- **Easy Integration** - One pip install, three lines of code
+- **Easy Integration** - One pip install, a few lines of code
 - **Production Ready** - Multi-tenant, rate-limited, horizontally scalable
 - **100% Free** - Self-hosted, no limits, no credit card required
-
-### Perfect For
-
-- Backend APIs that need better error tracking
-- Startups trying to keep costs down without sacrificing quality
-- Microservices needing centralized logging
-- Anyone tired of paying $100+/month for basic logging
 
 ## Get Started in 5 Minutes
 
 ### Prerequisites
 
-Just need Docker installed. That's it.
+Just need Docker installed.
 
 ### Installation
 
@@ -94,23 +83,20 @@ pip install ledger-sdk
 ```
 
 ```python
-from ledger_sdk import LedgerClient
+from ledger import LedgerClient
 
-# Initialize once
-client = LedgerClient(
+ledger = LedgerClient(
     api_key="your_api_key",  # Get this from the dashboard
     base_url="http://localhost:8000"
 )
 
-# Start logging
-client.log.info("User logged in", attributes={"user_id": "123"})
-client.log.warning("Slow database query", attributes={"duration_ms": 450})
+ledger.log_info("User logged in", attributes={"user_id": "123"})
+ledger.log_warning("Slow database query", attributes={"duration_ms": 450})
 
-# Errors are automatically captured with stack traces
 try:
     process_payment()
 except Exception as e:
-    client.log.error("Payment processing failed", error=e)
+    ledger.log_exception(e, message="Payment processing failed")
 ```
 
 **Option 2: Use the REST API directly**
@@ -156,35 +142,26 @@ curl -X POST http://localhost:8000/api/v1/ingest/single \
   }'
 ```
 
-**Congratulations!** You just sent your first log. Now let's query it:
+Query it back:
 
 ```bash
 curl -X GET "http://localhost:8000/api/v1/logs?project_id=1&limit=10" \
   -H "Authorization: Bearer YOUR_API_KEY"
 ```
 
-You should see your log in the response. Try the web dashboard at `http://localhost:8000` for a better view.
-
 ## What You Can Do
 
 ### Search Your Logs
 
-Find exactly what you need, fast:
-
 ```bash
 # All error logs from the last hour
 GET /api/v1/logs?project_id=1&level=error&start_time=2025-11-14T09:00:00Z
-
-# Full-text search for "timeout"
-GET /api/v1/logs/search?project_id=1&query=timeout
 
 # Errors from a specific user
 GET /api/v1/logs?project_id=1&level=error&user_id=123
 ```
 
 ### Track Your Metrics
-
-Pre-computed analytics updated in real-time:
 
 ```bash
 # How many errors are happening right now?
@@ -197,41 +174,11 @@ GET /api/v1/metrics/top-errors?project_id=1
 GET /api/v1/metrics/log-volume?project_id=1
 ```
 
-### Send Logs in Batches
-
-Need to send lots of logs at once? Use batch ingestion:
-
-```python
-# Send up to 1,000 logs in one request
-client.log.batch([
-    {"level": "info", "message": "Event 1"},
-    {"level": "info", "message": "Event 2"},
-    # ... up to 1,000 logs
-])
-```
-
-### Monitor Endpoints
-
-Track your API performance:
-
-```python
-# Automatically capture endpoint metrics
-@app.get("/api/users")
-async def get_users():
-    with client.monitor_endpoint("/api/users", method="GET"):
-        # Your code here
-        return users
-
-# Ledger tracks response time, status codes, and errors
-```
-
-See [Endpoint Monitoring Guide](project_overview/ENDPOINT_MONITORING.md) for details.
-
-## Features That Save You Time
+## Features
 
 ### Automatic Error Grouping
 
-Similar errors are automatically grouped together (like Sentry). No more scrolling through hundreds of duplicate errors:
+Similar errors are automatically grouped together (like Sentry):
 
 - **Smart fingerprinting** - Groups by error type, location, and message
 - **Occurrence tracking** - See how often each error happens
@@ -242,7 +189,7 @@ Similar errors are automatically grouped together (like Sentry). No more scrolli
 Beautiful web interface for exploring your logs:
 
 - **Live log streaming** - Watch logs appear in real-time
-- **Advanced filtering** - Filter by level, time range, user, or custom attributes
+- **Advanced filtering** - Filter by level, time range, or custom attributes
 - **Charts and graphs** - Visualize error rates and log volume
 - **Multi-project support** - Manage all your services in one place
 
@@ -250,16 +197,12 @@ Beautiful web interface for exploring your logs:
 
 ### Built-In Rate Limiting
 
-Protect your infrastructure from runaway logging:
-
 - **Per-minute limits** - Default: 1,000 logs/minute per project
 - **Per-hour limits** - Default: 50,000 logs/hour per project
 - **Daily quotas** - Default: 1 million logs/day per project
 - **All configurable** - Adjust limits based on your needs
 
 ## How It Works
-
-Ledger uses a microservices architecture optimized for speed and reliability:
 
 ```
 Your App (with SDK)
@@ -273,27 +216,13 @@ Your App (with SDK)
     └─► Web Dashboard
 ```
 
-**Why this architecture?**
-
-- **Separation of concerns** - Reading logs doesn't slow down writing logs
-- **Redis buffering** - Handles traffic spikes without dropping logs
-- **Pre-computed metrics** - Queries stay fast even with millions of logs
-- **gRPC internally** - Fast, efficient communication between services
-
-Want the technical details? Check out [ARCHITECTURE.md](documentation/ARCHITECTURE.md)
-
 ## Performance
-
-Ledger is built to handle production workloads:
 
 | Metric              | Performance | Notes                       |
 | ------------------- | ----------- | --------------------------- |
 | Log ingestion       | 10,000/sec  | Per Gateway instance        |
 | Query response time | <50ms       | P99, with cache             |
-| Search millions     | <200ms      | Full-text search            |
-| Error grouping      | Real-time   | Background workers          |
 | Horizontal scaling  | Yes         | Add more Gateway instances  |
-| Storage efficiency  | High        | Optimized PostgreSQL schema |
 
 ## Configuration
 
@@ -314,45 +243,18 @@ AUTH_DB_HOST=postgres-auth
 LOGS_DB_HOST=postgres-logs
 ```
 
-See [Configuration Guide](documentation/ARCHITECTURE.md#configuration) for all options.
-
 ## Ecosystem
 
-Ledger is more than just the server:
-
 - **[Python SDK](https://github.com/JakubTuta/Ledger-SDK)** - Official client library ([PyPI](https://pypi.org/project/ledger-sdk/))
-- **[Web Dashboard](https://github.com/JakubTuta/Ledger-WEB)** - React-based frontend
+- **[Web Dashboard](https://github.com/JakubTuta/Ledger-WEB)** - Nuxt/Vue dashboard
 - **[Live Demo](https://ledger.jtuta.cloud)** - Try it without installing
-
-**Coming Soon:**
-
-- JavaScript/Node.js SDK
-- Go SDK
-- Java SDK
-- Slack/Discord integrations
 
 ## Documentation
 
 - **[API Reference](https://bump.sh/tuta-corp/doc/ledger-api/)** - Complete REST API documentation
 - **[OpenAPI Spec](https://ledger-server.jtuta.cloud/openapi.json)** - Machine-readable API specification
-- **[Architecture Guide](documentation/ARCHITECTURE.md)** - How everything fits together
-- **[Services Guide](documentation/SERVICES.md)** - Deep dive into each service
-- **[Development Guide](CLAUDE.md)** - For contributors
-
-## Contributing
-
-We welcome contributions! Whether it's:
-
-- Reporting bugs
-- Suggesting features
-- Improving documentation
-- Submitting pull requests
-
-Check out our [Issues](https://github.com/JakubTuta/Ledger-APP/issues) to get started.
 
 ## Development
-
-Working on Ledger itself? Here are the essential commands:
 
 ```bash
 # Start all services
@@ -375,11 +277,7 @@ Working on Ledger itself? Here are the essential commands:
 ./scripts/Make.ps1 down
 ```
 
-See [CLAUDE.md](CLAUDE.md) for detailed development instructions.
-
 ## Technology Stack
-
-Built with modern, proven technologies:
 
 - **Backend:** Python 3.12+, FastAPI, gRPC
 - **Databases:** PostgreSQL 15, Redis 7
@@ -393,11 +291,7 @@ Ledger is running in production:
 - **API:** https://ledger-server.jtuta.cloud
 - **Dashboard:** https://ledger.jtuta.cloud
 
-Want to deploy your own? See [Deployment Guide](documentation/ARCHITECTURE.md#deployment).
-
 ## Support
-
-Need help?
 
 - **Questions?** [Open a Discussion](https://github.com/JakubTuta/Ledger-APP/discussions)
 - **Found a bug?** [Report an Issue](https://github.com/JakubTuta/Ledger-APP/issues)

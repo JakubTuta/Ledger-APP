@@ -79,6 +79,9 @@ async def ingest_single_log(
                 timeout=5.0,
             )
 
+        redis = request.app.state.redis_client
+        await redis.increment_daily_usage(project_id, 1)
+
         return schemas.IngestResponse(
             accepted=1,
             rejected=0,
@@ -195,6 +198,10 @@ async def ingest_batch_logs(
                 ),
                 timeout=10.0,
             )
+
+        if response.queued:
+            redis = request.app.state.redis_client
+            await redis.increment_daily_usage(project_id, response.queued)
 
         return schemas.IngestResponse(
             accepted=response.queued,

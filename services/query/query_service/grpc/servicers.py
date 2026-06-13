@@ -83,7 +83,7 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
                 log_entries.append(entry)
 
             return query_pb2.QueryLogsResponse(
-                logs=log_entries, total=result.total, has_more=result.has_more
+                logs=log_entries, total=result.total or 0, has_more=result.has_more
             )
 
         except Exception as e:
@@ -148,7 +148,7 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
                 log_entries.append(entry)
 
             return query_pb2.SearchLogsResponse(
-                logs=log_entries, total=result.total, has_more=result.has_more
+                logs=log_entries, total=result.total or 0, has_more=result.has_more
             )
 
         except Exception as e:

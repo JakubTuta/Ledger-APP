@@ -5,7 +5,7 @@ import typing
 import fastapi
 import gateway_service.config as config
 from fastapi.responses import JSONResponse
-from gateway_service.middleware import auth, circuit_breaker, rate_limit
+from gateway_service.middleware import auth, circuit_breaker, gzip_request, rate_limit
 from gateway_service.routes import (
     alert_routes,
     api_key_routes,
@@ -295,9 +295,10 @@ async def global_exception_handler(request, exc):
         )
 
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
-    return JSONResponse(
-        status_code=500, content={"error": "Internal server error", "detail": str(exc)}
-    )
+    body: dict = {"detail": "Internal server error"}
+    if config.settings.DEBUG:
+        body["debug"] = str(exc)
+    return JSONResponse(status_code=500, content=body)
 
 
 def add_middleware(middleware_class, **options):
@@ -314,6 +315,9 @@ add_middleware(
 )
 add_middleware(
     auth.AuthMiddleware,
+)
+add_middleware(
+    gzip_request.GzipRequestMiddleware,
 )
 
 

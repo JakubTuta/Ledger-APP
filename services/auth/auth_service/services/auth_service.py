@@ -363,7 +363,7 @@ class AuthService:
         full_key = f"ledger_{random_part}"
         key_prefix = full_key[:20]
 
-        key_hash = bcrypt.hashpw(full_key.encode(), bcrypt.gensalt(rounds=10)).decode()
+        key_hash = hashlib.sha256(full_key.encode()).hexdigest()
 
         api_key = models.ApiKey(
             project_id=project_id,
@@ -387,13 +387,13 @@ class AuthService:
         Validate API key and return project info.
 
         Returns: (is_valid, project_id, project_info)
-
-        Gateway calls this method to validate API keys.
+        Uses a single O(1) indexed lookup by SHA-256 hash.
         """
 
-        cache_key = f"api_key:{hash(api_key)}"
-        cached = await self.redis.hgetall(cache_key)
+        key_hash = hashlib.sha256(api_key.encode()).hexdigest()
+        cache_key = f"api_key:{key_hash}"
 
+        cached = await self.redis.hgetall(cache_key)
         if cached:
             return (
                 True,
@@ -405,52 +405,50 @@ class AuthService:
                     "retention_days": int(cached[b"retention_days"]),
                     "rate_limit_per_minute": int(cached[b"rate_limit_per_minute"]),
                     "rate_limit_per_hour": int(cached[b"rate_limit_per_hour"]),
-                    "current_usage": int(cached.get(b"current_usage", 0)),
                 },
             )
 
         result = await session.execute(
-            select(models.ApiKey).where(models.ApiKey.status == "active")
+            select(models.ApiKey).where(
+                models.ApiKey.key_hash == key_hash,
+                models.ApiKey.status == "active",
+            )
         )
-        api_keys = result.scalars().all()
+        key_record = result.scalar_one_or_none()
 
-        for key_record in api_keys:
-            if bcrypt.checkpw(api_key.encode(), key_record.key_hash.encode()):
-                if key_record.expires_at and key_record.expires_at < datetime.now(
-                    timezone.utc
-                ):
-                    return (False, None, {"error": "API key expired"})
+        if not key_record:
+            return (False, None, {"error": "Invalid API key"})
 
-                project = await self.get_project_by_id(session, key_record.project_id)
-                if not project:
-                    return (False, None, {"error": "Project not found"})
+        if key_record.expires_at and key_record.expires_at < datetime.now(timezone.utc):
+            return (False, None, {"error": "API key expired"})
 
-                key_record.last_used_at = datetime.now(timezone.utc)
-                await session.commit()
+        project = await self.get_project_by_id(session, key_record.project_id)
+        if not project:
+            return (False, None, {"error": "Project not found"})
 
-                project_info = {
-                    "project_id": project.id,
-                    "account_id": project.account_id,
-                    "daily_quota": project.daily_quota,
-                    "retention_days": project.retention_days,
-                    "rate_limit_per_minute": key_record.rate_limit_per_minute,
-                    "rate_limit_per_hour": key_record.rate_limit_per_hour,
-                    "current_usage": 0,  # TODO: Get from daily_usage table
-                }
+        key_record.last_used_at = datetime.now(timezone.utc)
+        await session.commit()
 
-                await self.redis.hset(cache_key, mapping=project_info)
-                await self.redis.expire(cache_key, config.settings.CACHE_TTL_SECONDS)
+        project_info = {
+            "project_id": project.id,
+            "account_id": project.account_id,
+            "daily_quota": project.daily_quota,
+            "retention_days": project.retention_days,
+            "rate_limit_per_minute": key_record.rate_limit_per_minute,
+            "rate_limit_per_hour": key_record.rate_limit_per_hour,
+        }
 
-                return (True, project.id, project_info)
+        await self.redis.hset(cache_key, mapping=project_info)
+        await self.redis.expire(cache_key, config.settings.CACHE_TTL_SECONDS)
 
-        return (False, None, {"error": "Invalid API key"})
+        return (True, project.id, project_info)
 
     async def revoke_api_key(
         self,
         session: AsyncSession,
         key_id: int,
     ) -> None:
-        """Revoke API key."""
+        """Revoke API key and purge its cache entry."""
 
         result = await session.execute(
             select(models.ApiKey).where(models.ApiKey.id == key_id)
@@ -460,13 +458,11 @@ class AuthService:
         if not api_key:
             raise ValueError("API key not found")
 
+        key_hash = api_key.key_hash
         api_key.status = "revoked"
         await session.commit()
 
-        pattern = "api_key:*"
-        async for key in self.redis.scan_iter(match=pattern):
-            await self.redis.delete(key)
-            await self.redis.delete(key)
+        await self.redis.delete(f"api_key:{key_hash}")
 
     async def list_api_keys(
         self,

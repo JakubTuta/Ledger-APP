@@ -266,7 +266,7 @@ class ApiKey(database.Base):
     API keys table for authentication.
 
     Performance notes:
-    - CHAR(60) for bcrypt hash (fixed length)
+    - CHAR(64) for SHA-256 hex digest (replaces bcrypt — enables O(1) indexed lookup)
     - Unique key_hash for fast validation
     - Covering index for validation query
     - Partial index on active keys only
@@ -285,7 +285,7 @@ class ApiKey(database.Base):
 
     key_prefix: Mapped[str] = mapped_column(VARCHAR(20), nullable=False)
     key_hash: Mapped[str] = mapped_column(
-        CHAR(60), unique=True, nullable=False, index=True
+        CHAR(64), unique=True, nullable=False, index=True
     )
 
     name: Mapped[str | None] = mapped_column(VARCHAR(255), nullable=True)

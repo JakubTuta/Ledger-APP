@@ -1,8 +1,6 @@
-import asyncio
 import hashlib
 import json
 import logging
-import random
 import typing
 
 from gateway_service import config
@@ -87,41 +85,20 @@ class RedisClient:
     async def get_stale_cache(self, api_key: str) -> typing.Optional[typing.Dict]:
         return await self.get_cached_api_key(api_key)
 
-    async def refresh_cache_probabilistic(
-        self, api_key: str, refresh_callback
-    ) -> typing.Optional[typing.Dict]:
-        cache_key = self._api_key_cache_key(api_key)
-
-        try:
-            pipe = self.client.pipeline()  # type: ignore
-            pipe.get(cache_key)
-            pipe.ttl(cache_key)
-            data_bytes, ttl_remaining = await pipe.execute()
-
-            if data_bytes is None:
-                return None
-
-            data = json.loads(data_bytes)
-
-            if ttl_remaining > 0 and ttl_remaining < 60 and random.random() < 0.1:
-                asyncio.create_task(refresh_callback(api_key))
-
-            return data
-
-        except RedisError as e:
-            logger.error(f"Redis error in probabilistic refresh: {e}")
-            return None
-
     # ==================== RATE LIMITING OPERATIONS ====================
 
     async def check_rate_limit(
-        self, project_id: int, limit_per_minute: int, limit_per_hour: int
+        self,
+        entity_id: int,
+        limit_per_minute: int,
+        limit_per_hour: int,
+        key_prefix: str = "project",
     ) -> tuple[bool, typing.Dict]:
         import time
 
         now = int(time.time())
-        minute_key = f"ratelimit:{project_id}:min:{now // 60}"
-        hour_key = f"ratelimit:{project_id}:hour:{now // 3600}"
+        minute_key = f"ratelimit:{key_prefix}:{entity_id}:min:{now // 60}"
+        hour_key = f"ratelimit:{key_prefix}:{entity_id}:hour:{now // 3600}"
 
         try:
             pipe = self.client.pipeline()  # type: ignore
@@ -147,6 +124,35 @@ class RedisClient:
         except RedisError as e:
             logger.error(f"Rate limit check error: {e}")
             return True, {"error": str(e)}
+
+    async def get_cached_project_access(
+        self, account_id: int, project_id: int
+    ) -> typing.Optional[bool]:
+        key = f"project_access:{account_id}:{project_id}"
+        try:
+            val = await self.client.get(key)  # type: ignore
+            if val is None:
+                return None
+            return val == b"1"
+        except RedisError as e:
+            logger.error(f"Redis GET project_access error: {e}")
+            return None
+
+    async def set_cached_project_access(
+        self, account_id: int, project_id: int, is_member: bool, ttl: int = 60
+    ):
+        key = f"project_access:{account_id}:{project_id}"
+        try:
+            await self.client.setex(key, ttl, b"1" if is_member else b"0")  # type: ignore
+        except RedisError as e:
+            logger.error(f"Redis SETEX project_access error: {e}")
+
+    async def delete_cached_project_access(self, account_id: int, project_id: int):
+        key = f"project_access:{account_id}:{project_id}"
+        try:
+            await self.client.delete(key)  # type: ignore
+        except RedisError as e:
+            logger.error(f"Redis DELETE project_access error: {e}")
 
     async def get_daily_usage(self, project_id: int) -> int:
         import datetime
