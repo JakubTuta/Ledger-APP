@@ -231,7 +231,7 @@ class BottleneckListEntry(pydantic.BaseModel):
 
 class BottleneckListResponse(pydantic.BaseModel):
     project_id: int
-    statistic: typing.Literal["min", "max", "avg", "median"]
+    statistic: typing.Literal["min", "max", "avg", "median", "count"]
     sort: typing.Literal["asc", "desc"]
     start_date: str
     end_date: str

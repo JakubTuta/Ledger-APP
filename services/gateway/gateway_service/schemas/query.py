@@ -178,7 +178,7 @@ class BottleneckListEntryResponse(pydantic.BaseModel):
 
 class BottleneckListResponse(pydantic.BaseModel):
     project_id: int = pydantic.Field(description="Project ID")
-    statistic: typing.Literal["min", "max", "avg", "median"] = pydantic.Field(
+    statistic: typing.Literal["min", "max", "avg", "median", "count"] = pydantic.Field(
         description="Statistic used for sorting and the value field"
     )
     sort: typing.Literal["asc", "desc"] = pydantic.Field(description="Sort direction")

@@ -517,7 +517,7 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
         context: grpc.aio.ServicerContext,
     ) -> query_pb2.GetBottleneckListResponse:
         try:
-            valid_statistics = ["min", "max", "avg", "median"]
+            valid_statistics = ["min", "max", "avg", "median", "count"]
             if request.statistic not in valid_statistics:
                 await context.abort(
                     grpc.StatusCode.INVALID_ARGUMENT,

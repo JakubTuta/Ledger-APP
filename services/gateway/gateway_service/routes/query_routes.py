@@ -1111,7 +1111,7 @@ async def get_error_list(
 async def get_bottleneck_list(
     request: fastapi.Request,
     project_id: int = fastapi.Depends(dependencies.require_project_member),
-    statistic: typing.Literal["min", "max", "avg", "median"] = fastapi.Query("avg"),
+    statistic: typing.Literal["min", "max", "avg", "median", "count"] = fastapi.Query("avg"),
     sort: typing.Literal["asc", "desc"] = fastapi.Query("desc"),
     period: typing.Optional[str] = fastapi.Query(None),
     periodFrom: typing.Optional[str] = fastapi.Query(None),

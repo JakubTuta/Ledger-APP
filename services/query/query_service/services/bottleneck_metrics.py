@@ -47,7 +47,7 @@ def _parse_period(
 
 async def get_bottleneck_list(
     project_id: int,
-    statistic: Literal["min", "max", "avg", "median"],
+    statistic: Literal["min", "max", "avg", "median", "count"],
     sort: Literal["asc", "desc"],
     period: str | None = None,
     period_from: datetime.date | None = None,
@@ -72,6 +72,7 @@ async def get_bottleneck_list(
         "max": sa.func.max(m.max_duration_ms),
         "avg": weighted_avg,
         "median": sa.func.avg(sa.func.nullif(m.median_duration_ms, 0)),
+        "count": sa.func.sum(m.log_count),
     }
 
     stat_expr = stat_expr_map[statistic]
