@@ -2,6 +2,7 @@ import json
 import logging
 
 import fastapi
+import gateway_service.config as config
 import gateway_service.proto.ingestion_pb2 as ingestion_pb2
 import gateway_service.schemas as schemas
 import grpc
@@ -196,7 +197,7 @@ async def ingest_batch_logs(
                 ingestion_pb2.IngestLogBatchRequest(
                     project_id=project_id, logs=proto_logs
                 ),
-                timeout=10.0,
+                timeout=config.settings.GRPC_TIMEOUT,
             )
 
         if response.queued:

@@ -36,21 +36,18 @@ function Show-Help {
     Write-Host "Available commands:" -ForegroundColor Cyan
     Write-Host "  setup        - Create venv, install deps, compile protos"
     Write-Host "  proto        - Compile protobuf files"
-    Write-Host "  up           - Start all dev services"
+    Write-Host "  up           - Build and start all dev services"
     Write-Host "  down         - Stop all dev services"
-    Write-Host "  build        - Build dev Docker images"
-    Write-Host "  redeploy     - Stop, rebuild and start dev services"
     Write-Host "  test         - Run all tests"
     Write-Host "  test-auth    - Run auth service tests"
     Write-Host "  test-gateway - Run gateway service tests"
     Write-Host "  test-ingestion - Run ingestion service tests"
     Write-Host "  test-analytics - Run analytics workers tests"
     Write-Host "  test-query   - Run query service tests"
+    Write-Host "  benchmark    - Measure max sustainable ingestion logs/s (auto-ramp, gzip, fresh key, DB verify)"
     Write-Host ""
     Write-Host "Production:" -ForegroundColor Yellow
-    Write-Host "  prod-build   - Build production images for registry"
-    Write-Host "  prod-push    - Push production images to registry"
-    Write-Host "  prod-deploy  - Build and push production images"
+    Write-Host "  prod-deploy  - Build and push production images to registry"
     Write-Host "  prod-up      - Start production services"
     Write-Host "  prod-down    - Stop production services"
     Write-Host ""
@@ -131,7 +128,9 @@ function Compile-Proto {
 }
 
 function Start-Services {
-    docker-compose up -d
+    docker-compose down --rmi local
+    if ($LASTEXITCODE -ne 0) { Write-Host "Failed to remove old containers/images" -ForegroundColor Red; exit 1 }
+    docker-compose up -d --build
     if ($LASTEXITCODE -ne 0) { Write-Host "Failed to start services" -ForegroundColor Red; exit 1 }
     Write-Host "Services started" -ForegroundColor Green
 }
@@ -140,18 +139,6 @@ function Stop-Services {
     docker-compose down
     if ($LASTEXITCODE -ne 0) { Write-Host "Failed to stop services" -ForegroundColor Red; exit 1 }
     Write-Host "Services stopped" -ForegroundColor Green
-}
-
-function Build-Images {
-    docker-compose build
-    if ($LASTEXITCODE -ne 0) { Write-Host "Build failed" -ForegroundColor Red; exit 1 }
-    Write-Host "Build complete" -ForegroundColor Green
-}
-
-function Redeploy-Services {
-    Stop-Services
-    Build-Images
-    Start-Services
 }
 
 function Run-Tests {
@@ -179,6 +166,17 @@ function Run-Tests {
         exit 1
     }
     Write-Host "All tests passed" -ForegroundColor Green
+}
+
+function Run-Benchmark {
+    if (-not (Test-Path "venv")) {
+        Write-Host "Virtual environment not found. Run '.\Make.ps1 setup' first." -ForegroundColor Red
+        exit 1
+    }
+    $python = Get-VenvPython
+    Write-Host "Starting ingestion benchmark (auto-ramp, gzip, fresh key, DB verify)..." -ForegroundColor Cyan
+    & $python "scripts\benchmark\__main__.py"
+    if ($LASTEXITCODE -ne 0) { Write-Host "Benchmark failed" -ForegroundColor Red; exit 1 }
 }
 
 # ==================== Production ====================
@@ -229,26 +227,6 @@ function Push-ProdImage {
     return $true
 }
 
-function Run-ProdBuild {
-    Assert-Docker
-    $failed = @()
-    foreach ($svc in $PROD_SERVICES) {
-        if (-not (Build-ProdImage -ServiceName $svc)) { $failed += $svc }
-    }
-    if ($failed.Count -gt 0) { Write-Host "Failed: $($failed -join ', ')" -ForegroundColor Red; exit 1 }
-    Write-Host "All production images built" -ForegroundColor Green
-}
-
-function Run-ProdPush {
-    Assert-Docker; Assert-Registry
-    $failed = @()
-    foreach ($svc in $PROD_SERVICES) {
-        if (-not (Push-ProdImage -ServiceName $svc)) { $failed += $svc }
-    }
-    if ($failed.Count -gt 0) { Write-Host "Failed: $($failed -join ', ')" -ForegroundColor Red; exit 1 }
-    Write-Host "All production images pushed" -ForegroundColor Green
-}
-
 function Run-ProdDeploy {
     Assert-Docker; Assert-Registry
     $failed = @()
@@ -280,16 +258,13 @@ switch ($Command.ToLower()) {
     "proto"            { Compile-Proto }
     "up"               { Start-Services }
     "down"             { Stop-Services }
-    "build"            { Build-Images }
-    "redeploy"         { Redeploy-Services }
     "test"             { Run-Tests }
     "test-auth"        { Run-Tests -Service "auth" }
     "test-gateway"     { Run-Tests -Service "gateway" }
     "test-ingestion"   { Run-Tests -Service "ingestion" }
     "test-analytics"   { Run-Tests -Service "analytics" }
     "test-query"       { Run-Tests -Service "query" }
-    "prod-build"       { Run-ProdBuild }
-    "prod-push"        { Run-ProdPush }
+    "benchmark"        { Run-Benchmark }
     "prod-deploy"      { Run-ProdDeploy }
     "prod-up"          { Start-ProdServices }
     "prod-down"        { Stop-ProdServices }

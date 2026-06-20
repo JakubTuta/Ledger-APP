@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -8,8 +9,11 @@ import auth_service.models as models
 import auth_service.utils.jwt_utils as jwt_utils
 import bcrypt
 from redis.asyncio import Redis
+from redis.exceptions import RedisError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 
 class AuthService:
@@ -393,7 +397,11 @@ class AuthService:
         key_hash = hashlib.sha256(api_key.encode()).hexdigest()
         cache_key = f"api_key:{key_hash}"
 
-        cached = await self.redis.hgetall(cache_key)
+        try:
+            cached = await self.redis.hgetall(cache_key)
+        except RedisError as e:
+            logger.warning("Redis HGETALL failed for api_key cache (treating as miss): %s", e)
+            cached = {}
         if cached:
             return (
                 True,
@@ -438,8 +446,11 @@ class AuthService:
             "rate_limit_per_hour": key_record.rate_limit_per_hour,
         }
 
-        await self.redis.hset(cache_key, mapping=project_info)
-        await self.redis.expire(cache_key, config.settings.CACHE_TTL_SECONDS)
+        try:
+            await self.redis.hset(cache_key, mapping=project_info)
+            await self.redis.expire(cache_key, config.settings.CACHE_TTL_SECONDS)
+        except RedisError as e:
+            logger.warning("Redis HSET failed for api_key cache: %s", e)
 
         return (True, project.id, project_info)
 

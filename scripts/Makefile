@@ -3,26 +3,27 @@
 include .env
 export
 
+.PHONY: benchmark
+benchmark:
+	@bash -c "source venv/bin/activate && python scripts/benchmark/__main__.py"
+
 .PHONY: help
 help:
 	@echo "Available commands:"
 	@echo "  setup       - Create venv, install deps, compile protos"
 	@echo "  proto       - Compile protobuf files"
-	@echo "  up          - Start all dev services"
+	@echo "  up          - Build and start all dev services"
 	@echo "  down        - Stop all dev services"
-	@echo "  build       - Build dev Docker images"
-	@echo "  redeploy    - Stop, rebuild and start dev services"
 	@echo "  test        - Run all tests"
 	@echo "  test-auth   - Run auth service tests"
 	@echo "  test-gateway - Run gateway service tests"
 	@echo "  test-ingestion - Run ingestion service tests"
 	@echo "  test-analytics - Run analytics workers tests"
 	@echo "  test-query  - Run query service tests"
+	@echo "  benchmark   - Measure max sustainable ingestion logs/s (auto-ramp, gzip, fresh key, DB verify)"
 	@echo ""
 	@echo "Production Commands:"
-	@echo "  prod-build  - Build production images for registry"
-	@echo "  prod-push   - Push production images to registry"
-	@echo "  prod-deploy - Build and push production images"
+	@echo "  prod-deploy - Build and push production images to registry"
 	@echo "  prod-up     - Start production services"
 	@echo "  prod-down   - Stop production services"
 
@@ -81,18 +82,11 @@ proto:
 
 .PHONY: up
 up:
-	docker-compose up -d
+	docker-compose down --rmi local && docker-compose up -d --build
 
 .PHONY: down
 down:
 	docker-compose down
-
-.PHONY: build
-build:
-	docker-compose build
-
-.PHONY: redeploy
-redeploy: down build up
 
 # ==================== Testing ====================
 
@@ -125,24 +119,15 @@ PROD_REGISTRY := container-repository.jtuta.cloud/ledger
 PROD_TAG := latest
 SERVICES := auth gateway ingestion analytics query
 
-.PHONY: prod-build
-prod-build:
+.PHONY: prod-deploy
+prod-deploy:
 	@for service in $(SERVICES); do \
 		echo "Building $$service..."; \
 		docker build --file services/$$service/Dockerfile --tag $(PROD_REGISTRY)/$$service:$(PROD_TAG) --platform linux/amd64 services/$$service || exit 1; \
-	done
-	@echo "All production images built"
-
-.PHONY: prod-push
-prod-push:
-	@for service in $(SERVICES); do \
 		echo "Pushing $$service..."; \
 		docker push $(PROD_REGISTRY)/$$service:$(PROD_TAG) || exit 1; \
 	done
-	@echo "All production images pushed"
-
-.PHONY: prod-deploy
-prod-deploy: prod-build prod-push
+	@echo "All production images deployed"
 
 .PHONY: prod-up
 prod-up:

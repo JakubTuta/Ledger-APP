@@ -29,6 +29,12 @@ CREATE TABLE logs (
     -- Context metadata (JSONB for flexibility)
     attributes JSONB,  -- Custom fields: user_id, request_id, tags, etc. (max 100KB enforced by API)
 
+    -- Endpoint monitoring (extracted from attributes for indexed access)
+    method VARCHAR(8),
+    path VARCHAR(2048),
+    status_code SMALLINT,
+    duration_ms INTEGER,
+
     -- SDK metadata
     sdk_version VARCHAR(20),
     platform VARCHAR(50),  -- python, node, java, etc.
