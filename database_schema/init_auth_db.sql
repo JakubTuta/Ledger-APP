@@ -2,7 +2,7 @@
 -- 1. ACCOUNTS & AUTHENTICATION
 -- ============================================
 
-CREATE TABLE accounts (
+CREATE TABLE IF NOT EXISTS accounts (
     id BIGSERIAL PRIMARY KEY,
     email VARCHAR(255) NOT NULL,
     password_hash CHAR(60) NOT NULL,
@@ -14,21 +14,15 @@ CREATE TABLE accounts (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE UNIQUE INDEX CONCURRENTLY idx_accounts_email 
-ON accounts(email);
-
-CREATE INDEX CONCURRENTLY idx_accounts_status
-ON accounts(status)
-WHERE status = 'active';
-
-CREATE INDEX CONCURRENTLY idx_accounts_notification_prefs
-ON accounts USING GIN(notification_preferences);
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_accounts_email ON accounts (email);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_accounts_status ON accounts (status) WHERE status = 'active';
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_accounts_notification_prefs ON accounts USING GIN (notification_preferences);
 
 -- ============================================
 -- 2. REFRESH TOKENS (JWT refresh)
 -- ============================================
 
-CREATE TABLE refresh_tokens (
+CREATE TABLE IF NOT EXISTS refresh_tokens (
     id BIGSERIAL PRIMARY KEY,
     account_id BIGINT NOT NULL,
     token_hash CHAR(64) NOT NULL UNIQUE,
@@ -39,30 +33,22 @@ CREATE TABLE refresh_tokens (
     last_used_at TIMESTAMPTZ
 );
 
-CREATE INDEX CONCURRENTLY idx_refresh_tokens_token_hash
-ON refresh_tokens(token_hash);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_refresh_tokens_token_hash ON refresh_tokens (token_hash);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_refresh_tokens_account_id ON refresh_tokens (account_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_refresh_tokens_active ON refresh_tokens (token_hash, account_id, expires_at) WHERE revoked = FALSE;
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_refresh_tokens_cleanup ON refresh_tokens (expires_at) WHERE revoked = FALSE;
 
-CREATE INDEX CONCURRENTLY idx_refresh_tokens_account_id
-ON refresh_tokens(account_id);
-
-CREATE INDEX CONCURRENTLY idx_refresh_tokens_active
-ON refresh_tokens(token_hash, account_id, expires_at)
-WHERE revoked = FALSE;
-
-CREATE INDEX CONCURRENTLY idx_refresh_tokens_cleanup
-ON refresh_tokens(expires_at)
-WHERE revoked = FALSE;
-
-ALTER TABLE refresh_tokens
-ADD CONSTRAINT fk_refresh_tokens_account
-FOREIGN KEY (account_id) REFERENCES accounts(id)
-ON DELETE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE refresh_tokens ADD CONSTRAINT fk_refresh_tokens_account
+        FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================
 -- 3. PROJECTS (multi-tenancy)
 -- ============================================
 
-CREATE TABLE projects (
+CREATE TABLE IF NOT EXISTS projects (
     id BIGSERIAL PRIMARY KEY,
     account_id BIGINT NOT NULL,
     name VARCHAR(255) NOT NULL,
@@ -75,22 +61,20 @@ CREATE TABLE projects (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX CONCURRENTLY idx_projects_account_id 
-ON projects(account_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_projects_account_id ON projects (account_id);
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_projects_slug ON projects (slug);
 
-ALTER TABLE projects 
-ADD CONSTRAINT fk_projects_account 
-FOREIGN KEY (account_id) REFERENCES accounts(id) 
-ON DELETE CASCADE;
-
-CREATE UNIQUE INDEX CONCURRENTLY idx_projects_slug 
-ON projects(slug);
+DO $$ BEGIN
+    ALTER TABLE projects ADD CONSTRAINT fk_projects_account
+        FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================
--- 3. API KEYS
+-- 4. API KEYS
 -- ============================================
 
-CREATE TABLE api_keys (
+CREATE TABLE IF NOT EXISTS api_keys (
     id BIGSERIAL PRIMARY KEY,
     project_id BIGINT NOT NULL,
     key_prefix VARCHAR(20) NOT NULL,
@@ -104,22 +88,15 @@ CREATE TABLE api_keys (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE UNIQUE INDEX CONCURRENTLY idx_api_keys_key_hash 
-ON api_keys(key_hash);
-
-CREATE INDEX CONCURRENTLY idx_api_keys_validation
-ON api_keys(key_hash, status, expires_at, project_id)
-WHERE status = 'active';
-
-CREATE INDEX CONCURRENTLY idx_api_keys_project_id 
-ON projects(account_id);
-
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_api_keys_key_hash ON api_keys (key_hash);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_api_keys_validation ON api_keys (key_hash, status, expires_at, project_id) WHERE status = 'active';
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_api_keys_project_id ON api_keys (project_id);
 
 -- ============================================
--- 4. USAGE TRACKING (for quotas & billing)
+-- 5. USAGE TRACKING (for quotas & billing)
 -- ============================================
 
-CREATE TABLE daily_usage (
+CREATE TABLE IF NOT EXISTS daily_usage (
     id BIGSERIAL PRIMARY KEY,
     project_id BIGINT NOT NULL,
     date DATE NOT NULL,
@@ -128,17 +105,16 @@ CREATE TABLE daily_usage (
     storage_bytes BIGINT DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT uq_project_date UNIQUE(project_id, date)
+    CONSTRAINT uq_project_date UNIQUE (project_id, date)
 );
 
-CREATE INDEX CONCURRENTLY idx_daily_usage_project_date
-ON daily_usage(project_id, date DESC);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_daily_usage_project_date ON daily_usage (project_id, date DESC);
 
 -- ============================================
--- 5. USER DASHBOARDS (panel configuration)
+-- 6. USER DASHBOARDS (panel configuration)
 -- ============================================
 
-CREATE TABLE user_dashboards (
+CREATE TABLE IF NOT EXISTS user_dashboards (
     id BIGSERIAL PRIMARY KEY,
     user_id BIGINT NOT NULL,
     panels JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -146,53 +122,55 @@ CREATE TABLE user_dashboards (
     active_tab_id VARCHAR,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT uq_user_dashboard UNIQUE(user_id)
+    CONSTRAINT uq_user_dashboard UNIQUE (user_id)
 );
 
-CREATE INDEX CONCURRENTLY idx_user_dashboards_user_id
-ON user_dashboards(user_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_user_dashboards_user_id ON user_dashboards (user_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_user_dashboards_panels ON user_dashboards USING GIN (panels);
 
-CREATE INDEX CONCURRENTLY idx_user_dashboards_panels
-ON user_dashboards USING GIN(panels);
-
-ALTER TABLE user_dashboards
-ADD CONSTRAINT fk_user_dashboards_account
-FOREIGN KEY (user_id) REFERENCES accounts(id)
-ON DELETE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE user_dashboards ADD CONSTRAINT fk_user_dashboards_account
+        FOREIGN KEY (user_id) REFERENCES accounts(id) ON DELETE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================
--- 6. PERSISTED NOTIFICATIONS
+-- 7. PERSISTED NOTIFICATIONS
 -- ============================================
 
-CREATE TABLE notifications (
-    id          BIGSERIAL PRIMARY KEY,
-    user_id     BIGINT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-    project_id  BIGINT NOT NULL,
-    kind        TEXT NOT NULL,
-    severity    SMALLINT NOT NULL DEFAULT 1,
-    payload     JSONB NOT NULL DEFAULT '{}'::jsonb,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    read_at     TIMESTAMPTZ,
-    expires_at  TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '30 days'
+CREATE TABLE IF NOT EXISTS notifications (
+    id         BIGSERIAL PRIMARY KEY,
+    user_id    BIGINT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    project_id BIGINT NOT NULL,
+    kind       TEXT NOT NULL,
+    severity   SMALLINT NOT NULL DEFAULT 1,
+    payload    JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    read_at    TIMESTAMPTZ,
+    expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '30 days'
 );
 
-CREATE INDEX idx_notif_unread ON notifications (user_id, created_at DESC)
-WHERE read_at IS NULL;
-CREATE INDEX idx_notif_expires ON notifications (expires_at);
-CREATE INDEX idx_notif_user_project ON notifications (user_id, project_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notif_unread ON notifications (user_id, created_at DESC) WHERE read_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_notif_expires ON notifications (expires_at);
+CREATE INDEX IF NOT EXISTS idx_notif_user_project ON notifications (user_id, project_id, created_at DESC);
 
-ALTER TABLE notifications
-    ADD CONSTRAINT check_notification_kind
-    CHECK (kind IN ('error', 'alert_firing', 'alert_resolved', 'quota_warning'));
-ALTER TABLE notifications
-    ADD CONSTRAINT check_notification_severity
-    CHECK (severity IN (1, 2, 3));
+DO $$ BEGIN
+    ALTER TABLE notifications ADD CONSTRAINT check_notification_kind
+        CHECK (kind IN ('error', 'alert_firing', 'alert_resolved', 'quota_warning'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    ALTER TABLE notifications ADD CONSTRAINT check_notification_severity
+        CHECK (severity IN (1, 2, 3));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================
 -- 8. ALERT RULES ENGINE
 -- ============================================
 
-CREATE TABLE alert_rules (
+CREATE TABLE IF NOT EXISTS alert_rules (
     id            BIGSERIAL PRIMARY KEY,
     project_id    BIGINT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     name          VARCHAR(255) NOT NULL,
@@ -209,48 +187,61 @@ CREATE TABLE alert_rules (
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_alert_rules_project_id ON alert_rules (project_id);
-CREATE INDEX idx_alert_rules_enabled ON alert_rules (project_id, enabled) WHERE enabled = TRUE;
+CREATE INDEX IF NOT EXISTS idx_alert_rules_project_id ON alert_rules (project_id);
+CREATE INDEX IF NOT EXISTS idx_alert_rules_enabled ON alert_rules (project_id, enabled) WHERE enabled = TRUE;
 
-ALTER TABLE alert_rules
-    ADD CONSTRAINT check_alert_comparator
-    CHECK (comparator IN ('>', '<', '>=', '<='));
-ALTER TABLE alert_rules
-    ADD CONSTRAINT check_alert_severity
-    CHECK (severity IN ('critical', 'warning', 'info'));
-ALTER TABLE alert_rules
-    ADD CONSTRAINT check_alert_state
-    CHECK (state IN ('ok', 'firing'));
-ALTER TABLE alert_rules
-    ADD CONSTRAINT check_alert_unit
-    CHECK (unit IN ('ms', 's', '%', 'count'));
+DO $$ BEGIN
+    ALTER TABLE alert_rules ADD CONSTRAINT check_alert_comparator
+        CHECK (comparator IN ('>', '<', '>=', '<='));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TABLE connectors (
-    id          BIGSERIAL PRIMARY KEY,
-    account_id  BIGINT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-    kind        VARCHAR(20) NOT NULL,
-    name        VARCHAR(255) NOT NULL,
-    config      JSONB NOT NULL DEFAULT '{}'::jsonb,
-    enabled     BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+DO $$ BEGIN
+    ALTER TABLE alert_rules ADD CONSTRAINT check_alert_severity
+        CHECK (severity IN ('critical', 'warning', 'info'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    ALTER TABLE alert_rules ADD CONSTRAINT check_alert_state
+        CHECK (state IN ('ok', 'firing'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    ALTER TABLE alert_rules ADD CONSTRAINT check_alert_unit
+        CHECK (unit IN ('ms', 's', '%', 'count'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE TABLE IF NOT EXISTS connectors (
+    id         BIGSERIAL PRIMARY KEY,
+    account_id BIGINT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    kind       VARCHAR(20) NOT NULL,
+    name       VARCHAR(255) NOT NULL,
+    config     JSONB NOT NULL DEFAULT '{}'::jsonb,
+    enabled    BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_connectors_account_id ON connectors (account_id);
+CREATE INDEX IF NOT EXISTS idx_connectors_account_id ON connectors (account_id);
 
-ALTER TABLE connectors
-    ADD CONSTRAINT check_connector_kind
-    CHECK (kind IN ('in_app', 'email', 'webhook'));
+DO $$ BEGIN
+    ALTER TABLE connectors ADD CONSTRAINT check_connector_kind
+        CHECK (kind IN ('in_app', 'email', 'webhook'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TABLE alert_rule_connectors (
+CREATE TABLE IF NOT EXISTS alert_rule_connectors (
     rule_id      BIGINT NOT NULL REFERENCES alert_rules(id) ON DELETE CASCADE,
     connector_id BIGINT NOT NULL REFERENCES connectors(id) ON DELETE CASCADE,
     PRIMARY KEY (rule_id, connector_id)
 );
 
-CREATE INDEX idx_alert_rule_connectors_connector ON alert_rule_connectors (connector_id);
+CREATE INDEX IF NOT EXISTS idx_alert_rule_connectors_connector ON alert_rule_connectors (connector_id);
 
-CREATE TABLE alert_events (
+CREATE TABLE IF NOT EXISTS alert_events (
     id              BIGSERIAL PRIMARY KEY,
     rule_id         BIGINT REFERENCES alert_rules(id) ON DELETE SET NULL,
     project_id      BIGINT NOT NULL,
@@ -266,21 +257,23 @@ CREATE TABLE alert_events (
     fired_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_alert_events_project_fired ON alert_events (project_id, fired_at);
-CREATE INDEX idx_alert_events_rule_id ON alert_events (rule_id);
+CREATE INDEX IF NOT EXISTS idx_alert_events_project_fired ON alert_events (project_id, fired_at);
+CREATE INDEX IF NOT EXISTS idx_alert_events_rule_id ON alert_events (rule_id);
 
-ALTER TABLE alert_events
-    ADD CONSTRAINT check_alert_event_state
-    CHECK (state IN ('firing', 'resolved'));
+DO $$ BEGIN
+    ALTER TABLE alert_events ADD CONSTRAINT check_alert_event_state
+        CHECK (state IN ('firing', 'resolved'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TABLE notification_preferences (
-    user_id     BIGINT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-    project_id  BIGINT NOT NULL,
-    rule_id     BIGINT,
-    severity    SMALLINT,
-    muted       BOOLEAN NOT NULL DEFAULT FALSE,
-    channels    JSONB,
+CREATE TABLE IF NOT EXISTS notification_preferences (
+    user_id    BIGINT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    project_id BIGINT NOT NULL,
+    rule_id    BIGINT,
+    severity   SMALLINT,
+    muted      BOOLEAN NOT NULL DEFAULT FALSE,
+    channels   JSONB,
     PRIMARY KEY (user_id, project_id, COALESCE(rule_id, 0), COALESCE(severity, 0))
 );
 
-CREATE INDEX idx_notif_prefs_user_project ON notification_preferences (user_id, project_id);
+CREATE INDEX IF NOT EXISTS idx_notif_prefs_user_project ON notification_preferences (user_id, project_id);

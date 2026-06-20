@@ -30,7 +30,6 @@ services:
       POSTGRES_CHECKPOINT_TIMEOUT: 5min
     volumes:
       - ledger-postgres-data:/var/lib/postgresql/data
-      - ./database_schema/init_auth_db.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
       - "5432:5432"
     deploy:
@@ -67,7 +66,6 @@ services:
       POSTGRES_AUTOVACUUM_MAX_WORKERS: 4
     volumes:
       - ledger-postgres-logs-data:/var/lib/postgresql/data
-      - ./database_schema/init_logs_db.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
       - "5433:5432"
     deploy:

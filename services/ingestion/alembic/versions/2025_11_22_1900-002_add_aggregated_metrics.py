@@ -16,7 +16,7 @@ depends_on = None
 
 def upgrade() -> None:
     op.execute("""
-        CREATE TABLE aggregated_metrics (
+        CREATE TABLE IF NOT EXISTS aggregated_metrics (
             id BIGSERIAL PRIMARY KEY,
             project_id BIGINT NOT NULL,
             date VARCHAR(8) NOT NULL,
@@ -39,23 +39,10 @@ def upgrade() -> None:
         );
     """)
 
-    op.create_index(
-        'idx_aggregated_metrics_lookup',
-        'aggregated_metrics',
-        ['project_id', 'date', 'metric_type'],
-        unique=False
-    )
-
-    op.create_index(
-        'idx_aggregated_metrics_endpoint',
-        'aggregated_metrics',
-        ['project_id', 'date', 'endpoint_path'],
-        unique=False,
-        postgresql_where=sa.text("metric_type = 'endpoint'")
-    )
-
+    op.execute("CREATE INDEX IF NOT EXISTS idx_aggregated_metrics_lookup ON aggregated_metrics (project_id, date, metric_type)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_aggregated_metrics_endpoint ON aggregated_metrics (project_id, date, endpoint_path) WHERE metric_type = 'endpoint'")
     op.execute("""
-        CREATE UNIQUE INDEX uq_aggregated_metrics
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_aggregated_metrics
         ON aggregated_metrics(project_id, date, hour, metric_type,
             COALESCE(endpoint_method, ''), COALESCE(endpoint_path, ''));
     """)

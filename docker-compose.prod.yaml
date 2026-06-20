@@ -43,7 +43,6 @@ services:
       -c max_connections=30
     volumes:
       - ledger-postgres-data:/var/lib/postgresql/data
-      - ../LedgerServer/database_schema/init_auth_db.sql:/docker-entrypoint-initdb.d/init.sql
     deploy:
       resources:
         limits:
@@ -86,7 +85,6 @@ services:
       -c max_connections=30
     volumes:
       - ledger-postgres-logs-data:/var/lib/postgresql/data
-      - ../LedgerServer/database_schema/init_logs_db.sql:/docker-entrypoint-initdb.d/init.sql
     deploy:
       resources:
         limits:

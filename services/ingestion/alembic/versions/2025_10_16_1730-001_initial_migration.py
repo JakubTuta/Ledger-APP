@@ -17,9 +17,8 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Create logs table (partitioned by timestamp)
     op.execute("""
-        CREATE TABLE logs (
+        CREATE TABLE IF NOT EXISTS logs (
             id BIGSERIAL NOT NULL,
             project_id BIGINT NOT NULL,
             timestamp TIMESTAMPTZ NOT NULL,
@@ -46,49 +45,54 @@ def upgrade() -> None:
         ) PARTITION BY RANGE (timestamp);
     """)
 
-    # Create indexes for logs table
-    op.create_index('idx_logs_project_timestamp', 'logs', ['project_id', 'timestamp'], unique=False)
-    op.create_index('idx_logs_level', 'logs', ['level'], unique=False)
-    op.create_index('idx_logs_log_type', 'logs', ['log_type'], unique=False)
-    op.create_index('idx_logs_importance', 'logs', ['importance'], unique=False)
-    op.create_index('idx_logs_error_fingerprint', 'logs', ['error_fingerprint'], unique=False, postgresql_where=sa.text("error_fingerprint IS NOT NULL"))
-    op.create_index('idx_logs_attributes_gin', 'logs', ['attributes'], unique=False, postgresql_using='gin')
+    op.execute("CREATE INDEX IF NOT EXISTS idx_logs_project_timestamp ON logs (project_id, timestamp)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_logs_level ON logs (level)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_logs_log_type ON logs (log_type)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_logs_importance ON logs (importance)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_logs_error_fingerprint ON logs (error_fingerprint) WHERE error_fingerprint IS NOT NULL")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_logs_attributes_gin ON logs USING gin (attributes)")
 
-    # Create error_groups table
-    op.create_table(
-        'error_groups',
-        sa.Column('id', sa.BigInteger(), nullable=False),
-        sa.Column('project_id', sa.BigInteger(), nullable=False),
-        sa.Column('error_fingerprint', sa.CHAR(length=64), nullable=False),
-        sa.Column('error_type', sa.String(length=255), nullable=False),
-        sa.Column('error_message', sa.Text(), nullable=False),
-        sa.Column('first_seen', sa.DateTime(timezone=True), server_default=sa.text('NOW()'), nullable=False),
-        sa.Column('last_seen', sa.DateTime(timezone=True), server_default=sa.text('NOW()'), nullable=False),
-        sa.Column('occurrence_count', sa.BigInteger(), server_default=sa.text('1'), nullable=False),
-        sa.Column('platform', sa.String(length=50), nullable=True),
-        sa.Column('stack_frames', sa.JSON(), nullable=True),
-        sa.PrimaryKeyConstraint('id'),
-        sa.UniqueConstraint('project_id', 'error_fingerprint', name='uq_error_groups_project_fingerprint')
-    )
-    op.create_index('idx_error_groups_project_last_seen', 'error_groups', ['project_id', 'last_seen'], unique=False)
-    op.create_index('idx_error_groups_project_count', 'error_groups', ['project_id', 'occurrence_count'], unique=False)
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS error_groups (
+            id BIGSERIAL NOT NULL,
+            project_id BIGINT NOT NULL,
+            fingerprint CHAR(64) NOT NULL,
+            error_type VARCHAR(255) NOT NULL,
+            error_message TEXT,
+            first_seen TIMESTAMPTZ NOT NULL,
+            last_seen TIMESTAMPTZ NOT NULL,
+            occurrence_count BIGINT DEFAULT 1 NOT NULL,
+            status VARCHAR(20) DEFAULT 'unresolved' NOT NULL,
+            assigned_to BIGINT,
+            sample_log_id BIGINT,
+            sample_stack_trace TEXT,
+            created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+            updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+            PRIMARY KEY (id),
+            CONSTRAINT uq_error_groups_project_fingerprint UNIQUE (project_id, fingerprint),
+            CONSTRAINT check_error_status CHECK (status IN ('unresolved', 'resolved', 'ignored', 'muted'))
+        );
+    """)
+    op.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_error_groups_fingerprint ON error_groups (project_id, fingerprint)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_error_groups_status ON error_groups (project_id, status, last_seen)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_error_groups_type ON error_groups (project_id, error_type, last_seen)")
 
-    # Create ingestion_metrics table
-    op.create_table(
-        'ingestion_metrics',
-        sa.Column('id', sa.BigInteger(), nullable=False),
-        sa.Column('project_id', sa.BigInteger(), nullable=False),
-        sa.Column('metric_date', sa.Date(), nullable=False),
-        sa.Column('total_logs', sa.BigInteger(), server_default=sa.text('0'), nullable=False),
-        sa.Column('total_errors', sa.BigInteger(), server_default=sa.text('0'), nullable=False),
-        sa.Column('total_criticals', sa.BigInteger(), server_default=sa.text('0'), nullable=False),
-        sa.Column('avg_processing_time_ms', sa.Float(), nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('NOW()'), nullable=False),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('NOW()'), nullable=False),
-        sa.PrimaryKeyConstraint('id'),
-        sa.UniqueConstraint('project_id', 'metric_date', name='uq_metrics_project_date')
-    )
-    op.create_index('idx_ingestion_metrics_project_date', 'ingestion_metrics', ['project_id', 'metric_date'], unique=False)
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS ingestion_metrics (
+            id BIGSERIAL NOT NULL,
+            project_id BIGINT NOT NULL,
+            metric_date DATE NOT NULL,
+            total_logs BIGINT DEFAULT 0 NOT NULL,
+            total_errors BIGINT DEFAULT 0 NOT NULL,
+            total_criticals BIGINT DEFAULT 0 NOT NULL,
+            avg_processing_time_ms FLOAT,
+            created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+            updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+            PRIMARY KEY (id),
+            CONSTRAINT uq_metrics_project_date UNIQUE (project_id, metric_date)
+        );
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS idx_ingestion_metrics_project_date ON ingestion_metrics (project_id, metric_date)")
 
 
 def downgrade() -> None:

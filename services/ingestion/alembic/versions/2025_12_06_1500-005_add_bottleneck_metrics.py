@@ -16,7 +16,7 @@ depends_on = None
 
 def upgrade() -> None:
     op.execute("""
-        CREATE TABLE bottleneck_metrics (
+        CREATE TABLE IF NOT EXISTS bottleneck_metrics (
             id BIGSERIAL PRIMARY KEY,
             project_id BIGINT NOT NULL,
             date VARCHAR(8) NOT NULL,
@@ -33,24 +33,9 @@ def upgrade() -> None:
         );
     """)
 
-    op.create_index(
-        'idx_bottleneck_metrics_lookup',
-        'bottleneck_metrics',
-        ['project_id', 'date', 'hour'],
-        unique=False
-    )
-
-    op.create_index(
-        'idx_bottleneck_metrics_route',
-        'bottleneck_metrics',
-        ['project_id', 'date', 'route'],
-        unique=False
-    )
-
-    op.execute("""
-        CREATE UNIQUE INDEX uq_bottleneck_metrics
-        ON bottleneck_metrics(project_id, date, hour, route);
-    """)
+    op.execute("CREATE INDEX IF NOT EXISTS idx_bottleneck_metrics_lookup ON bottleneck_metrics (project_id, date, hour)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_bottleneck_metrics_route ON bottleneck_metrics (project_id, date, route)")
+    op.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_bottleneck_metrics ON bottleneck_metrics (project_id, date, hour, route)")
 
 
 def downgrade() -> None:
