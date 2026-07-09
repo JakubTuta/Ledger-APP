@@ -42,18 +42,6 @@ async def setup_topology() -> None:
     connection = await get_connection()
 
     async with connection.channel() as channel:
-        dlx = await channel.declare_exchange(
-            config.settings.RABBITMQ_DLX,
-            aio_pika.ExchangeType.FANOUT,
-            durable=True,
-        )
-
-        dlq = await channel.declare_queue(
-            config.settings.RABBITMQ_DLQ,
-            durable=True,
-        )
-        await dlq.bind(dlx)
-
         exchange = await channel.declare_exchange(
             config.settings.RABBITMQ_EXCHANGE,
             aio_pika.ExchangeType.TOPIC,
@@ -64,19 +52,44 @@ async def setup_topology() -> None:
             config.settings.RABBITMQ_QUEUE,
             durable=True,
             arguments={
-                "x-dead-letter-exchange": config.settings.RABBITMQ_DLX,
                 "x-max-length": config.settings.QUEUE_MAX_DEPTH,
                 "x-overflow": "reject-publish",
             },
         )
         await queue.bind(exchange, routing_key="logs.*")
 
+        # Spans reuse the existing "logs" topic exchange (routing is keyed off the
+        # binding, not the exchange identity) but get their own queue so span
+        # traffic can't crowd out log traffic in the shared queue depth budget.
+        spans_queue = await channel.declare_queue(
+            config.settings.RABBITMQ_SPANS_QUEUE,
+            durable=True,
+            arguments={
+                "x-max-length": config.settings.QUEUE_MAX_DEPTH,
+                "x-overflow": "reject-publish",
+            },
+        )
+        await spans_queue.bind(exchange, routing_key="spans.*")
+
+        # Metric points get the same treatment as spans: their own queue on the
+        # shared "logs" topic exchange, so a stuck/slow metrics consumer or a
+        # burst of metric traffic can't crowd out log or span consumption.
+        metrics_queue = await channel.declare_queue(
+            config.settings.RABBITMQ_METRICS_QUEUE,
+            durable=True,
+            arguments={
+                "x-max-length": config.settings.QUEUE_MAX_DEPTH,
+                "x-overflow": "reject-publish",
+            },
+        )
+        await metrics_queue.bind(exchange, routing_key="metrics.*")
+
     logger.info(
-        "RabbitMQ topology ready: exchange=%s queue=%s dlx=%s dlq=%s",
+        "RabbitMQ topology ready: exchange=%s queue=%s spans_queue=%s metrics_queue=%s",
         config.settings.RABBITMQ_EXCHANGE,
         config.settings.RABBITMQ_QUEUE,
-        config.settings.RABBITMQ_DLX,
-        config.settings.RABBITMQ_DLQ,
+        config.settings.RABBITMQ_SPANS_QUEUE,
+        config.settings.RABBITMQ_METRICS_QUEUE,
     )
 
 

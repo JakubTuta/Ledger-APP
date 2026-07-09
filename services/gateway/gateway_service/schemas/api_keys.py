@@ -96,9 +96,7 @@ class ApiKeyInfo(pydantic.BaseModel):
 class ListApiKeysResponse(pydantic.BaseModel):
     """Response containing list of API keys."""
 
-    api_keys: list[ApiKeyInfo] = pydantic.Field(
-        ..., description="List of API keys for the project"
-    )
+    api_keys: list[ApiKeyInfo] = pydantic.Field(..., description="List of API keys for the project")
     total: int = pydantic.Field(..., description="Total number of API keys")
 
     model_config = pydantic.ConfigDict(

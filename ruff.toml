@@ -1,0 +1,16 @@
+target-version = "py312"
+line-length = 100
+
+extend-exclude = [
+    "**/proto/*_pb2.py",
+    "**/proto/*_pb2.pyi",
+    "**/proto/*_pb2_grpc.py",
+    "**/alembic/versions/*.py",
+]
+
+[lint]
+# Minimal, non-invented rule set kept intentionally small so CI stays green on
+# the current codebase. select = pyflakes + a handful of pycodestyle checks;
+# ignore = the handful of currently-violated rules that ruff cannot auto-fix.
+select = ["E4", "E7", "E9", "F"]
+ignore = ["F841", "E722", "E712", "E402", "E741"]

@@ -1,4 +1,3 @@
-import asyncio
 import logging
 
 import ingestion_service.config as config
@@ -34,9 +33,7 @@ class PartitionScheduler:
             logger.warning("Partition scheduler is already running")
             return
 
-        create_cron = self._parse_cron_expression(
-            config.settings.PARTITION_CREATE_CRON
-        )
+        create_cron = self._parse_cron_expression(config.settings.PARTITION_CREATE_CRON)
         check_cron = self._parse_cron_expression(config.settings.PARTITION_CHECK_CRON)
 
         self.scheduler.add_job(
@@ -58,9 +55,7 @@ class PartitionScheduler:
         )
 
         logger.info("Scheduled partition management jobs:")
-        logger.info(
-            f"  - Create partitions: {config.settings.PARTITION_CREATE_CRON}"
-        )
+        logger.info(f"  - Create partitions: {config.settings.PARTITION_CREATE_CRON}")
         logger.info(f"  - Daily check: {config.settings.PARTITION_CHECK_CRON}")
 
         self.scheduler.start()

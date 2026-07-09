@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import os
 import time
 
 import ingestion_service.proto.ingestion_pb2 as ingestion_pb2
@@ -8,8 +9,17 @@ import pytest
 from .helpers import create_proto_log
 from .test_base import BaseIngestionTest
 
+# Wall-clock throughput/stress tests: slow (multi-second sustained loops,
+# hundreds of concurrent requests) and their timing assertions are inherently
+# flaky on shared/throttled CI runners. Excludable with `-m "not load"`; also
+# auto-skipped whenever CI is set so they never gate a build by default.
+pytestmark = [
+    pytest.mark.asyncio,
+    pytest.mark.load,
+    pytest.mark.skipif(bool(os.environ.get("CI")), reason="load test: skipped in CI"),
+]
 
-@pytest.mark.asyncio
+
 class TestLoadTesting(BaseIngestionTest):
     """Test ingestion service under high load."""
 
@@ -37,7 +47,7 @@ class TestLoadTesting(BaseIngestionTest):
 
         assert all(r.success is True for r in results)
         print(
-            f"✅ 100 rapid single ingestions completed in {duration:.3f}s ({100/duration:.1f} req/s)"
+            f"✅ 100 rapid single ingestions completed in {duration:.3f}s ({100 / duration:.1f} req/s)"
         )
 
     async def test_concurrent_batch_ingestion(self):
@@ -46,9 +56,7 @@ class TestLoadTesting(BaseIngestionTest):
         async def send_batch(batch_id, size):
             logs = [
                 {
-                    "timestamp": datetime.datetime.now(
-                        datetime.timezone.utc
-                    ).isoformat(),
+                    "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                     "level": "info",
                     "log_type": "logger",
                     "importance": "standard",
@@ -72,7 +80,7 @@ class TestLoadTesting(BaseIngestionTest):
 
         assert total_logs == 2000
         print(
-            f"✅ 20 concurrent batches (2000 logs) completed in {duration:.3f}s ({total_logs/duration:.1f} logs/s)"
+            f"✅ 20 concurrent batches (2000 logs) completed in {duration:.3f}s ({total_logs / duration:.1f} logs/s)"
         )
 
     async def test_sustained_load_single(self):
@@ -115,9 +123,7 @@ class TestLoadTesting(BaseIngestionTest):
         while time.time() - start < duration_seconds:
             logs = [
                 {
-                    "timestamp": datetime.datetime.now(
-                        datetime.timezone.utc
-                    ).isoformat(),
+                    "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                     "level": "info",
                     "log_type": "logger",
                     "importance": "standard",
@@ -149,9 +155,7 @@ class TestLoadTesting(BaseIngestionTest):
             results = []
             for i in range(count):
                 log_dict = {
-                    "timestamp": datetime.datetime.now(
-                        datetime.timezone.utc
-                    ).isoformat(),
+                    "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                     "level": "info",
                     "log_type": "console",
                     "importance": "standard",
@@ -167,9 +171,7 @@ class TestLoadTesting(BaseIngestionTest):
             for i in range(count):
                 logs = [
                     {
-                        "timestamp": datetime.datetime.now(
-                            datetime.timezone.utc
-                        ).isoformat(),
+                        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                         "level": "info",
                         "log_type": "logger",
                         "importance": "standard",
@@ -178,9 +180,7 @@ class TestLoadTesting(BaseIngestionTest):
                     for j in range(batch_size)
                 ]
                 proto_logs = [create_proto_log(log) for log in logs]
-                request = ingestion_pb2.IngestLogBatchRequest(
-                    project_id=1, logs=proto_logs
-                )
+                request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=proto_logs)
                 results.append(await self.stub.IngestLogBatch(request))
             return results
 
@@ -197,9 +197,7 @@ class TestLoadTesting(BaseIngestionTest):
         assert all(r.success is True for r in batch_results)
 
         total_logs = 100 + (10 * 100)
-        print(
-            f"✅ Mixed load (100 single + 10 batches = 1100 logs) completed in {duration:.3f}s"
-        )
+        print(f"✅ Mixed load (100 single + 10 batches = 1100 logs) completed in {duration:.3f}s")
 
     async def test_high_concurrency_single(self):
         """Test very high concurrency for single log ingestion."""
@@ -225,7 +223,7 @@ class TestLoadTesting(BaseIngestionTest):
 
         assert all(r.success is True for r in results)
         print(
-            f"✅ 500 concurrent single logs completed in {duration:.3f}s ({500/duration:.1f} req/s)"
+            f"✅ 500 concurrent single logs completed in {duration:.3f}s ({500 / duration:.1f} req/s)"
         )
 
     async def test_high_concurrency_batch(self):
@@ -234,9 +232,7 @@ class TestLoadTesting(BaseIngestionTest):
         async def send_batch(batch_id):
             logs = [
                 {
-                    "timestamp": datetime.datetime.now(
-                        datetime.timezone.utc
-                    ).isoformat(),
+                    "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                     "level": "info",
                     "log_type": "logger",
                     "importance": "standard",
@@ -259,7 +255,7 @@ class TestLoadTesting(BaseIngestionTest):
         total_logs = sum(r.queued for r in results)
 
         print(
-            f"✅ 100 concurrent batches ({total_logs} logs) completed in {duration:.3f}s ({total_logs/duration:.1f} logs/s)"
+            f"✅ 100 concurrent batches ({total_logs} logs) completed in {duration:.3f}s ({total_logs / duration:.1f} logs/s)"
         )
 
     async def test_large_payload_stress(self):
@@ -284,9 +280,7 @@ class TestLoadTesting(BaseIngestionTest):
         duration = time.time() - start
 
         assert response.success is True
-        print(
-            f"✅ Large payload batch (100 logs with large attrs) ingested in {duration:.3f}s"
-        )
+        print(f"✅ Large payload batch (100 logs with large attrs) ingested in {duration:.3f}s")
 
     async def test_exception_heavy_load(self):
         """Test load with high percentage of exception logs."""
@@ -296,9 +290,7 @@ class TestLoadTesting(BaseIngestionTest):
             if i % 2 == 0:
                 logs.append(
                     {
-                        "timestamp": datetime.datetime.now(
-                            datetime.timezone.utc
-                        ).isoformat(),
+                        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                         "level": "error",
                         "log_type": "exception",
                         "importance": "high",
@@ -312,9 +304,7 @@ class TestLoadTesting(BaseIngestionTest):
             else:
                 logs.append(
                     {
-                        "timestamp": datetime.datetime.now(
-                            datetime.timezone.utc
-                        ).isoformat(),
+                        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                         "level": "info",
                         "log_type": "console",
                         "importance": "standard",
@@ -330,9 +320,7 @@ class TestLoadTesting(BaseIngestionTest):
         duration = time.time() - start
 
         assert response.success is True
-        print(
-            f"✅ Exception-heavy batch (200 logs, 50% exceptions) ingested in {duration:.3f}s"
-        )
+        print(f"✅ Exception-heavy batch (200 logs, 50% exceptions) ingested in {duration:.3f}s")
 
     async def test_multi_project_concurrent_load(self):
         """Test concurrent ingestion for multiple projects."""
@@ -340,9 +328,7 @@ class TestLoadTesting(BaseIngestionTest):
         async def send_project_batch(project_id, count):
             logs = [
                 {
-                    "timestamp": datetime.datetime.now(
-                        datetime.timezone.utc
-                    ).isoformat(),
+                    "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                     "level": "info",
                     "log_type": "logger",
                     "importance": "standard",
@@ -351,9 +337,7 @@ class TestLoadTesting(BaseIngestionTest):
                 for i in range(count)
             ]
             proto_logs = [create_proto_log(log) for log in logs]
-            request = ingestion_pb2.IngestLogBatchRequest(
-                project_id=project_id, logs=proto_logs
-            )
+            request = ingestion_pb2.IngestLogBatchRequest(project_id=project_id, logs=proto_logs)
             return await self.stub.IngestLogBatch(request)
 
         start = time.time()
@@ -371,7 +355,7 @@ class TestLoadTesting(BaseIngestionTest):
         total_logs = sum(r.queued for r in results)
 
         print(
-            f"✅ Multi-project load (10 projects, {total_logs} logs) completed in {duration:.3f}s ({total_logs/duration:.1f} logs/s)"
+            f"✅ Multi-project load (10 projects, {total_logs} logs) completed in {duration:.3f}s ({total_logs / duration:.1f} logs/s)"
         )
 
     async def test_burst_traffic_pattern(self):
@@ -384,9 +368,7 @@ class TestLoadTesting(BaseIngestionTest):
 
             async def send_log(i):
                 log_dict = {
-                    "timestamp": datetime.datetime.now(
-                        datetime.timezone.utc
-                    ).isoformat(),
+                    "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                     "level": "info",
                     "log_type": "console",
                     "importance": "standard",
@@ -402,7 +384,7 @@ class TestLoadTesting(BaseIngestionTest):
 
             assert all(r.success is True for r in results)
             print(
-                f"  Burst {burst_num + 1}: {logs_per_burst} logs in {duration:.3f}s ({logs_per_burst/duration:.1f} logs/s)"
+                f"  Burst {burst_num + 1}: {logs_per_burst} logs in {duration:.3f}s ({logs_per_burst / duration:.1f} logs/s)"
             )
 
             await asyncio.sleep(0.5)
@@ -417,14 +399,11 @@ class TestLoadTesting(BaseIngestionTest):
         total_logs = 0
 
         start_time = time.time()
-        last_clear_time = start_time
 
         while time.time() - start_time < test_duration:
             logs = [
                 {
-                    "timestamp": datetime.datetime.now(
-                        datetime.timezone.utc
-                    ).isoformat(),
+                    "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                     "level": "info",
                     "log_type": "logger",
                     "importance": "standard",
@@ -441,12 +420,6 @@ class TestLoadTesting(BaseIngestionTest):
 
             batches_sent += 1
             total_logs += batch_size
-
-            current_time = time.time()
-            if current_time - last_clear_time >= 1.0:
-                queue_key = "queue:logs:1"
-                await self.redis.delete(queue_key)
-                last_clear_time = current_time
 
         actual_duration = time.time() - start_time
         throughput = total_logs / actual_duration
@@ -465,9 +438,7 @@ class TestLoadTesting(BaseIngestionTest):
             for i in range(small):
                 logs.append(
                     {
-                        "timestamp": datetime.datetime.now(
-                            datetime.timezone.utc
-                        ).isoformat(),
+                        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                         "level": "info",
                         "log_type": "console",
                         "importance": "standard",
@@ -478,9 +449,7 @@ class TestLoadTesting(BaseIngestionTest):
             for i in range(medium):
                 logs.append(
                     {
-                        "timestamp": datetime.datetime.now(
-                            datetime.timezone.utc
-                        ).isoformat(),
+                        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                         "level": "info",
                         "log_type": "custom",
                         "importance": "standard",
@@ -492,9 +461,7 @@ class TestLoadTesting(BaseIngestionTest):
             for i in range(large):
                 logs.append(
                     {
-                        "timestamp": datetime.datetime.now(
-                            datetime.timezone.utc
-                        ).isoformat(),
+                        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                         "level": "info",
                         "log_type": "custom",
                         "importance": "standard",
@@ -529,9 +496,7 @@ class TestLoadTesting(BaseIngestionTest):
         async def send_stress_batch(batch_id):
             logs = [
                 {
-                    "timestamp": datetime.datetime.now(
-                        datetime.timezone.utc
-                    ).isoformat(),
+                    "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                     "level": "info",
                     "log_type": "logger",
                     "importance": "standard",

@@ -109,9 +109,7 @@ class NotificationStream:
                                 "data": json.dumps(data),
                             }
                     except json.JSONDecodeError:
-                        logger.error(
-                            f"Failed to decode notification message: {message['data']}"
-                        )
+                        logger.error(f"Failed to decode notification message: {message['data']}")
         except asyncio.CancelledError:
             logger.info("Notification stream cancelled")
             raise
@@ -167,9 +165,7 @@ async def get_notification_preferences(grpc_pool, account_id: int) -> dict:
         return preferences
 
     except grpc.RpcError as e:
-        logger.error(
-            f"gRPC error fetching notification preferences: {e.code()}", exc_info=True
-        )
+        logger.error(f"gRPC error fetching notification preferences: {e.code()}", exc_info=True)
         return {"enabled": True, "projects": {}}
     except Exception as e:
         logger.error(f"Error fetching notification preferences: {e}", exc_info=True)
@@ -214,9 +210,7 @@ Get your notification preferences including global settings and per-project filt
         },
         401: {
             "description": "Authentication required",
-            "content": {
-                "application/json": {"example": {"detail": "Authentication required"}}
-            },
+            "content": {"application/json": {"example": {"detail": "Authentication required"}}},
         },
     },
 )
@@ -294,15 +288,11 @@ Update your notification preferences including global settings and per-project f
         },
         401: {
             "description": "Authentication required",
-            "content": {
-                "application/json": {"example": {"detail": "Authentication required"}}
-            },
+            "content": {"application/json": {"example": {"detail": "Authentication required"}}},
         },
     },
 )
-async def update_preferences(
-    request: fastapi.Request, preferences: NotificationPreferences
-):
+async def update_preferences(request: fastapi.Request, preferences: NotificationPreferences):
     account_id = getattr(request.state, "account_id", None)
 
     if not account_id:
@@ -332,9 +322,7 @@ async def update_preferences(
         update_request = auth_pb2.UpdateNotificationPreferencesRequest(
             account_id=account_id, preferences=proto_preferences
         )
-        response = await stub.UpdateNotificationPreferences(
-            update_request, timeout=5.0
-        )
+        response = await stub.UpdateNotificationPreferences(update_request, timeout=5.0)
 
         if not response.success:
             raise fastapi.HTTPException(
@@ -422,16 +410,12 @@ eventSource.addEventListener('connected', (event) => {
         },
         401: {
             "description": "Authentication required",
-            "content": {
-                "application/json": {"example": {"detail": "Authentication required"}}
-            },
+            "content": {"application/json": {"example": {"detail": "Authentication required"}}},
         },
         503: {
             "description": "Notifications disabled",
             "content": {
-                "application/json": {
-                    "example": {"detail": "Notifications are currently disabled"}
-                }
+                "application/json": {"example": {"detail": "Notifications are currently disabled"}}
             },
         },
     },
@@ -485,9 +469,7 @@ async def stream_error_notifications(request: fastapi.Request):
                 await queue.put(
                     {
                         "event": "heartbeat",
-                        "data": json.dumps(
-                            {"timestamp": datetime.utcnow().isoformat() + "Z"}
-                        ),
+                        "data": json.dumps({"timestamp": datetime.utcnow().isoformat() + "Z"}),
                     }
                 )
 
@@ -499,9 +481,7 @@ async def stream_error_notifications(request: fastapi.Request):
                         "timestamp": datetime.utcnow().isoformat() + "Z",
                         "projects": list(project_ids),
                         "warning": (
-                            "No projects available — stream idle"
-                            if not project_ids
-                            else None
+                            "No projects available — stream idle" if not project_ids else None
                         ),
                     }
                 ),
@@ -516,9 +496,7 @@ async def stream_error_notifications(request: fastapi.Request):
                 yield event
 
         except asyncio.CancelledError:
-            logger.info(
-                f"Client disconnected from notification stream (account: {account_id})"
-            )
+            logger.info(f"Client disconnected from notification stream (account: {account_id})")
         finally:
             for task in tasks:
                 task.cancel()

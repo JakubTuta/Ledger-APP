@@ -9,14 +9,35 @@ from gateway_service.schemas.auth import (
     AccountInfoResponse,
     ChangePasswordRequest,
     ChangePasswordResponse,
+    Disable2FARequest,
+    Disable2FAResponse,
+    ListSessionsResponse,
     LoginRequest,
     LoginResponse,
     RefreshTokenRequest,
     RefreshTokenResponse,
     RegisterRequest,
     RegisterResponse,
+    ResendVerificationResponse,
+    RevokeAllSessionsResponse,
+    RevokeSessionResponse,
+    SessionInfo,
+    Setup2FAResponse,
+    TOTPLoginRequest,
     UpdateAccountNameRequest,
     UpdateAccountNameResponse,
+    Verify2FARequest,
+    Verify2FAResponse,
+    VerifyEmailRequest,
+    VerifyEmailResponse,
+)
+from gateway_service.schemas.error_groups import (
+    AssignErrorGroupRequest,
+    ErrorGroupDetailResponse,
+    ErrorGroupListResponse,
+    ErrorGroupResponse,
+    ErrorOccurrenceBucket,
+    UpdateErrorGroupStatusRequest,
 )
 from gateway_service.schemas.dashboard import (
     DashboardTabSchema,
@@ -35,17 +56,13 @@ from gateway_service.schemas.health import (
     HealthSummaryResponse,
     HealthThresholds,
 )
-from gateway_service.schemas.ingestion import (
-    BatchLogRequest,
-    IngestResponse,
-    LogEntry,
-    QueueDepthResponse,
-)
+from gateway_service.schemas.ingestion import QueueDepthResponse
 from gateway_service.schemas.projects import (
     CreateProjectRequest,
     ProjectListResponse,
     ProjectQuotaResponse,
     ProjectResponse,
+    UpdateProjectRequest,
 )
 from gateway_service.schemas.query import (
     AggregatedMetricDataResponse,
@@ -55,6 +72,8 @@ from gateway_service.schemas.query import (
     ErrorListEntryResponse,
     ErrorListResponse,
     LogEntryResponse,
+    LogFacetsResponse,
+    LogFacetValueResponse,
     LogsListResponse,
 )
 from gateway_service.schemas.sharing import (
@@ -88,11 +107,28 @@ __all__ = [
     "ChangePasswordResponse",
     "RefreshTokenRequest",
     "RefreshTokenResponse",
+    # Email verification schemas
+    "VerifyEmailRequest",
+    "VerifyEmailResponse",
+    "ResendVerificationResponse",
+    # 2FA schemas
+    "Setup2FAResponse",
+    "Verify2FARequest",
+    "Verify2FAResponse",
+    "Disable2FARequest",
+    "Disable2FAResponse",
+    "TOTPLoginRequest",
+    # Session management schemas
+    "SessionInfo",
+    "ListSessionsResponse",
+    "RevokeSessionResponse",
+    "RevokeAllSessionsResponse",
     # Project schemas
     "CreateProjectRequest",
     "ProjectResponse",
     "ProjectListResponse",
     "ProjectQuotaResponse",
+    "UpdateProjectRequest",
     # API Key schemas
     "CreateApiKeyRequest",
     "CreateApiKeyResponse",
@@ -130,9 +166,6 @@ __all__ = [
     "ServerInfo",
     "SettingsResponse",
     # Ingestion schemas
-    "LogEntry",
-    "BatchLogRequest",
-    "IngestResponse",
     "QueueDepthResponse",
     # Query schemas
     "LogEntryResponse",
@@ -141,6 +174,15 @@ __all__ = [
     "ErrorListEntryResponse",
     "ErrorListResponse",
     "LogsListResponse",
+    "LogFacetValueResponse",
+    "LogFacetsResponse",
     "BottleneckListEntryResponse",
     "BottleneckListResponse",
+    # Error group workflow schemas
+    "ErrorGroupResponse",
+    "ErrorGroupListResponse",
+    "ErrorGroupDetailResponse",
+    "UpdateErrorGroupStatusRequest",
+    "AssignErrorGroupRequest",
+    "ErrorOccurrenceBucket",
 ]

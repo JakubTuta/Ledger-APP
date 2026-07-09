@@ -1,4 +1,3 @@
-import asyncio
 import sys
 
 import httpx
@@ -15,9 +14,7 @@ async def run_ramp(
     api_key: str,
     project_id: int,
 ) -> list[models.StageResult]:
-    template_pool = payload_module.build_template_pool(
-        max(2000, cfg.batch_size * 2)
-    )
+    template_pool = payload_module.build_template_pool(max(2000, cfg.batch_size * 2))
     stage_concurrencies = range(cfg.ramp_start, cfg.ramp_max + 1, cfg.ramp_step)
     results: list[models.StageResult] = []
 
@@ -84,15 +81,9 @@ async def run_ramp(
             total_time = phase.duration_s + drain.drain_seconds
             drain_rate = phase.accepted / total_time if total_time > 0 else 0.0
 
-            db_match = (
-                db_delta is None
-                or db_delta >= int(phase.accepted * 0.99)
-            )
+            db_match = db_delta is None or db_delta >= int(phase.accepted * 0.99)
             healthy = (
-                phase.errors.total == 0
-                and drain.drained
-                and drain.max_depth < 90_000
-                and db_match
+                phase.errors.total == 0 and drain.drained and drain.max_depth < 90_000 and db_match
             )
 
             saturation_cause: str | None = None
@@ -104,9 +95,7 @@ async def run_ramp(
                 elif drain.max_depth >= 90_000:
                     saturation_cause = "queue-near-cap"
                 elif not db_match and db_delta is not None:
-                    saturation_cause = (
-                        f"db-mismatch (accepted={phase.accepted}, db={db_delta})"
-                    )
+                    saturation_cause = f"db-mismatch (accepted={phase.accepted}, db={db_delta})"
                 elif phase.errors.total > 0:
                     saturation_cause = f"send-errors ({phase.errors.total} total)"
 

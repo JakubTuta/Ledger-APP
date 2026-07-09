@@ -1,6 +1,5 @@
 import logging
 import logging.config
-import typing
 
 import analytics_workers.config as config
 

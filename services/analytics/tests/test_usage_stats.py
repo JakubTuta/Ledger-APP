@@ -26,12 +26,8 @@ async def test_generate_usage_stats_empty_database():
     mock_auth_session.__aexit__ = AsyncMock()
 
     with patch("analytics_workers.redis_client.get_redis", return_value=mock_redis):
-        with patch(
-            "analytics_workers.database.get_logs_session"
-        ) as mock_get_logs_session:
-            with patch(
-                "analytics_workers.database.get_auth_session"
-            ) as mock_get_auth_session:
+        with patch("analytics_workers.database.get_logs_session") as mock_get_logs_session:
+            with patch("analytics_workers.database.get_auth_session") as mock_get_auth_session:
                 mock_get_logs_session.return_value = mock_logs_session
                 mock_get_auth_session.return_value = mock_auth_session
                 await usage_stats_job.generate_usage_stats()
@@ -66,12 +62,8 @@ async def test_generate_usage_stats_with_data():
     mock_auth_session.__aexit__ = AsyncMock()
 
     with patch("analytics_workers.redis_client.get_redis", return_value=mock_redis):
-        with patch(
-            "analytics_workers.database.get_logs_session"
-        ) as mock_get_logs_session:
-            with patch(
-                "analytics_workers.database.get_auth_session"
-            ) as mock_get_auth_session:
+        with patch("analytics_workers.database.get_logs_session") as mock_get_logs_session:
+            with patch("analytics_workers.database.get_auth_session") as mock_get_auth_session:
                 mock_get_logs_session.return_value = mock_logs_session
                 mock_get_auth_session.return_value = mock_auth_session
                 await usage_stats_job.generate_usage_stats()
@@ -113,12 +105,8 @@ async def test_generate_usage_stats_quota_calculations():
     mock_auth_session.__aexit__ = AsyncMock()
 
     with patch("analytics_workers.redis_client.get_redis", return_value=mock_redis):
-        with patch(
-            "analytics_workers.database.get_logs_session"
-        ) as mock_get_logs_session:
-            with patch(
-                "analytics_workers.database.get_auth_session"
-            ) as mock_get_auth_session:
+        with patch("analytics_workers.database.get_logs_session") as mock_get_logs_session:
+            with patch("analytics_workers.database.get_auth_session") as mock_get_auth_session:
                 mock_get_logs_session.return_value = mock_logs_session
                 mock_get_auth_session.return_value = mock_auth_session
                 await usage_stats_job.generate_usage_stats()
@@ -155,17 +143,11 @@ async def test_generate_usage_stats_multiple_days():
     mock_auth_session.__aexit__ = AsyncMock()
 
     with patch("analytics_workers.redis_client.get_redis", return_value=mock_redis):
-        with patch(
-            "analytics_workers.database.get_logs_session"
-        ) as mock_get_logs_session:
-            with patch(
-                "analytics_workers.database.get_auth_session"
-            ) as mock_get_auth_session:
+        with patch("analytics_workers.database.get_logs_session") as mock_get_logs_session:
+            with patch("analytics_workers.database.get_auth_session") as mock_get_auth_session:
                 mock_get_logs_session.return_value = mock_logs_session
                 mock_get_auth_session.return_value = mock_auth_session
                 await usage_stats_job.generate_usage_stats()
 
     cached_data = json.loads(mock_redis.setex.call_args_list[0][0][2])
     assert len(cached_data) == 3
-
-

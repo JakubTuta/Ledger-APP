@@ -5,7 +5,6 @@ from datetime import timezone
 import sqlalchemy as sa
 
 import query_service.database as database
-import query_service.models as models
 from query_service.services.aggregated_metrics import _parse_period
 
 ERROR_RATE_WARN = 0.01
@@ -34,9 +33,7 @@ async def _compute_project_summary(project_id: int, period: str) -> dict:
     start_str = start_date.strftime("%Y%m%d")
     end_str = end_date.strftime("%Y%m%d")
 
-    period_start = datetime.datetime.combine(
-        start_date, datetime.time.min, tzinfo=timezone.utc
-    )
+    period_start = datetime.datetime.combine(start_date, datetime.time.min, tzinfo=timezone.utc)
     period_end = datetime.datetime.combine(
         end_date, datetime.time.min, tzinfo=timezone.utc
     ) + datetime.timedelta(days=1)
@@ -150,21 +147,23 @@ async def get_health_summaries(project_ids: list[int], period: str) -> list[dict
     summaries = []
     for pid, result in zip(project_ids, results):
         if isinstance(result, Exception):
-            summaries.append({
-                "project_id": str(pid),
-                "error_rate": 0.0,
-                "p95_ms": 0.0,
-                "rps": 0.0,
-                "status": "down",
-                "sparkline": [0] * 24,
-                "thresholds": {
-                    "error_rate_warn": ERROR_RATE_WARN,
-                    "error_rate_crit": ERROR_RATE_CRIT,
-                    "p95_warn_ms": P95_WARN_MS,
-                    "p95_crit_ms": P95_CRIT_MS,
-                },
-                "generated_at": datetime.datetime.now(timezone.utc).isoformat(),
-            })
+            summaries.append(
+                {
+                    "project_id": str(pid),
+                    "error_rate": 0.0,
+                    "p95_ms": 0.0,
+                    "rps": 0.0,
+                    "status": "down",
+                    "sparkline": [0] * 24,
+                    "thresholds": {
+                        "error_rate_warn": ERROR_RATE_WARN,
+                        "error_rate_crit": ERROR_RATE_CRIT,
+                        "p95_warn_ms": P95_WARN_MS,
+                        "p95_crit_ms": P95_CRIT_MS,
+                    },
+                    "generated_at": datetime.datetime.now(timezone.utc).isoformat(),
+                }
+            )
         else:
             summaries.append(result)
 

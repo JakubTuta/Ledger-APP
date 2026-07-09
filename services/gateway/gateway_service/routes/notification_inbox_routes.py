@@ -114,9 +114,7 @@ async def get_unread_count(request: fastapi.Request) -> UnreadCountResponse:
     status_code=204,
     summary="Mark notification as read",
 )
-async def mark_notification_read(
-    notification_id: int, request: fastapi.Request
-) -> None:
+async def mark_notification_read(notification_id: int, request: fastapi.Request) -> None:
     account_id = _require_account(request)
     grpc_pool = request.app.state.grpc_pool
 
@@ -158,9 +156,7 @@ async def mark_all_notifications_read(request: fastapi.Request) -> None:
     status_code=204,
     summary="Delete notification",
 )
-async def delete_notification(
-    notification_id: int, request: fastapi.Request
-) -> None:
+async def delete_notification(notification_id: int, request: fastapi.Request) -> None:
     account_id = _require_account(request)
     grpc_pool = request.app.state.grpc_pool
 
@@ -168,9 +164,7 @@ async def delete_notification(
         channel = grpc_pool.get_channel("auth")
         stub = auth_pb2_grpc.AuthServiceStub(channel)
         await stub.DeleteNotification(
-            auth_pb2.DeleteNotificationRequest(
-                notification_id=notification_id, user_id=account_id
-            ),
+            auth_pb2.DeleteNotificationRequest(notification_id=notification_id, user_id=account_id),
             timeout=5.0,
         )
     except grpc.RpcError as e:

@@ -53,14 +53,13 @@ async def _get_error_rate_from_redis(
 
     if start_time or end_time:
         error_rate_data = [
-            item for item in error_rate_data
+            item
+            for item in error_rate_data
             if (not start_time or item.timestamp >= start_time)
             and (not end_time or item.timestamp <= end_time)
         ]
 
-    return schemas.ErrorRateResponse(
-        project_id=project_id, interval=interval, data=error_rate_data
-    )
+    return schemas.ErrorRateResponse(project_id=project_id, interval=interval, data=error_rate_data)
 
 
 async def _get_error_rate_from_db(
@@ -140,14 +139,13 @@ async def _get_log_volume_from_redis(
 
     if start_time or end_time:
         log_volume_data = [
-            item for item in log_volume_data
+            item
+            for item in log_volume_data
             if (not start_time or item.timestamp >= start_time)
             and (not end_time or item.timestamp <= end_time)
         ]
 
-    return schemas.LogVolumeResponse(
-        project_id=project_id, interval=interval, data=log_volume_data
-    )
+    return schemas.LogVolumeResponse(project_id=project_id, interval=interval, data=log_volume_data)
 
 
 async def _get_log_volume_from_db(
@@ -208,9 +206,7 @@ async def _get_log_volume_from_db(
         )
         for row in rows
     ]
-    return schemas.LogVolumeResponse(
-        project_id=project_id, interval=resolved_interval, data=data
-    )
+    return schemas.LogVolumeResponse(project_id=project_id, interval=resolved_interval, data=data)
 
 
 async def get_top_errors(

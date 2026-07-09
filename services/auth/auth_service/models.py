@@ -33,9 +33,7 @@ class Account(database.Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
 
-    email: Mapped[str] = mapped_column(
-        VARCHAR(255), unique=True, nullable=False, index=True
-    )
+    email: Mapped[str] = mapped_column(VARCHAR(255), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(CHAR(60), nullable=False)
     name: Mapped[str] = mapped_column(VARCHAR(255), nullable=False)
 
@@ -48,6 +46,30 @@ class Account(database.Base):
         nullable=False,
         server_default='{"enabled": true, "projects": {}}',
     )
+
+    # Email verification. New registrations start unverified; accounts that
+    # existed before this column was added were backfilled to TRUE by the
+    # e5f6a7b8c9d0 migration so nobody already using the product got locked
+    # out retroactively.
+    email_verified: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, server_default="false"
+    )
+    email_verification_token: Mapped[str | None] = mapped_column(
+        CHAR(64), unique=True, nullable=True
+    )
+    email_verification_sent_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # TOTP-based 2FA. totp_secret is written on Setup2FA (pending, not yet
+    # active) and totp_enabled only flips to True once the user proves
+    # possession of the secret via Verify2FASetup. totp_backup_codes stores
+    # only SHA-256 hashes of the one-time backup codes, never plaintext.
+    totp_secret: Mapped[str | None] = mapped_column(VARCHAR(32), nullable=True)
+    totp_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, server_default="false"
+    )
+    totp_backup_codes: Mapped[list | None] = mapped_column(JSONB, nullable=True)
 
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
@@ -114,9 +136,7 @@ class RefreshToken(database.Base):
         index=True,
     )
 
-    token_hash: Mapped[str] = mapped_column(
-        CHAR(64), unique=True, nullable=False, index=True
-    )
+    token_hash: Mapped[str] = mapped_column(CHAR(64), unique=True, nullable=False, index=True)
 
     device_info: Mapped[str | None] = mapped_column(VARCHAR(255), nullable=True)
 
@@ -186,19 +206,11 @@ class Project(database.Base):
     )
 
     name: Mapped[str] = mapped_column(VARCHAR(255), nullable=False)
-    slug: Mapped[str] = mapped_column(
-        VARCHAR(255), unique=True, nullable=False, index=True
-    )
-    environment: Mapped[str] = mapped_column(
-        VARCHAR(20), default="production", nullable=False
-    )
+    slug: Mapped[str] = mapped_column(VARCHAR(255), unique=True, nullable=False, index=True)
+    environment: Mapped[str] = mapped_column(VARCHAR(20), default="production", nullable=False)
 
-    retention_days: Mapped[int] = mapped_column(
-        SmallInteger, default=30, nullable=False
-    )
-    daily_quota: Mapped[int] = mapped_column(
-        BigInteger, default=100_000, nullable=False
-    )
+    retention_days: Mapped[int] = mapped_column(SmallInteger, default=30, nullable=False)
+    daily_quota: Mapped[int] = mapped_column(BigInteger, default=100_000, nullable=False)
 
     available_routes: Mapped[list[str]] = mapped_column(
         ARRAY(String), default=list, nullable=False, server_default="{}"
@@ -256,9 +268,7 @@ class Project(database.Base):
     )
 
     def __repr__(self) -> str:
-        return (
-            f"<Project(id={self.id}, slug={self.slug}, environment={self.environment})>"
-        )
+        return f"<Project(id={self.id}, slug={self.slug}, environment={self.environment})>"
 
 
 class ApiKey(database.Base):
@@ -284,9 +294,7 @@ class ApiKey(database.Base):
     )
 
     key_prefix: Mapped[str] = mapped_column(VARCHAR(20), nullable=False)
-    key_hash: Mapped[str] = mapped_column(
-        CHAR(64), unique=True, nullable=False, index=True
-    )
+    key_hash: Mapped[str] = mapped_column(CHAR(64), unique=True, nullable=False, index=True)
 
     name: Mapped[str | None] = mapped_column(VARCHAR(255), nullable=True)
     last_used_at: Mapped[datetime.datetime | None] = mapped_column(
@@ -300,12 +308,8 @@ class ApiKey(database.Base):
         nullable=True,
     )
 
-    rate_limit_per_minute: Mapped[int] = mapped_column(
-        Integer, default=1000, nullable=False
-    )
-    rate_limit_per_hour: Mapped[int] = mapped_column(
-        Integer, default=50_000, nullable=False
-    )
+    rate_limit_per_minute: Mapped[int] = mapped_column(Integer, default=1000, nullable=False)
+    rate_limit_per_hour: Mapped[int] = mapped_column(Integer, default=50_000, nullable=False)
 
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
@@ -641,6 +645,25 @@ class AlertRule(database.Base):
     )
     fired_value: Mapped[float | None] = mapped_column(nullable=True)
 
+    for_minutes: Mapped[int] = mapped_column(SmallInteger, default=0, nullable=False)
+    cooldown_minutes: Mapped[int] = mapped_column(SmallInteger, default=0, nullable=False)
+    last_notified_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    pending_since: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    escalation_after_minutes: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    escalate_connector_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("connectors.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    escalated_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         default=datetime.datetime.now(datetime.timezone.utc),
@@ -676,7 +699,7 @@ class AlertRule(database.Base):
             name="check_alert_severity",
         ),
         CheckConstraint(
-            "state IN ('ok', 'firing')",
+            "state IN ('ok', 'pending', 'firing')",
             name="check_alert_state",
         ),
         CheckConstraint(
@@ -720,7 +743,7 @@ class Connector(database.Base):
     __table_args__ = (
         Index("idx_connectors_account_id", "account_id"),
         CheckConstraint(
-            "kind IN ('in_app', 'email', 'webhook')",
+            "kind IN ('in_app', 'email', 'webhook', 'slack', 'discord', 'pagerduty', 'opsgenie')",
             name="check_connector_kind",
         ),
     )
@@ -743,9 +766,7 @@ class AlertRuleConnector(database.Base):
         primary_key=True,
     )
 
-    __table_args__ = (
-        Index("idx_alert_rule_connectors_connector", "connector_id"),
-    )
+    __table_args__ = (Index("idx_alert_rule_connectors_connector", "connector_id"),)
 
     def __repr__(self) -> str:
         return f"<AlertRuleConnector(rule_id={self.rule_id}, connector_id={self.connector_id})>"
@@ -780,6 +801,18 @@ class AlertEvent(database.Base):
         index=True,
     )
 
+    acked_by: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("accounts.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    acked_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    snoozed_until: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     __table_args__ = (
         Index("idx_alert_events_project_fired", "project_id", "fired_at"),
         CheckConstraint(
@@ -790,6 +823,168 @@ class AlertEvent(database.Base):
 
     def __repr__(self) -> str:
         return f"<AlertEvent(id={self.id}, rule_id={self.rule_id}, state={self.state})>"
+
+
+class MaintenanceWindow(database.Base):
+    """
+    A time range (optionally recurring) during which alert dispatch for a
+    project is suppressed. Rule state is still evaluated/updated as normal;
+    only outbound notifications are skipped while a window is active.
+    """
+
+    __tablename__ = "maintenance_windows"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+
+    project_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(VARCHAR(255), nullable=False)
+    starts_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ends_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # None/'none' = one-off window; 'daily' matches time-of-day; 'weekly'
+    # additionally matches day-of-week.
+    recurrence: Mapped[str | None] = mapped_column(VARCHAR(20), nullable=True)
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.datetime.now(datetime.timezone.utc),
+        onupdate=datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        Index("idx_maintenance_windows_project_id", "project_id"),
+        CheckConstraint(
+            "recurrence IN ('none', 'daily', 'weekly') OR recurrence IS NULL",
+            name="check_maintenance_window_recurrence",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return f"<MaintenanceWindow(id={self.id}, project_id={self.project_id}, name={self.name})>"
+
+
+class Monitor(database.Base):
+    """
+    Uptime (HTTP) and heartbeat (dead-man's-switch) monitors.
+
+    Performance notes:
+    - Unique partial index on token (heartbeat monitors only)
+    - Partial index on (kind, enabled) for the checker job's scan query
+    """
+
+    __tablename__ = "monitors"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+
+    project_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    kind: Mapped[str] = mapped_column(VARCHAR(20), nullable=False)
+    name: Mapped[str] = mapped_column(VARCHAR(255), nullable=False)
+
+    target_url: Mapped[str | None] = mapped_column(VARCHAR(2048), nullable=True)
+    token: Mapped[str | None] = mapped_column(VARCHAR(64), unique=True, nullable=True)
+
+    interval_s: Mapped[int] = mapped_column(Integer, default=60, nullable=False)
+    timeout_s: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
+    expected_status: Mapped[int] = mapped_column(Integer, default=200, nullable=False)
+    grace_s: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    state: Mapped[str] = mapped_column(VARCHAR(10), default="unknown", nullable=False)
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.datetime.now(datetime.timezone.utc),
+        onupdate=datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+    checks: Mapped[list["MonitorCheck"]] = relationship(
+        "MonitorCheck",
+        back_populates="monitor",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        Index("idx_monitors_project_id", "project_id"),
+        Index(
+            "idx_monitors_token",
+            "token",
+            unique=True,
+            postgresql_where=(token.isnot(None)),
+        ),
+        Index(
+            "idx_monitors_enabled",
+            "kind",
+            "enabled",
+            postgresql_where=(enabled == True),  # noqa: E712
+        ),
+        CheckConstraint(
+            "kind IN ('http', 'heartbeat')",
+            name="check_monitor_kind",
+        ),
+        CheckConstraint(
+            "state IN ('unknown', 'up', 'down')",
+            name="check_monitor_state",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return f"<Monitor(id={self.id}, project_id={self.project_id}, kind={self.kind}, state={self.state})>"
+
+
+class MonitorCheck(database.Base):
+    __tablename__ = "monitor_checks"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+
+    monitor_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("monitors.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    checked_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+        index=True,
+    )
+    ok: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    monitor: Mapped["Monitor"] = relationship("Monitor", back_populates="checks")
+
+    __table_args__ = (
+        Index("idx_monitor_checks_monitor_checked", "monitor_id", "checked_at"),
+        Index("idx_monitor_checks_checked_at", "checked_at"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<MonitorCheck(id={self.id}, monitor_id={self.monitor_id}, ok={self.ok})>"
 
 
 class NotificationPreference(database.Base):

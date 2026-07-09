@@ -4,8 +4,6 @@ import fastapi
 from gateway_service.proto import auth_pb2, auth_pb2_grpc
 from gateway_service.services import grpc_pool, redis_client
 
-# ==================== SINGLETON DEPENDENCIES ====================
-
 
 def get_grpc_pool(request: fastapi.Request) -> grpc_pool.GRPCPoolManager:
     """
@@ -43,9 +41,6 @@ def get_redis_client(request: fastapi.Request) -> redis_client.RedisClient:
         raise RuntimeError("Redis client not initialized")
 
     return request.app.state.redis_client
-
-
-# ==================== AUTH DEPENDENCIES ====================
 
 
 def get_current_project_id(request: fastapi.Request) -> int:
@@ -118,9 +113,6 @@ def get_auth_context(request: fastapi.Request) -> typing.Dict:
     }
 
 
-# ==================== PROJECT ACCESS DEPENDENCIES ====================
-
-
 async def _get_project_role(
     request: fastapi.Request,
     project_id: int,
@@ -138,9 +130,7 @@ async def _get_project_role(
 
     try:
         response = await stub.GetProjectRole(
-            auth_pb2.GetProjectRoleRequest(
-                project_id=project_id, account_id=account_id
-            ),
+            auth_pb2.GetProjectRoleRequest(project_id=project_id, account_id=account_id),
             timeout=5.0,
         )
     except Exception as exc:
@@ -149,9 +139,7 @@ async def _get_project_role(
             detail="Auth service unavailable",
         ) from exc
 
-    await redis_client_inst.set_cached_project_access(
-        account_id, project_id, response.is_member
-    )
+    await redis_client_inst.set_cached_project_access(account_id, project_id, response.is_member)
     return (response.is_member, response.role)
 
 
@@ -196,9 +184,7 @@ async def require_project_owner(
     stub = grpc_mgr.get_stub("auth", auth_pb2_grpc.AuthServiceStub)
     try:
         response = await stub.GetProjectRole(
-            auth_pb2.GetProjectRoleRequest(
-                project_id=project_id, account_id=account_id
-            ),
+            auth_pb2.GetProjectRoleRequest(project_id=project_id, account_id=account_id),
             timeout=5.0,
         )
     except Exception as exc:
@@ -220,9 +206,6 @@ async def require_project_owner(
             detail="Only project owners can perform this action",
         )
     return project_id
-
-
-# ==================== PAGINATION DEPENDENCIES ====================
 
 
 class PaginationParams:
@@ -277,9 +260,6 @@ def get_pagination(page: int = 1, page_size: int = 50) -> PaginationParams:
     return PaginationParams(page=page, page_size=page_size)
 
 
-# ==================== QUERY PARAMETER DEPENDENCIES ====================
-
-
 class SortParams:
     """
     Sorting parameters with validation.
@@ -313,9 +293,6 @@ class SortParams:
         return f"{self.sort_by} {self.sort_order}"
 
 
-# ==================== RATE LIMIT DEPENDENCIES ====================
-
-
 async def check_endpoint_rate_limit(
     request: fastapi.Request, endpoint_limit: typing.Optional[int] = None
 ):
@@ -345,9 +322,7 @@ async def check_endpoint_rate_limit(
         limit_per_minute = request.state.rate_limits["per_minute"]
         limit_per_hour = request.state.rate_limits["per_hour"]
 
-    allowed, metadata = await redis.check_rate_limit(
-        project_id, limit_per_minute, limit_per_hour
-    )
+    allowed, metadata = await redis.check_rate_limit(project_id, limit_per_minute, limit_per_hour)
 
     if not allowed:
         raise fastapi.HTTPException(
@@ -355,9 +330,6 @@ async def check_endpoint_rate_limit(
             detail="Rate limit exceeded for this endpoint",
             headers={"Retry-After": "60"},
         )
-
-
-# ==================== CIRCUIT BREAKER DEPENDENCIES ====================
 
 
 def get_circuit_breakers(request: fastapi.Request):

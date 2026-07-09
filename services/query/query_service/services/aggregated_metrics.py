@@ -66,13 +66,10 @@ async def get_aggregated_metrics(
         end_date_str = end_date.strftime("%Y%m%d")
 
         if granularity == "hourly":
-            query = (
-                sa.select(models.AggregatedMetric)
-                .where(
-                    models.AggregatedMetric.project_id == project_id,
-                    models.AggregatedMetric.metric_type == metric_type,
-                    models.AggregatedMetric.date == start_date_str,
-                )
+            query = sa.select(models.AggregatedMetric).where(
+                models.AggregatedMetric.project_id == project_id,
+                models.AggregatedMetric.metric_type == metric_type,
+                models.AggregatedMetric.date == start_date_str,
             )
 
             if endpoint_path is not None:
@@ -83,9 +80,7 @@ async def get_aggregated_metrics(
             result = await session.execute(query)
             metrics = result.scalars().all()
 
-            metrics_map = {
-                (m.date, m.hour): m for m in metrics
-            }
+            metrics_map = {(m.date, m.hour): m for m in metrics}
 
             all_buckets = _generate_time_buckets(start_date, end_date, granularity)
 

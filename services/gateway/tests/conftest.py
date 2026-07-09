@@ -1,3 +1,12 @@
+import os
+
+# Must run before gateway_service.config is imported (below): without this,
+# Settings() picks up ../../.env (the real repo-root .env, if one exists on
+# the machine running tests) instead of field defaults - meaning tests behave
+# differently, and can hard-depend on production hostnames/secrets, depending
+# on whether the developer happens to have a real .env checked out locally.
+os.environ.setdefault("ENV_FILE_PATH", os.devnull)
+
 import pytest
 import pytest_asyncio
 import httpx
@@ -22,19 +31,16 @@ async def async_client(mock_redis, mock_grpc_pool):
     main.app.state.grpc_pool = mock_grpc_pool
 
     for middleware in main.app.user_middleware:
-        if hasattr(middleware, 'kwargs'):
-            if 'redis_client' in middleware.kwargs:
-                middleware.kwargs['redis_client'] = mock_redis
-            if 'grpc_pool' in middleware.kwargs:
-                middleware.kwargs['grpc_pool'] = mock_grpc_pool
+        if hasattr(middleware, "kwargs"):
+            if "redis_client" in middleware.kwargs:
+                middleware.kwargs["redis_client"] = mock_redis
+            if "grpc_pool" in middleware.kwargs:
+                middleware.kwargs["grpc_pool"] = mock_grpc_pool
 
-    if hasattr(main.app, 'middleware_stack'):
+    if hasattr(main.app, "middleware_stack"):
         _update_middleware_in_stack(main.app.middleware_stack, mock_redis, mock_grpc_pool)
 
-    client = httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=main.app),
-        base_url="http://test"
-    )
+    client = httpx.AsyncClient(transport=httpx.ASGITransport(app=main.app), base_url="http://test")
 
     yield client
 
@@ -42,9 +48,9 @@ async def async_client(mock_redis, mock_grpc_pool):
 
 
 def _update_middleware_in_stack(middleware_stack, mock_redis, mock_grpc_pool):
-    if hasattr(middleware_stack, 'app'):
+    if hasattr(middleware_stack, "app"):
         _update_middleware_in_stack(middleware_stack.app, mock_redis, mock_grpc_pool)
-    if hasattr(middleware_stack, 'redis'):
+    if hasattr(middleware_stack, "redis"):
         middleware_stack.redis = mock_redis
-    if hasattr(middleware_stack, 'grpc_pool'):
+    if hasattr(middleware_stack, "grpc_pool"):
         middleware_stack.grpc_pool = mock_grpc_pool

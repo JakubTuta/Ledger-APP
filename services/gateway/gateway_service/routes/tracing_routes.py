@@ -196,9 +196,7 @@ async def list_traces(
         )
         for t in response.traces
     ]
-    return ListTracesResponse(
-        traces=traces, total=response.total, has_more=response.has_more
-    )
+    return ListTracesResponse(traces=traces, total=response.total, has_more=response.has_more)
 
 
 @router.get(
@@ -216,9 +214,7 @@ async def get_trace(
     try:
         async with grpc_pool.get_query_stub() as stub:
             response = await stub.GetTrace(
-                query_pb2.GetTraceRequest(
-                    trace_id=trace_id, project_id=project_id
-                ),
+                query_pb2.GetTraceRequest(trace_id=trace_id, project_id=project_id),
                 timeout=10.0,
             )
     except grpc.RpcError as e:

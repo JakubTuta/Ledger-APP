@@ -154,5 +154,3 @@ async def test_compute_top_errors_multiple_projects():
             await top_errors_job.compute_top_errors()
 
     assert mock_redis.setex.call_count == 3
-
-

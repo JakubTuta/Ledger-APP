@@ -39,6 +39,11 @@ class QueryServiceStub(object):
                 request_serializer=query__pb2.QueryLogsRequest.SerializeToString,
                 response_deserializer=query__pb2.QueryLogsResponse.FromString,
                 _registered_method=True)
+        self.GetLogFacets = channel.unary_unary(
+                '/query.QueryService/GetLogFacets',
+                request_serializer=query__pb2.GetLogFacetsRequest.SerializeToString,
+                response_deserializer=query__pb2.GetLogFacetsResponse.FromString,
+                _registered_method=True)
         self.SearchLogs = channel.unary_unary(
                 '/query.QueryService/SearchLogs',
                 request_serializer=query__pb2.SearchLogsRequest.SerializeToString,
@@ -94,6 +99,26 @@ class QueryServiceStub(object):
                 request_serializer=query__pb2.GetHealthSummaryRequest.SerializeToString,
                 response_deserializer=query__pb2.GetHealthSummaryResponse.FromString,
                 _registered_method=True)
+        self.ListErrorGroups = channel.unary_unary(
+                '/query.QueryService/ListErrorGroups',
+                request_serializer=query__pb2.ListErrorGroupsRequest.SerializeToString,
+                response_deserializer=query__pb2.ListErrorGroupsResponse.FromString,
+                _registered_method=True)
+        self.GetErrorGroup = channel.unary_unary(
+                '/query.QueryService/GetErrorGroup',
+                request_serializer=query__pb2.GetErrorGroupRequest.SerializeToString,
+                response_deserializer=query__pb2.GetErrorGroupResponse.FromString,
+                _registered_method=True)
+        self.UpdateErrorGroupStatus = channel.unary_unary(
+                '/query.QueryService/UpdateErrorGroupStatus',
+                request_serializer=query__pb2.UpdateErrorGroupStatusRequest.SerializeToString,
+                response_deserializer=query__pb2.UpdateErrorGroupStatusResponse.FromString,
+                _registered_method=True)
+        self.AssignErrorGroup = channel.unary_unary(
+                '/query.QueryService/AssignErrorGroup',
+                request_serializer=query__pb2.AssignErrorGroupRequest.SerializeToString,
+                response_deserializer=query__pb2.AssignErrorGroupResponse.FromString,
+                _registered_method=True)
         self.GetTrace = channel.unary_unary(
                 '/query.QueryService/GetTrace',
                 request_serializer=query__pb2.GetTraceRequest.SerializeToString,
@@ -109,12 +134,28 @@ class QueryServiceStub(object):
                 request_serializer=query__pb2.GetSpanLatencyRequest.SerializeToString,
                 response_deserializer=query__pb2.GetSpanLatencyResponse.FromString,
                 _registered_method=True)
+        self.GetMetricSeries = channel.unary_unary(
+                '/query.QueryService/GetMetricSeries',
+                request_serializer=query__pb2.GetMetricSeriesRequest.SerializeToString,
+                response_deserializer=query__pb2.GetMetricSeriesResponse.FromString,
+                _registered_method=True)
+        self.QueryMetrics = channel.unary_unary(
+                '/query.QueryService/QueryMetrics',
+                request_serializer=query__pb2.QueryMetricsRequest.SerializeToString,
+                response_deserializer=query__pb2.QueryMetricsResponse.FromString,
+                _registered_method=True)
 
 
 class QueryServiceServicer(object):
     """Missing associated documentation comment in .proto file."""
 
     def QueryLogs(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetLogFacets(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -186,6 +227,31 @@ class QueryServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ListErrorGroups(self, request, context):
+        """Error group workflow (resolve/ignore/mute/reopen, assignment)
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetErrorGroup(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def UpdateErrorGroupStatus(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def AssignErrorGroup(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def GetTrace(self, request, context):
         """Distributed tracing
         """
@@ -205,6 +271,19 @@ class QueryServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetMetricSeries(self, request, context):
+        """Metric points
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def QueryMetrics(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_QueryServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -212,6 +291,11 @@ def add_QueryServiceServicer_to_server(servicer, server):
                     servicer.QueryLogs,
                     request_deserializer=query__pb2.QueryLogsRequest.FromString,
                     response_serializer=query__pb2.QueryLogsResponse.SerializeToString,
+            ),
+            'GetLogFacets': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetLogFacets,
+                    request_deserializer=query__pb2.GetLogFacetsRequest.FromString,
+                    response_serializer=query__pb2.GetLogFacetsResponse.SerializeToString,
             ),
             'SearchLogs': grpc.unary_unary_rpc_method_handler(
                     servicer.SearchLogs,
@@ -268,6 +352,26 @@ def add_QueryServiceServicer_to_server(servicer, server):
                     request_deserializer=query__pb2.GetHealthSummaryRequest.FromString,
                     response_serializer=query__pb2.GetHealthSummaryResponse.SerializeToString,
             ),
+            'ListErrorGroups': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListErrorGroups,
+                    request_deserializer=query__pb2.ListErrorGroupsRequest.FromString,
+                    response_serializer=query__pb2.ListErrorGroupsResponse.SerializeToString,
+            ),
+            'GetErrorGroup': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetErrorGroup,
+                    request_deserializer=query__pb2.GetErrorGroupRequest.FromString,
+                    response_serializer=query__pb2.GetErrorGroupResponse.SerializeToString,
+            ),
+            'UpdateErrorGroupStatus': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateErrorGroupStatus,
+                    request_deserializer=query__pb2.UpdateErrorGroupStatusRequest.FromString,
+                    response_serializer=query__pb2.UpdateErrorGroupStatusResponse.SerializeToString,
+            ),
+            'AssignErrorGroup': grpc.unary_unary_rpc_method_handler(
+                    servicer.AssignErrorGroup,
+                    request_deserializer=query__pb2.AssignErrorGroupRequest.FromString,
+                    response_serializer=query__pb2.AssignErrorGroupResponse.SerializeToString,
+            ),
             'GetTrace': grpc.unary_unary_rpc_method_handler(
                     servicer.GetTrace,
                     request_deserializer=query__pb2.GetTraceRequest.FromString,
@@ -282,6 +386,16 @@ def add_QueryServiceServicer_to_server(servicer, server):
                     servicer.GetSpanLatency,
                     request_deserializer=query__pb2.GetSpanLatencyRequest.FromString,
                     response_serializer=query__pb2.GetSpanLatencyResponse.SerializeToString,
+            ),
+            'GetMetricSeries': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetMetricSeries,
+                    request_deserializer=query__pb2.GetMetricSeriesRequest.FromString,
+                    response_serializer=query__pb2.GetMetricSeriesResponse.SerializeToString,
+            ),
+            'QueryMetrics': grpc.unary_unary_rpc_method_handler(
+                    servicer.QueryMetrics,
+                    request_deserializer=query__pb2.QueryMetricsRequest.FromString,
+                    response_serializer=query__pb2.QueryMetricsResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -311,6 +425,33 @@ class QueryService(object):
             '/query.QueryService/QueryLogs',
             query__pb2.QueryLogsRequest.SerializeToString,
             query__pb2.QueryLogsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetLogFacets(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/query.QueryService/GetLogFacets',
+            query__pb2.GetLogFacetsRequest.SerializeToString,
+            query__pb2.GetLogFacetsResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -619,6 +760,114 @@ class QueryService(object):
             _registered_method=True)
 
     @staticmethod
+    def ListErrorGroups(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/query.QueryService/ListErrorGroups',
+            query__pb2.ListErrorGroupsRequest.SerializeToString,
+            query__pb2.ListErrorGroupsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetErrorGroup(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/query.QueryService/GetErrorGroup',
+            query__pb2.GetErrorGroupRequest.SerializeToString,
+            query__pb2.GetErrorGroupResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UpdateErrorGroupStatus(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/query.QueryService/UpdateErrorGroupStatus',
+            query__pb2.UpdateErrorGroupStatusRequest.SerializeToString,
+            query__pb2.UpdateErrorGroupStatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def AssignErrorGroup(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/query.QueryService/AssignErrorGroup',
+            query__pb2.AssignErrorGroupRequest.SerializeToString,
+            query__pb2.AssignErrorGroupResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
     def GetTrace(request,
             target,
             options=(),
@@ -689,6 +938,60 @@ class QueryService(object):
             '/query.QueryService/GetSpanLatency',
             query__pb2.GetSpanLatencyRequest.SerializeToString,
             query__pb2.GetSpanLatencyResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetMetricSeries(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/query.QueryService/GetMetricSeries',
+            query__pb2.GetMetricSeriesRequest.SerializeToString,
+            query__pb2.GetMetricSeriesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def QueryMetrics(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/query.QueryService/QueryMetrics',
+            query__pb2.QueryMetricsRequest.SerializeToString,
+            query__pb2.QueryMetricsResponse.FromString,
             options,
             channel_credentials,
             insecure,

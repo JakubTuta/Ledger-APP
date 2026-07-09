@@ -1,5 +1,4 @@
 import asyncio
-import os
 
 import asyncpg
 import auth_service.config as config
@@ -57,7 +56,9 @@ class TestDatabase:
             table_names = [t.name for t in reversed(database.Base.metadata.sorted_tables)]
             if table_names:
                 await conn.execute(
-                    sqlalchemy.text(f"TRUNCATE TABLE {', '.join(table_names)} RESTART IDENTITY CASCADE")
+                    sqlalchemy.text(
+                        f"TRUNCATE TABLE {', '.join(table_names)} RESTART IDENTITY CASCADE"
+                    )
                 )
 
     async def close(self):
@@ -115,6 +116,7 @@ async def clear_test_database():
 
 
 if __name__ == "__main__":
+
     async def test():
         print("Creating tables...")
         await setup_test_database()

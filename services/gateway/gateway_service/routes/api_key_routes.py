@@ -13,7 +13,6 @@ logger = logging.getLogger(__name__)
 router = fastapi.APIRouter(tags=["API Keys"])
 
 
-# ==================== ROUTE HANDLERS ====================
 # Note: Request/Response models moved to gateway_service/schemas/api_keys.py
 
 
@@ -50,9 +49,7 @@ router = fastapi.APIRouter(tags=["API Keys"])
         },
         404: {
             "description": "Project not found",
-            "content": {
-                "application/json": {"example": {"detail": "Project 456 not found"}}
-            },
+            "content": {"application/json": {"example": {"detail": "Project 456 not found"}}},
         },
         409: {
             "description": "API key name already exists",
@@ -67,14 +64,13 @@ router = fastapi.APIRouter(tags=["API Keys"])
         503: {
             "description": "Service timeout",
             "content": {
-                "application/json": {
-                    "example": {"detail": "Service timeout, please try again"}
-                }
+                "application/json": {"example": {"detail": "Service timeout, please try again"}}
             },
         },
     },
 )
 async def create_api_key(
+    request: fastapi.Request,
     project_id: int = fastapi.Path(
         ..., description="Project ID to create API key for", examples=[456]
     ),
@@ -94,15 +90,16 @@ async def create_api_key(
 
     Include the key in requests using the `X-API-Key` header.
 
-    Requires JWT authentication.
+    Requires JWT authentication AND project ownership — API keys grant
+    ingest/query access to the whole project, so only owners may mint them.
     """
 
     try:
+        await dependencies.require_project_owner(request, project_id)
+
         stub = grpc_pool.get_stub("auth", auth_pb2_grpc.AuthServiceStub)
 
-        grpc_request = auth_pb2.CreateApiKeyRequest(
-            project_id=project_id, name=request_data.name
-        )
+        grpc_request = auth_pb2.CreateApiKeyRequest(project_id=project_id, name=request_data.name)
 
         response = await asyncio.wait_for(
             stub.CreateApiKey(grpc_request),
@@ -190,9 +187,7 @@ async def create_api_key(
         },
         404: {
             "description": "Project not found",
-            "content": {
-                "application/json": {"example": {"detail": "Project 456 not found"}}
-            },
+            "content": {"application/json": {"example": {"detail": "Project 456 not found"}}},
         },
         503: {
             "description": "Service timeout",
@@ -227,9 +222,7 @@ async def list_api_keys(
         stub = grpc_pool.get_stub("auth", auth_pb2_grpc.AuthServiceStub)
 
         projects_request = auth_pb2.GetProjectsRequest(account_id=account_id)
-        projects_response = await asyncio.wait_for(
-            stub.GetProjects(projects_request), timeout=5.0
-        )
+        projects_response = await asyncio.wait_for(stub.GetProjects(projects_request), timeout=5.0)
 
         project_ids = [p.project_id for p in projects_response.projects]
         if project_id not in project_ids:
@@ -311,17 +304,13 @@ async def list_api_keys(
             "description": "Permission denied (don't own this API key)",
             "content": {
                 "application/json": {
-                    "example": {
-                        "detail": "You don't have permission to revoke this API key"
-                    }
+                    "example": {"detail": "You don't have permission to revoke this API key"}
                 }
             },
         },
         404: {
             "description": "API key not found",
-            "content": {
-                "application/json": {"example": {"detail": "API key 789 not found"}}
-            },
+            "content": {"application/json": {"example": {"detail": "API key 789 not found"}}},
         },
         503: {
             "description": "Service timeout",
@@ -331,6 +320,7 @@ async def list_api_keys(
 )
 async def revoke_api_key(
     key_id: int = fastapi.Path(..., description="API key ID to revoke", examples=[789]),
+    account_id: int = fastapi.Depends(dependencies.get_current_account_id),
     grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
 ):
     """
@@ -344,13 +334,15 @@ async def revoke_api_key(
     - Removing access for decommissioned services
     - Cleaning up unused keys
 
-    Requires JWT authentication.
+    Requires JWT authentication AND that the caller is the *owner* of the
+    key's project — a plain member cannot revoke API keys (i.e. cannot cut
+    off another member's/service's ingest access) for the project.
     """
 
     try:
         stub = grpc_pool.get_stub("auth", auth_pb2_grpc.AuthServiceStub)
 
-        grpc_request = auth_pb2.RevokeApiKeyRequest(key_id=key_id)
+        grpc_request = auth_pb2.RevokeApiKeyRequest(key_id=key_id, requester_account_id=account_id)
 
         response = await asyncio.wait_for(stub.RevokeApiKey(grpc_request), timeout=5.0)
 

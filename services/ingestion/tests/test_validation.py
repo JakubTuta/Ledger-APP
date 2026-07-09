@@ -146,7 +146,10 @@ class TestValidation(BaseIngestionTest):
             await self.stub.IngestLog(request)
 
         assert exc_info.value.code() == grpc.StatusCode.INVALID_ARGUMENT
-        assert "timestamp" in str(exc_info.value.details()).lower() or "future" in str(exc_info.value.details()).lower()
+        assert (
+            "timestamp" in str(exc_info.value.details()).lower()
+            or "future" in str(exc_info.value.details()).lower()
+        )
         print("✅ Future timestamp beyond tolerance rejected")
 
     async def test_message_too_long(self):

@@ -7,15 +7,15 @@ import grpc
 import jwt
 from gateway_service import config
 from gateway_service.proto import auth_pb2, auth_pb2_grpc
-from gateway_service.services import grpc_pool, redis_client
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 logger = logging.getLogger(__name__)
 
 
-class AuthMiddleware(BaseHTTPMiddleware):
-    """High-performance authentication middleware."""
+class AuthMiddleware:
+    """High-performance authentication middleware (pure ASGI)."""
 
     PUBLIC_PATHS = {
         "/health",
@@ -26,22 +26,37 @@ class AuthMiddleware(BaseHTTPMiddleware):
         "/api/v1/accounts/register",
         "/api/v1/accounts/login",
         "/api/v1/accounts/refresh",
+        # Email verification: the token in the request body IS the
+        # credential, there's no session yet for a brand-new registrant.
+        "/api/v1/accounts/verify-email",
+        # 2FA login completion: the caller only has a short-lived opaque
+        # totp_session_token (from /accounts/login) at this point, not a
+        # session token yet — that's exactly what this endpoint mints.
+        "/api/v1/accounts/2fa/login",
     }
 
-    def __init__(self, app):
-        super().__init__(app)
+    def __init__(self, app: ASGIApp):
+        self.app = app
         self._cache_hits = 0
         self._cache_misses = 0
         self._auth_failures = 0
 
-    async def dispatch(self, request: fastapi.Request, call_next) -> Response:
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         """Main middleware logic."""
 
-        if self._is_public_path(request.url.path):
-            return await call_next(request)
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
 
-        self.redis = request.app.state.redis_client
-        self.grpc_pool = request.app.state.grpc_pool
+        scope["app"].state.auth_middleware = self
+
+        if self._is_public_path(scope["path"]):
+            await self.app(scope, receive, send)
+            return
+
+        self.redis = scope["app"].state.redis_client
+        self.grpc_pool = scope["app"].state.grpc_pool
+        request = Request(scope, receive=receive)
 
         try:
             token, auth_type = self._extract_auth_token(request)
@@ -51,41 +66,48 @@ class AuthMiddleware(BaseHTTPMiddleware):
             else:
                 auth_data = await self._validate_api_key(token)
 
-            request.state.project_id = auth_data.get("project_id")
-            request.state.account_id = auth_data["account_id"]
-            request.state.rate_limits = auth_data.get(
+            state = scope.setdefault("state", {})
+            state["project_id"] = auth_data.get("project_id")
+            state["account_id"] = auth_data["account_id"]
+            state["rate_limits"] = auth_data.get(
                 "rate_limits",
                 {
                     "per_minute": auth_data.get("rate_limit_per_minute", 1000),
                     "per_hour": auth_data.get("rate_limit_per_hour", 50000),
                 },
             )
-            request.state.daily_quota = auth_data.get(
-                "daily_quota", config.settings.DEFAULT_DAILY_QUOTA
-            )
+            state["daily_quota"] = auth_data.get("daily_quota", config.settings.DEFAULT_DAILY_QUOTA)
 
-            return await call_next(request)
+            await self.app(scope, receive, send)
 
         except fastapi.HTTPException as exc:
-            from starlette.responses import JSONResponse
-
-            return JSONResponse(
+            response = JSONResponse(
                 status_code=exc.status_code,
                 content={"detail": exc.detail},
                 headers=getattr(exc, "headers", None),
             )
+            await response(scope, receive, send)
 
         except Exception as e:
             logger.error(f"Auth middleware error: {e}", exc_info=True)
-            from starlette.responses import JSONResponse
-
-            return JSONResponse(
+            response = JSONResponse(
                 status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR,
                 content={"detail": "Authentication service error"},
             )
+            await response(scope, receive, send)
 
     def _is_public_path(self, path: str) -> bool:
-        return path in self.PUBLIC_PATHS
+        if path in self.PUBLIC_PATHS:
+            return True
+
+        # Heartbeat ping endpoint is authenticated by the token embedded in
+        # the URL path itself (POST /api/v1/monitors/{token}/ping), not by
+        # the normal JWT/API-key headers, so it can't be a fixed PUBLIC_PATHS
+        # entry. Match on prefix + suffix instead of a full path.
+        if path.startswith("/api/v1/monitors/") and path.endswith("/ping"):
+            return True
+
+        return False
 
     def _extract_auth_token(self, request: fastapi.Request) -> typing.Tuple[str, str]:
         """
@@ -134,11 +156,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         try:
             settings = config.get_settings()
 
-            payload = jwt.decode(
-                token,
-                settings.JWT_SECRET,
-                algorithms=["HS256"]
-            )
+            payload = jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
 
             if payload.get("type") != "access":
                 self._auth_failures += 1

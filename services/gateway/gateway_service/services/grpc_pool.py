@@ -21,19 +21,23 @@ class GRPCChannelPool:
         self._lock = asyncio.Lock()
 
     def _service_config(self) -> str:
-        return json.dumps({
-            "methodConfig": [{
-                "name": [{}],
-                "waitForReady": True,
-                "retryPolicy": {
-                    "maxAttempts": 3,
-                    "initialBackoff": "0.5s",
-                    "maxBackoff": "5s",
-                    "backoffMultiplier": 2,
-                    "retryableStatusCodes": ["UNAVAILABLE"],
-                },
-            }]
-        })
+        return json.dumps(
+            {
+                "methodConfig": [
+                    {
+                        "name": [{}],
+                        "waitForReady": True,
+                        "retryPolicy": {
+                            "maxAttempts": 3,
+                            "initialBackoff": "0.5s",
+                            "maxBackoff": "5s",
+                            "backoffMultiplier": 2,
+                            "retryableStatusCodes": ["UNAVAILABLE"],
+                        },
+                    }
+                ]
+            }
+        )
 
     def _channel_options(self) -> typing.List[typing.Tuple]:
         return [
@@ -43,9 +47,18 @@ class GRPCChannelPool:
             ("grpc.keepalive_time_ms", config.settings.GRPC_KEEPALIVE_TIME_MS),
             ("grpc.keepalive_timeout_ms", config.settings.GRPC_KEEPALIVE_TIMEOUT_MS),
             ("grpc.keepalive_permit_without_calls", 1),
-            ("grpc.http2.max_pings_without_data", config.settings.GRPC_HTTP2_MAX_PINGS_WITHOUT_DATA),
-            ("grpc.http2.min_time_between_pings_ms", config.settings.GRPC_HTTP2_MIN_TIME_BETWEEN_PINGS_MS),
-            ("grpc.http2.min_ping_interval_without_data_ms", config.settings.GRPC_HTTP2_MIN_PING_INTERVAL_WITHOUT_DATA_MS),
+            (
+                "grpc.http2.max_pings_without_data",
+                config.settings.GRPC_HTTP2_MAX_PINGS_WITHOUT_DATA,
+            ),
+            (
+                "grpc.http2.min_time_between_pings_ms",
+                config.settings.GRPC_HTTP2_MIN_TIME_BETWEEN_PINGS_MS,
+            ),
+            (
+                "grpc.http2.min_ping_interval_without_data_ms",
+                config.settings.GRPC_HTTP2_MIN_PING_INTERVAL_WITHOUT_DATA_MS,
+            ),
             ("grpc.service_config", self._service_config()),
         ]
 
@@ -85,7 +98,7 @@ class GRPCChannelPool:
             try:
                 await channel.close()
             except Exception as e:
-                logger.error(f"Error closing channel {i+1}: {e}")
+                logger.error(f"Error closing channel {i + 1}: {e}")
 
         self.channels.clear()
 
@@ -124,13 +137,7 @@ class GRPCPoolManager:
 
     @contextlib.asynccontextmanager
     async def get_auth_stub(self):
-        """
-        Context manager for Auth Service stub.
-
-        Usage:
-            async with grpc_pool.get_auth_stub() as stub:
-                response = await stub.ValidateApiKey(request)
-        """
+        """Context manager yielding an Auth Service stub."""
         try:
             stub = self.get_stub("auth", auth_pb2_grpc.AuthServiceStub)
             yield stub
@@ -143,13 +150,7 @@ class GRPCPoolManager:
 
     @contextlib.asynccontextmanager
     async def get_ingestion_stub(self):
-        """
-        Context manager for Ingestion Service stub.
-
-        Usage:
-            async with grpc_pool.get_ingestion_stub() as stub:
-                response = await stub.IngestLog(request)
-        """
+        """Context manager yielding an Ingestion Service stub."""
         try:
             stub = self.get_stub("ingestion", ingestion_pb2_grpc.IngestionServiceStub)
             yield stub
@@ -162,13 +163,7 @@ class GRPCPoolManager:
 
     @contextlib.asynccontextmanager
     async def get_query_stub(self):
-        """
-        Context manager for Query Service stub.
-
-        Usage:
-            async with grpc_pool.get_query_stub() as stub:
-                response = await stub.GetLog(request)
-        """
+        """Context manager yielding a Query Service stub."""
         try:
             stub = self.get_stub("query", query_pb2_grpc.QueryServiceStub)
             yield stub

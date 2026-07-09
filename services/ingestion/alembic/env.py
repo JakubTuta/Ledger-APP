@@ -15,9 +15,7 @@ if config.config_file_name is not None:
 
 target_metadata = database.Base.metadata
 
-config.set_main_option(
-    "sqlalchemy.url", ingestion_service_config.settings.LOGS_DATABASE_URL
-)
+config.set_main_option("sqlalchemy.url", ingestion_service_config.settings.LOGS_DATABASE_URL)
 
 
 def run_migrations_offline() -> None:

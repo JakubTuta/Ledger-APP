@@ -63,8 +63,13 @@ async def generate_invite_code(
     except grpc.RpcError as e:
         logger.error(f"gRPC error generating invite code: {e.code()} - {e.details()}")
         if e.code() == grpc.StatusCode.PERMISSION_DENIED:
-            raise fastapi.HTTPException(status_code=fastapi.status.HTTP_403_FORBIDDEN, detail=e.details())
-        raise fastapi.HTTPException(status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to generate invite code")
+            raise fastapi.HTTPException(
+                status_code=fastapi.status.HTTP_403_FORBIDDEN, detail=e.details()
+            )
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate invite code",
+        )
 
 
 @router.post(
@@ -116,8 +121,13 @@ async def accept_invite_code(
     except grpc.RpcError as e:
         logger.error(f"gRPC error accepting invite code: {e.code()} - {e.details()}")
         if e.code() == grpc.StatusCode.INVALID_ARGUMENT:
-            raise fastapi.HTTPException(status_code=fastapi.status.HTTP_400_BAD_REQUEST, detail=e.details())
-        raise fastapi.HTTPException(status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to accept invite code")
+            raise fastapi.HTTPException(
+                status_code=fastapi.status.HTTP_400_BAD_REQUEST, detail=e.details()
+            )
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to accept invite code",
+        )
 
 
 @router.get(
@@ -177,8 +187,13 @@ async def list_project_members(
     except grpc.RpcError as e:
         logger.error(f"gRPC error listing project members: {e.code()} - {e.details()}")
         if e.code() == grpc.StatusCode.PERMISSION_DENIED:
-            raise fastapi.HTTPException(status_code=fastapi.status.HTTP_403_FORBIDDEN, detail=e.details())
-        raise fastapi.HTTPException(status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to list members")
+            raise fastapi.HTTPException(
+                status_code=fastapi.status.HTTP_403_FORBIDDEN, detail=e.details()
+            )
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to list members",
+        )
 
 
 @router.delete(
@@ -233,10 +248,17 @@ async def remove_project_member(
     except grpc.RpcError as e:
         logger.error(f"gRPC error removing project member: {e.code()} - {e.details()}")
         if e.code() == grpc.StatusCode.PERMISSION_DENIED:
-            raise fastapi.HTTPException(status_code=fastapi.status.HTTP_403_FORBIDDEN, detail=e.details())
+            raise fastapi.HTTPException(
+                status_code=fastapi.status.HTTP_403_FORBIDDEN, detail=e.details()
+            )
         if e.code() == grpc.StatusCode.INVALID_ARGUMENT:
-            raise fastapi.HTTPException(status_code=fastapi.status.HTTP_400_BAD_REQUEST, detail=e.details())
-        raise fastapi.HTTPException(status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to remove member")
+            raise fastapi.HTTPException(
+                status_code=fastapi.status.HTTP_400_BAD_REQUEST, detail=e.details()
+            )
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to remove member",
+        )
 
 
 @router.post(
@@ -286,5 +308,10 @@ async def leave_project(
     except grpc.RpcError as e:
         logger.error(f"gRPC error leaving project: {e.code()} - {e.details()}")
         if e.code() == grpc.StatusCode.INVALID_ARGUMENT:
-            raise fastapi.HTTPException(status_code=fastapi.status.HTTP_400_BAD_REQUEST, detail=e.details())
-        raise fastapi.HTTPException(status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to leave project")
+            raise fastapi.HTTPException(
+                status_code=fastapi.status.HTTP_400_BAD_REQUEST, detail=e.details()
+            )
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to leave project",
+        )

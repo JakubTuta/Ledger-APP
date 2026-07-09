@@ -7,7 +7,7 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class QueryLogsRequest(_message.Message):
-    __slots__ = ("project_id", "start_time", "end_time", "level", "log_type", "environment", "error_fingerprint", "limit", "offset", "status_class", "search")
+    __slots__ = ("project_id", "start_time", "end_time", "level", "log_type", "environment", "error_fingerprint", "limit", "offset", "status_class", "search", "cursor")
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
     START_TIME_FIELD_NUMBER: _ClassVar[int]
     END_TIME_FIELD_NUMBER: _ClassVar[int]
@@ -19,6 +19,7 @@ class QueryLogsRequest(_message.Message):
     OFFSET_FIELD_NUMBER: _ClassVar[int]
     STATUS_CLASS_FIELD_NUMBER: _ClassVar[int]
     SEARCH_FIELD_NUMBER: _ClassVar[int]
+    CURSOR_FIELD_NUMBER: _ClassVar[int]
     project_id: int
     start_time: str
     end_time: str
@@ -30,7 +31,52 @@ class QueryLogsRequest(_message.Message):
     offset: int
     status_class: _containers.RepeatedScalarFieldContainer[str]
     search: str
-    def __init__(self, project_id: _Optional[int] = ..., start_time: _Optional[str] = ..., end_time: _Optional[str] = ..., level: _Optional[str] = ..., log_type: _Optional[str] = ..., environment: _Optional[str] = ..., error_fingerprint: _Optional[str] = ..., limit: _Optional[int] = ..., offset: _Optional[int] = ..., status_class: _Optional[_Iterable[str]] = ..., search: _Optional[str] = ...) -> None: ...
+    cursor: str
+    def __init__(self, project_id: _Optional[int] = ..., start_time: _Optional[str] = ..., end_time: _Optional[str] = ..., level: _Optional[str] = ..., log_type: _Optional[str] = ..., environment: _Optional[str] = ..., error_fingerprint: _Optional[str] = ..., limit: _Optional[int] = ..., offset: _Optional[int] = ..., status_class: _Optional[_Iterable[str]] = ..., search: _Optional[str] = ..., cursor: _Optional[str] = ...) -> None: ...
+
+class GetLogFacetsRequest(_message.Message):
+    __slots__ = ("project_id", "start_time", "end_time", "level", "log_type", "environment", "error_fingerprint", "status_class", "search")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    START_TIME_FIELD_NUMBER: _ClassVar[int]
+    END_TIME_FIELD_NUMBER: _ClassVar[int]
+    LEVEL_FIELD_NUMBER: _ClassVar[int]
+    LOG_TYPE_FIELD_NUMBER: _ClassVar[int]
+    ENVIRONMENT_FIELD_NUMBER: _ClassVar[int]
+    ERROR_FINGERPRINT_FIELD_NUMBER: _ClassVar[int]
+    STATUS_CLASS_FIELD_NUMBER: _ClassVar[int]
+    SEARCH_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    start_time: str
+    end_time: str
+    level: str
+    log_type: str
+    environment: str
+    error_fingerprint: str
+    status_class: _containers.RepeatedScalarFieldContainer[str]
+    search: str
+    def __init__(self, project_id: _Optional[int] = ..., start_time: _Optional[str] = ..., end_time: _Optional[str] = ..., level: _Optional[str] = ..., log_type: _Optional[str] = ..., environment: _Optional[str] = ..., error_fingerprint: _Optional[str] = ..., status_class: _Optional[_Iterable[str]] = ..., search: _Optional[str] = ...) -> None: ...
+
+class LogFacetValue(_message.Message):
+    __slots__ = ("value", "count")
+    VALUE_FIELD_NUMBER: _ClassVar[int]
+    COUNT_FIELD_NUMBER: _ClassVar[int]
+    value: str
+    count: int
+    def __init__(self, value: _Optional[str] = ..., count: _Optional[int] = ...) -> None: ...
+
+class GetLogFacetsResponse(_message.Message):
+    __slots__ = ("project_id", "level", "log_type", "status_class", "environment")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    LEVEL_FIELD_NUMBER: _ClassVar[int]
+    LOG_TYPE_FIELD_NUMBER: _ClassVar[int]
+    STATUS_CLASS_FIELD_NUMBER: _ClassVar[int]
+    ENVIRONMENT_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    level: _containers.RepeatedCompositeFieldContainer[LogFacetValue]
+    log_type: _containers.RepeatedCompositeFieldContainer[LogFacetValue]
+    status_class: _containers.RepeatedCompositeFieldContainer[LogFacetValue]
+    environment: _containers.RepeatedCompositeFieldContainer[LogFacetValue]
+    def __init__(self, project_id: _Optional[int] = ..., level: _Optional[_Iterable[_Union[LogFacetValue, _Mapping]]] = ..., log_type: _Optional[_Iterable[_Union[LogFacetValue, _Mapping]]] = ..., status_class: _Optional[_Iterable[_Union[LogFacetValue, _Mapping]]] = ..., environment: _Optional[_Iterable[_Union[LogFacetValue, _Mapping]]] = ...) -> None: ...
 
 class SearchLogsRequest(_message.Message):
     __slots__ = ("project_id", "query", "start_time", "end_time", "limit", "offset")
@@ -107,14 +153,16 @@ class LogEntry(_message.Message):
     def __init__(self, id: _Optional[int] = ..., project_id: _Optional[int] = ..., timestamp: _Optional[str] = ..., ingested_at: _Optional[str] = ..., level: _Optional[str] = ..., log_type: _Optional[str] = ..., importance: _Optional[str] = ..., environment: _Optional[str] = ..., release: _Optional[str] = ..., message: _Optional[str] = ..., error_type: _Optional[str] = ..., error_message: _Optional[str] = ..., stack_trace: _Optional[str] = ..., attributes: _Optional[str] = ..., sdk_version: _Optional[str] = ..., platform: _Optional[str] = ..., platform_version: _Optional[str] = ..., processing_time_ms: _Optional[int] = ..., error_fingerprint: _Optional[str] = ..., method: _Optional[str] = ..., path: _Optional[str] = ..., status_code: _Optional[int] = ..., duration_ms: _Optional[int] = ...) -> None: ...
 
 class QueryLogsResponse(_message.Message):
-    __slots__ = ("logs", "total", "has_more")
+    __slots__ = ("logs", "total", "has_more", "next_cursor")
     LOGS_FIELD_NUMBER: _ClassVar[int]
     TOTAL_FIELD_NUMBER: _ClassVar[int]
     HAS_MORE_FIELD_NUMBER: _ClassVar[int]
+    NEXT_CURSOR_FIELD_NUMBER: _ClassVar[int]
     logs: _containers.RepeatedCompositeFieldContainer[LogEntry]
     total: int
     has_more: bool
-    def __init__(self, logs: _Optional[_Iterable[_Union[LogEntry, _Mapping]]] = ..., total: _Optional[int] = ..., has_more: bool = ...) -> None: ...
+    next_cursor: str
+    def __init__(self, logs: _Optional[_Iterable[_Union[LogEntry, _Mapping]]] = ..., total: _Optional[int] = ..., has_more: bool = ..., next_cursor: _Optional[str] = ...) -> None: ...
 
 class SearchLogsResponse(_message.Message):
     __slots__ = ("logs", "total", "has_more")
@@ -520,6 +568,128 @@ class GetBottleneckListResponse(_message.Message):
     has_more: bool
     def __init__(self, project_id: _Optional[int] = ..., statistic: _Optional[str] = ..., sort: _Optional[str] = ..., start_date: _Optional[str] = ..., end_date: _Optional[str] = ..., max_value: _Optional[float] = ..., entries: _Optional[_Iterable[_Union[BottleneckListEntry, _Mapping]]] = ..., total: _Optional[int] = ..., has_more: bool = ...) -> None: ...
 
+class ErrorGroupData(_message.Message):
+    __slots__ = ("id", "project_id", "fingerprint", "error_type", "error_message", "first_seen", "last_seen", "occurrence_count", "status", "assigned_to", "sample_log_id", "resolved_at", "resolved_in_release")
+    ID_FIELD_NUMBER: _ClassVar[int]
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    FINGERPRINT_FIELD_NUMBER: _ClassVar[int]
+    ERROR_TYPE_FIELD_NUMBER: _ClassVar[int]
+    ERROR_MESSAGE_FIELD_NUMBER: _ClassVar[int]
+    FIRST_SEEN_FIELD_NUMBER: _ClassVar[int]
+    LAST_SEEN_FIELD_NUMBER: _ClassVar[int]
+    OCCURRENCE_COUNT_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    ASSIGNED_TO_FIELD_NUMBER: _ClassVar[int]
+    SAMPLE_LOG_ID_FIELD_NUMBER: _ClassVar[int]
+    RESOLVED_AT_FIELD_NUMBER: _ClassVar[int]
+    RESOLVED_IN_RELEASE_FIELD_NUMBER: _ClassVar[int]
+    id: int
+    project_id: int
+    fingerprint: str
+    error_type: str
+    error_message: str
+    first_seen: str
+    last_seen: str
+    occurrence_count: int
+    status: str
+    assigned_to: int
+    sample_log_id: int
+    resolved_at: str
+    resolved_in_release: str
+    def __init__(self, id: _Optional[int] = ..., project_id: _Optional[int] = ..., fingerprint: _Optional[str] = ..., error_type: _Optional[str] = ..., error_message: _Optional[str] = ..., first_seen: _Optional[str] = ..., last_seen: _Optional[str] = ..., occurrence_count: _Optional[int] = ..., status: _Optional[str] = ..., assigned_to: _Optional[int] = ..., sample_log_id: _Optional[int] = ..., resolved_at: _Optional[str] = ..., resolved_in_release: _Optional[str] = ...) -> None: ...
+
+class ListErrorGroupsRequest(_message.Message):
+    __slots__ = ("project_id", "status", "limit", "offset")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    LIMIT_FIELD_NUMBER: _ClassVar[int]
+    OFFSET_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    status: str
+    limit: int
+    offset: int
+    def __init__(self, project_id: _Optional[int] = ..., status: _Optional[str] = ..., limit: _Optional[int] = ..., offset: _Optional[int] = ...) -> None: ...
+
+class ListErrorGroupsResponse(_message.Message):
+    __slots__ = ("project_id", "groups", "total", "has_more")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    GROUPS_FIELD_NUMBER: _ClassVar[int]
+    TOTAL_FIELD_NUMBER: _ClassVar[int]
+    HAS_MORE_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    groups: _containers.RepeatedCompositeFieldContainer[ErrorGroupData]
+    total: int
+    has_more: bool
+    def __init__(self, project_id: _Optional[int] = ..., groups: _Optional[_Iterable[_Union[ErrorGroupData, _Mapping]]] = ..., total: _Optional[int] = ..., has_more: bool = ...) -> None: ...
+
+class GetErrorGroupRequest(_message.Message):
+    __slots__ = ("project_id", "group_id")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    GROUP_ID_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    group_id: int
+    def __init__(self, project_id: _Optional[int] = ..., group_id: _Optional[int] = ...) -> None: ...
+
+class ErrorOccurrenceBucket(_message.Message):
+    __slots__ = ("bucket", "count")
+    BUCKET_FIELD_NUMBER: _ClassVar[int]
+    COUNT_FIELD_NUMBER: _ClassVar[int]
+    bucket: str
+    count: int
+    def __init__(self, bucket: _Optional[str] = ..., count: _Optional[int] = ...) -> None: ...
+
+class GetErrorGroupResponse(_message.Message):
+    __slots__ = ("group", "sample_stack_trace", "sample_log", "found", "occurrence_sparkline")
+    GROUP_FIELD_NUMBER: _ClassVar[int]
+    SAMPLE_STACK_TRACE_FIELD_NUMBER: _ClassVar[int]
+    SAMPLE_LOG_FIELD_NUMBER: _ClassVar[int]
+    FOUND_FIELD_NUMBER: _ClassVar[int]
+    OCCURRENCE_SPARKLINE_FIELD_NUMBER: _ClassVar[int]
+    group: ErrorGroupData
+    sample_stack_trace: str
+    sample_log: LogEntry
+    found: bool
+    occurrence_sparkline: _containers.RepeatedCompositeFieldContainer[ErrorOccurrenceBucket]
+    def __init__(self, group: _Optional[_Union[ErrorGroupData, _Mapping]] = ..., sample_stack_trace: _Optional[str] = ..., sample_log: _Optional[_Union[LogEntry, _Mapping]] = ..., found: bool = ..., occurrence_sparkline: _Optional[_Iterable[_Union[ErrorOccurrenceBucket, _Mapping]]] = ...) -> None: ...
+
+class UpdateErrorGroupStatusRequest(_message.Message):
+    __slots__ = ("project_id", "group_id", "status", "resolved_in_release")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    GROUP_ID_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    RESOLVED_IN_RELEASE_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    group_id: int
+    status: str
+    resolved_in_release: str
+    def __init__(self, project_id: _Optional[int] = ..., group_id: _Optional[int] = ..., status: _Optional[str] = ..., resolved_in_release: _Optional[str] = ...) -> None: ...
+
+class UpdateErrorGroupStatusResponse(_message.Message):
+    __slots__ = ("group", "found")
+    GROUP_FIELD_NUMBER: _ClassVar[int]
+    FOUND_FIELD_NUMBER: _ClassVar[int]
+    group: ErrorGroupData
+    found: bool
+    def __init__(self, group: _Optional[_Union[ErrorGroupData, _Mapping]] = ..., found: bool = ...) -> None: ...
+
+class AssignErrorGroupRequest(_message.Message):
+    __slots__ = ("project_id", "group_id", "assigned_to")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    GROUP_ID_FIELD_NUMBER: _ClassVar[int]
+    ASSIGNED_TO_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    group_id: int
+    assigned_to: int
+    def __init__(self, project_id: _Optional[int] = ..., group_id: _Optional[int] = ..., assigned_to: _Optional[int] = ...) -> None: ...
+
+class AssignErrorGroupResponse(_message.Message):
+    __slots__ = ("group", "found")
+    GROUP_FIELD_NUMBER: _ClassVar[int]
+    FOUND_FIELD_NUMBER: _ClassVar[int]
+    group: ErrorGroupData
+    found: bool
+    def __init__(self, group: _Optional[_Union[ErrorGroupData, _Mapping]] = ..., found: bool = ...) -> None: ...
+
 class GetHealthSummaryRequest(_message.Message):
     __slots__ = ("project_ids", "period")
     PROJECT_IDS_FIELD_NUMBER: _ClassVar[int]
@@ -715,3 +885,70 @@ class GetSpanLatencyResponse(_message.Message):
     project_id: int
     data: _containers.RepeatedCompositeFieldContainer[SpanLatencyBucket]
     def __init__(self, project_id: _Optional[int] = ..., data: _Optional[_Iterable[_Union[SpanLatencyBucket, _Mapping]]] = ...) -> None: ...
+
+class GetMetricSeriesRequest(_message.Message):
+    __slots__ = ("project_id",)
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    def __init__(self, project_id: _Optional[int] = ...) -> None: ...
+
+class MetricSeriesInfo(_message.Message):
+    __slots__ = ("name", "type", "tag_keys")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    TYPE_FIELD_NUMBER: _ClassVar[int]
+    TAG_KEYS_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    type: int
+    tag_keys: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, name: _Optional[str] = ..., type: _Optional[int] = ..., tag_keys: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class GetMetricSeriesResponse(_message.Message):
+    __slots__ = ("project_id", "series")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    SERIES_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    series: _containers.RepeatedCompositeFieldContainer[MetricSeriesInfo]
+    def __init__(self, project_id: _Optional[int] = ..., series: _Optional[_Iterable[_Union[MetricSeriesInfo, _Mapping]]] = ...) -> None: ...
+
+class QueryMetricsRequest(_message.Message):
+    __slots__ = ("project_id", "name", "tags", "aggregation", "from_time", "to_time")
+    class TagsEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: str
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    TAGS_FIELD_NUMBER: _ClassVar[int]
+    AGGREGATION_FIELD_NUMBER: _ClassVar[int]
+    FROM_TIME_FIELD_NUMBER: _ClassVar[int]
+    TO_TIME_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    name: str
+    tags: _containers.ScalarMap[str, str]
+    aggregation: str
+    from_time: str
+    to_time: str
+    def __init__(self, project_id: _Optional[int] = ..., name: _Optional[str] = ..., tags: _Optional[_Mapping[str, str]] = ..., aggregation: _Optional[str] = ..., from_time: _Optional[str] = ..., to_time: _Optional[str] = ...) -> None: ...
+
+class MetricDataPoint(_message.Message):
+    __slots__ = ("bucket", "value")
+    BUCKET_FIELD_NUMBER: _ClassVar[int]
+    VALUE_FIELD_NUMBER: _ClassVar[int]
+    bucket: str
+    value: float
+    def __init__(self, bucket: _Optional[str] = ..., value: _Optional[float] = ...) -> None: ...
+
+class QueryMetricsResponse(_message.Message):
+    __slots__ = ("project_id", "name", "aggregation", "data")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    AGGREGATION_FIELD_NUMBER: _ClassVar[int]
+    DATA_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    name: str
+    aggregation: str
+    data: _containers.RepeatedCompositeFieldContainer[MetricDataPoint]
+    def __init__(self, project_id: _Optional[int] = ..., name: _Optional[str] = ..., aggregation: _Optional[str] = ..., data: _Optional[_Iterable[_Union[MetricDataPoint, _Mapping]]] = ...) -> None: ...

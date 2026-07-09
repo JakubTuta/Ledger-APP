@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 
 import sqlalchemy as sa
 
@@ -33,9 +33,10 @@ async def get_trace(project_id: int, trace_id: str) -> dict | None:
             (s for s in spans if not s["parent_span_id"]),
             spans[0],
         )
-        total_duration_ms = max(
-            (s["duration_ns"] for s in spans if s["duration_ns"] is not None), default=0
-        ) // 1_000_000
+        total_duration_ms = (
+            max((s["duration_ns"] for s in spans if s["duration_ns"] is not None), default=0)
+            // 1_000_000
+        )
 
         return {
             "trace_id": trace_id,
@@ -184,7 +185,9 @@ def _row_to_span_dict(row) -> dict:
         "service_name": row.service_name or "",
         "name": row.name or "",
         "kind": row.kind or 0,
-        "start_time": start_time.isoformat() if hasattr(start_time, "isoformat") else str(start_time),
+        "start_time": start_time.isoformat()
+        if hasattr(start_time, "isoformat")
+        else str(start_time),
         "duration_ns": row.duration_ns or 0,
         "status_code": row.status_code or 0,
         "status_message": row.status_message or "",

@@ -17,9 +17,7 @@ async def rollup_log_volume_1h() -> None:
 
     try:
         async with database.get_logs_session() as session:
-            last_bucket = await rollup_state.get_last_bucket(
-                session, _JOB_NAME, _DEFAULT_LOOKBACK
-            )
+            last_bucket = await rollup_state.get_last_bucket(session, _JOB_NAME, _DEFAULT_LOOKBACK)
 
             upsert = sa.text(
                 """
@@ -44,9 +42,7 @@ async def rollup_log_volume_1h() -> None:
             )
             max_bucket_row = max_result.fetchone()
             if max_bucket_row and max_bucket_row[0] is not None:
-                await rollup_state.set_last_bucket(
-                    session, _JOB_NAME, max_bucket_row[0]
-                )
+                await rollup_state.set_last_bucket(session, _JOB_NAME, max_bucket_row[0])
 
             await session.commit()
 

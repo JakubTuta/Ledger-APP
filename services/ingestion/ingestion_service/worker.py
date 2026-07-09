@@ -1,5 +1,7 @@
 import asyncio
 import datetime
+import hashlib
+import json
 import logging
 import signal
 import sys
@@ -11,16 +13,259 @@ import msgpack
 import ingestion_service.config as config
 import ingestion_service.database as database
 import ingestion_service.models as models
+import ingestion_service.notifications as notifications
 import ingestion_service.services.partition_manager as partition_manager
 import ingestion_service.services.partition_scheduler as partition_scheduler
 import ingestion_service.services.rabbitmq_client as rabbitmq_client
-from sqlalchemy import insert
+import ingestion_service.services.redis_client as redis_client
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=getattr(logging, config.settings.LOG_LEVEL),
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+_LOG_COPY_COLUMNS = [
+    "project_id",
+    "timestamp",
+    "ingested_at",
+    "level",
+    "log_type",
+    "importance",
+    "environment",
+    "release",
+    "message",
+    "error_type",
+    "error_message",
+    "stack_trace",
+    "attributes",
+    "method",
+    "path",
+    "status_code",
+    "duration_ms",
+    "sdk_version",
+    "platform",
+    "platform_version",
+    "error_fingerprint",
+    "log_id",
+]
+
+_LOGS_STAGING_DDL = """
+    CREATE TEMP TABLE IF NOT EXISTS logs_staging (
+        project_id BIGINT,
+        timestamp TIMESTAMPTZ,
+        ingested_at TIMESTAMPTZ,
+        level VARCHAR(20),
+        log_type VARCHAR(30),
+        importance VARCHAR(20),
+        environment VARCHAR(20),
+        release VARCHAR(100),
+        message TEXT,
+        error_type VARCHAR(255),
+        error_message TEXT,
+        stack_trace TEXT,
+        attributes JSONB,
+        method VARCHAR(8),
+        path VARCHAR(2048),
+        status_code SMALLINT,
+        duration_ms INTEGER,
+        sdk_version VARCHAR(20),
+        platform VARCHAR(50),
+        platform_version VARCHAR(50),
+        error_fingerprint CHAR(64),
+        log_id VARCHAR(64)
+    ) ON COMMIT DROP
+"""
+
+_LOGS_COPY_COLUMNS_SQL = ", ".join(_LOG_COPY_COLUMNS)
+
+_SPAN_COPY_COLUMNS = [
+    "span_id",
+    "trace_id",
+    "parent_span_id",
+    "project_id",
+    "service_name",
+    "name",
+    "kind",
+    "start_time",
+    "duration_ns",
+    "status_code",
+    "status_message",
+    "attributes",
+    "events",
+    "error_fingerprint",
+]
+
+_SPANS_STAGING_DDL = """
+    CREATE TEMP TABLE IF NOT EXISTS spans_staging (
+        span_id           CHAR(16),
+        trace_id          CHAR(32),
+        parent_span_id    CHAR(16),
+        project_id        BIGINT,
+        service_name      TEXT,
+        name              TEXT,
+        kind              SMALLINT,
+        start_time        TIMESTAMPTZ,
+        duration_ns       BIGINT,
+        status_code       SMALLINT,
+        status_message    TEXT,
+        attributes        JSONB,
+        events            JSONB,
+        error_fingerprint CHAR(64)
+    ) ON COMMIT DROP
+"""
+
+_SPANS_COPY_COLUMNS_SQL = ", ".join(_SPAN_COPY_COLUMNS)
+
+_METRIC_POINT_COPY_COLUMNS = [
+    "project_id",
+    "name",
+    "type",
+    "ts",
+    "value",
+    "count",
+    "sum",
+    "bucket_counts",
+    "explicit_bounds",
+    "tags",
+    "tags_hash",
+    "service_name",
+]
+
+_METRIC_POINTS_STAGING_DDL = """
+    CREATE TEMP TABLE IF NOT EXISTS metric_points_staging (
+        project_id      BIGINT,
+        name            TEXT,
+        type            SMALLINT,
+        ts              TIMESTAMPTZ,
+        value           DOUBLE PRECISION,
+        count           BIGINT,
+        sum             DOUBLE PRECISION,
+        bucket_counts   JSONB,
+        explicit_bounds JSONB,
+        tags            JSONB,
+        tags_hash       CHAR(16),
+        service_name    TEXT
+    ) ON COMMIT DROP
+"""
+
+_METRIC_POINTS_COPY_COLUMNS_SQL = ", ".join(_METRIC_POINT_COPY_COLUMNS)
+
+
+def _encode_jsonb(value: object) -> bytes:
+    text = value if isinstance(value, str) else json.dumps(value)
+    return b"\x01" + text.encode("utf-8")
+
+
+def _decode_jsonb(data: bytes) -> object:
+    return json.loads(data[1:].decode("utf-8"))
+
+
+def _fallback_log_id(record: dict) -> str:
+    attributes = record.get("attributes") or {}
+    source = (
+        f"{record['project_id']}:{record['timestamp'].isoformat()}:"
+        f"{record.get('message') or ''}:"
+        f"{attributes.get('trace_id') or ''}:{attributes.get('span_id') or ''}"
+    )
+    return hashlib.sha256(source.encode()).hexdigest()
+
+
+async def _copy_log_records(session, log_records: list[dict]) -> None:
+    conn = await session.connection()
+    raw_conn = await conn.get_raw_connection()
+    asyncpg_conn = raw_conn.driver_connection
+
+    await asyncpg_conn.set_type_codec(
+        "jsonb",
+        encoder=_encode_jsonb,
+        decoder=_decode_jsonb,
+        schema="pg_catalog",
+        format="binary",
+    )
+
+    rows = [tuple(record[column] for column in _LOG_COPY_COLUMNS) for record in log_records]
+
+    # A single explicit transaction is required here: each raw statement on this
+    # connection auto-commits on its own otherwise, which would trigger the staging
+    # table's ON COMMIT DROP right after CREATE, before TRUNCATE/COPY/INSERT can run.
+    async with asyncpg_conn.transaction():
+        await asyncpg_conn.execute(_LOGS_STAGING_DDL)
+        await asyncpg_conn.execute("TRUNCATE logs_staging")
+        await asyncpg_conn.copy_records_to_table(
+            "logs_staging", records=rows, columns=_LOG_COPY_COLUMNS
+        )
+        await asyncpg_conn.execute(
+            f"INSERT INTO logs ({_LOGS_COPY_COLUMNS_SQL}) "
+            f"SELECT {_LOGS_COPY_COLUMNS_SQL} FROM logs_staging "
+            f"ON CONFLICT (project_id, log_id, timestamp) WHERE log_id IS NOT NULL DO NOTHING"
+        )
+
+
+async def _copy_span_records(session, span_records: list[dict]) -> None:
+    conn = await session.connection()
+    raw_conn = await conn.get_raw_connection()
+    asyncpg_conn = raw_conn.driver_connection
+
+    await asyncpg_conn.set_type_codec(
+        "jsonb",
+        encoder=_encode_jsonb,
+        decoder=_decode_jsonb,
+        schema="pg_catalog",
+        format="binary",
+    )
+
+    rows = [tuple(record[column] for column in _SPAN_COPY_COLUMNS) for record in span_records]
+
+    # Same explicit-transaction requirement as _copy_log_records: without it each
+    # raw statement auto-commits on its own, which fires the staging table's
+    # ON COMMIT DROP before TRUNCATE/COPY/INSERT get a chance to run.
+    async with asyncpg_conn.transaction():
+        await asyncpg_conn.execute(_SPANS_STAGING_DDL)
+        await asyncpg_conn.execute("TRUNCATE spans_staging")
+        await asyncpg_conn.copy_records_to_table(
+            "spans_staging", records=rows, columns=_SPAN_COPY_COLUMNS
+        )
+        await asyncpg_conn.execute(
+            f"INSERT INTO spans ({_SPANS_COPY_COLUMNS_SQL}) "
+            f"SELECT {_SPANS_COPY_COLUMNS_SQL} FROM spans_staging "
+            f"ON CONFLICT (span_id, start_time) DO NOTHING"
+        )
+
+
+async def _copy_metric_points(session, metric_point_records: list[dict]) -> None:
+    conn = await session.connection()
+    raw_conn = await conn.get_raw_connection()
+    asyncpg_conn = raw_conn.driver_connection
+
+    await asyncpg_conn.set_type_codec(
+        "jsonb",
+        encoder=_encode_jsonb,
+        decoder=_decode_jsonb,
+        schema="pg_catalog",
+        format="binary",
+    )
+
+    rows = [
+        tuple(record[column] for column in _METRIC_POINT_COPY_COLUMNS)
+        for record in metric_point_records
+    ]
+
+    # Same explicit-transaction requirement as _copy_log_records/_copy_span_records:
+    # without it each raw statement auto-commits on its own, which fires the
+    # staging table's ON COMMIT DROP before TRUNCATE/COPY/INSERT get a chance to run.
+    async with asyncpg_conn.transaction():
+        await asyncpg_conn.execute(_METRIC_POINTS_STAGING_DDL)
+        await asyncpg_conn.execute("TRUNCATE metric_points_staging")
+        await asyncpg_conn.copy_records_to_table(
+            "metric_points_staging", records=rows, columns=_METRIC_POINT_COPY_COLUMNS
+        )
+        await asyncpg_conn.execute(
+            f"INSERT INTO metric_points ({_METRIC_POINTS_COPY_COLUMNS_SQL}) "
+            f"SELECT {_METRIC_POINTS_COPY_COLUMNS_SQL} FROM metric_points_staging "
+            f"ON CONFLICT (project_id, name, tags_hash, ts) DO NOTHING"
+        )
 
 
 class StorageWorker:
@@ -29,6 +274,9 @@ class StorageWorker:
         self.running = False
         self.processed_count = 0
         self.failed_count = 0
+        self.tail_publisher = notifications.TailPublisher(
+            redis_client.get_redis_client(), enabled=config.settings.NOTIFICATIONS_ENABLED
+        )
 
     @staticmethod
     def _build_log_record(log_data: dict) -> tuple[dict, datetime.date]:
@@ -79,6 +327,7 @@ class StorageWorker:
             "status_code": status_code,
             "duration_ms": duration_ms,
         }
+        record["log_id"] = log_data.get("log_id") or _fallback_log_id(record)
         return record, timestamp.date()
 
     async def process_logs_batch(self, logs: list[dict]) -> None:
@@ -119,11 +368,9 @@ class StorageWorker:
 
         async with database.get_session() as session:
             for partition_date in required_partitions:
-                await partition_manager.ensure_partition_for_date(
-                    session, "logs", partition_date
-                )
+                await partition_manager.ensure_partition_for_date(session, "logs", partition_date)
 
-            await session.execute(insert(models.Log).values(log_records))
+            await _copy_log_records(session, log_records)
 
             if error_groups:
                 await self._upsert_error_groups_batch(session, list(error_groups.values()))
@@ -131,7 +378,20 @@ class StorageWorker:
             await session.commit()
             self.processed_count += len(logs)
 
+        await self._publish_tail(log_records)
+
+    async def _publish_tail(self, log_records: list[dict]) -> None:
+        by_project: dict[int, list[dict]] = {}
+        for record in log_records:
+            by_project.setdefault(record["project_id"], []).append(record)
+        for project_id, records in by_project.items():
+            await self.tail_publisher.publish_tail_batch(project_id, records)
+
     async def _upsert_error_groups_batch(self, session, groups: list[dict]) -> None:
+        # Sort by conflict key so concurrent workers acquire row locks in the same
+        # order; otherwise multi-row upserts touching the same fingerprints from
+        # different batches can lock-order deadlock against each other.
+        groups = sorted(groups, key=lambda g: (g["project_id"], g["fingerprint"]))
         stmt = pg_insert(models.ErrorGroup).values(groups)
         stmt = stmt.on_conflict_do_update(
             index_elements=["project_id", "fingerprint"],
@@ -145,31 +405,243 @@ class StorageWorker:
         )
         await session.execute(stmt)
 
+    @staticmethod
+    def _build_span_record(span_data: dict) -> tuple[dict, datetime.date]:
+        start_time = datetime.datetime.fromisoformat(span_data["start_time"])
+
+        record = {
+            "span_id": span_data["span_id"],
+            "trace_id": span_data["trace_id"],
+            "parent_span_id": span_data.get("parent_span_id"),
+            "project_id": span_data["project_id"],
+            "service_name": span_data.get("service_name"),
+            "name": span_data.get("name"),
+            "kind": span_data.get("kind", 0),
+            "start_time": start_time,
+            "duration_ns": span_data.get("duration_ns", 0),
+            "status_code": span_data.get("status_code", 0),
+            "status_message": span_data.get("status_message"),
+            "attributes": span_data.get("attributes") or {},
+            "events": span_data.get("events"),
+            "error_fingerprint": span_data.get("error_fingerprint"),
+        }
+        return record, start_time.date()
+
+    async def process_spans_batch(self, spans: list[dict]) -> None:
+        if not spans:
+            return
+
+        span_records: list[dict] = []
+        required_partitions: set[datetime.date] = set()
+
+        for span_data in spans:
+            record, partition_date = self._build_span_record(span_data)
+            span_records.append(record)
+            required_partitions.add(partition_date)
+
+        async with database.get_session() as session:
+            for partition_date in required_partitions:
+                await partition_manager.ensure_partition_for_date(session, "spans", partition_date)
+
+            await _copy_span_records(session, span_records)
+
+            await session.commit()
+            self.processed_count += len(spans)
+
+    @staticmethod
+    def _build_metric_point_record(point_data: dict) -> tuple[dict, datetime.date]:
+        ts = datetime.datetime.fromisoformat(point_data["ts"])
+
+        record = {
+            "project_id": point_data["project_id"],
+            "name": point_data["name"],
+            "type": point_data.get("type", 0),
+            "ts": ts,
+            "value": point_data.get("value"),
+            "count": point_data.get("count"),
+            "sum": point_data.get("sum"),
+            "bucket_counts": point_data.get("bucket_counts"),
+            "explicit_bounds": point_data.get("explicit_bounds"),
+            "tags": point_data.get("tags") or {},
+            "tags_hash": point_data["tags_hash"],
+            "service_name": point_data.get("service_name"),
+        }
+        return record, ts.date()
+
+    async def process_metric_points_batch(self, points: list[dict]) -> None:
+        if not points:
+            return
+
+        point_records: list[dict] = []
+        required_partitions: set[datetime.date] = set()
+
+        for point_data in points:
+            record, partition_date = self._build_metric_point_record(point_data)
+            point_records.append(record)
+            required_partitions.add(partition_date)
+
+        async with database.get_session() as session:
+            for partition_date in required_partitions:
+                await partition_manager.ensure_partition_for_date(
+                    session, "metric_points", partition_date
+                )
+
+            await _copy_metric_points(session, point_records)
+
+            await session.commit()
+            self.processed_count += len(points)
+
+    @staticmethod
+    def _decode_message(message: aio_pika.abc.AbstractIncomingMessage) -> list[dict]:
+        payload = msgpack.unpackb(message.body, raw=False)
+        if not isinstance(payload, dict) or "logs" not in payload:
+            raise ValueError(
+                f"Malformed log envelope: expected dict with 'logs' key, got {type(payload)}"
+            )
+        project_id = payload.get("project_id")
+        logs = payload["logs"]
+        if project_id is not None:
+            for log in logs:
+                log.setdefault("project_id", project_id)
+        return logs
+
+    @staticmethod
+    def _decode_spans_message(message: aio_pika.abc.AbstractIncomingMessage) -> list[dict]:
+        payload = msgpack.unpackb(message.body, raw=False)
+        if not isinstance(payload, dict) or "spans" not in payload:
+            raise ValueError(
+                f"Malformed span envelope: expected dict with 'spans' key, got {type(payload)}"
+            )
+        project_id = payload.get("project_id")
+        spans = payload["spans"]
+        if project_id is not None:
+            for span in spans:
+                span.setdefault("project_id", project_id)
+        return spans
+
+    @staticmethod
+    def _decode_metrics_message(message: aio_pika.abc.AbstractIncomingMessage) -> list[dict]:
+        payload = msgpack.unpackb(message.body, raw=False)
+        if not isinstance(payload, dict) or "points" not in payload:
+            raise ValueError(
+                f"Malformed metric envelope: expected dict with 'points' key, got {type(payload)}"
+            )
+        project_id = payload.get("project_id")
+        points = payload["points"]
+        if project_id is not None:
+            for point in points:
+                point.setdefault("project_id", project_id)
+        return points
+
     async def _flush_batch(
         self,
         messages: list[aio_pika.abc.AbstractIncomingMessage],
-        payloads: list[dict],
+        message_logs: list[list[dict]],
     ) -> None:
+        payloads = [log for logs in message_logs for log in logs]
         try:
             await self.process_logs_batch(payloads)
             await messages[-1].ack(multiple=True)
             logger.debug(
-                f"Worker {self.worker_id}: ACKed batch of {len(messages)} messages"
+                f"Worker {self.worker_id}: ACKed batch of {len(messages)} messages "
+                f"({len(payloads)} logs)"
             )
         except Exception as e:
             logger.error(
-                f"Worker {self.worker_id}: Batch of {len(messages)} failed, falling back to per-message: {e}",
+                f"Worker {self.worker_id}: Batch of {len(messages)} messages failed, "
+                f"falling back to per-message: {e}",
             )
-            for message, payload in zip(messages, payloads):
+            for message, logs in zip(messages, message_logs):
                 try:
-                    await self.process_logs_batch([payload])
+                    await self.process_logs_batch(logs)
                     await message.ack()
                 except Exception as per_msg_err:
-                    logger.error(
-                        f"Worker {self.worker_id}: Single message failed, sending to DLQ: {per_msg_err}",
+                    logger.warning(
+                        f"Worker {self.worker_id}: Message failed, retrying once: {per_msg_err}",
                     )
-                    self.failed_count += 1
-                    await message.nack(requeue=False)
+                    try:
+                        await self.process_logs_batch(logs)
+                        await message.ack()
+                    except Exception as retry_err:
+                        logger.error(
+                            f"Worker {self.worker_id}: Message failed after retry, dropping: {retry_err}",
+                        )
+                        self.failed_count += len(logs)
+                        await message.nack(requeue=False)
+
+    async def _flush_spans_batch(
+        self,
+        messages: list[aio_pika.abc.AbstractIncomingMessage],
+        message_spans: list[list[dict]],
+    ) -> None:
+        payloads = [span for spans in message_spans for span in spans]
+        try:
+            await self.process_spans_batch(payloads)
+            await messages[-1].ack(multiple=True)
+            logger.debug(
+                f"Worker {self.worker_id}: ACKed batch of {len(messages)} messages "
+                f"({len(payloads)} spans)"
+            )
+        except Exception as e:
+            logger.error(
+                f"Worker {self.worker_id}: Span batch of {len(messages)} messages failed, "
+                f"falling back to per-message: {e}",
+            )
+            for message, spans in zip(messages, message_spans):
+                try:
+                    await self.process_spans_batch(spans)
+                    await message.ack()
+                except Exception as per_msg_err:
+                    logger.warning(
+                        f"Worker {self.worker_id}: Span message failed, retrying once: {per_msg_err}",
+                    )
+                    try:
+                        await self.process_spans_batch(spans)
+                        await message.ack()
+                    except Exception as retry_err:
+                        logger.error(
+                            f"Worker {self.worker_id}: Span message failed after retry, dropping: {retry_err}",
+                        )
+                        self.failed_count += len(spans)
+                        await message.nack(requeue=False)
+
+    async def _flush_metrics_batch(
+        self,
+        messages: list[aio_pika.abc.AbstractIncomingMessage],
+        message_points: list[list[dict]],
+    ) -> None:
+        payloads = [point for points in message_points for point in points]
+        try:
+            await self.process_metric_points_batch(payloads)
+            await messages[-1].ack(multiple=True)
+            logger.debug(
+                f"Worker {self.worker_id}: ACKed batch of {len(messages)} messages "
+                f"({len(payloads)} metric points)"
+            )
+        except Exception as e:
+            logger.error(
+                f"Worker {self.worker_id}: Metric points batch of {len(messages)} "
+                f"messages failed, falling back to per-message: {e}",
+            )
+            for message, points in zip(messages, message_points):
+                try:
+                    await self.process_metric_points_batch(points)
+                    await message.ack()
+                except Exception as per_msg_err:
+                    logger.warning(
+                        f"Worker {self.worker_id}: Metric points message failed, "
+                        f"retrying once: {per_msg_err}",
+                    )
+                    try:
+                        await self.process_metric_points_batch(points)
+                        await message.ack()
+                    except Exception as retry_err:
+                        logger.error(
+                            f"Worker {self.worker_id}: Metric points message failed after "
+                            f"retry, dropping: {retry_err}",
+                        )
+                        self.failed_count += len(points)
+                        await message.nack(requeue=False)
 
     async def run(self) -> None:
         self.running = True
@@ -183,9 +655,7 @@ class StorageWorker:
             passive=True,
         )
 
-        message_buffer: asyncio.Queue[aio_pika.abc.AbstractIncomingMessage] = (
-            asyncio.Queue()
-        )
+        message_buffer: asyncio.Queue[aio_pika.abc.AbstractIncomingMessage] = asyncio.Queue()
 
         async def on_message(
             message: aio_pika.abc.AbstractIncomingMessage,
@@ -198,7 +668,8 @@ class StorageWorker:
         try:
             while self.running:
                 batch_messages: list[aio_pika.abc.AbstractIncomingMessage] = []
-                batch_payloads: list[dict] = []
+                batch_message_logs: list[list[dict]] = []
+                batch_log_count = 0
 
                 try:
                     first_message = await asyncio.wait_for(
@@ -209,30 +680,182 @@ class StorageWorker:
                     continue
 
                 try:
-                    payload = msgpack.unpackb(first_message.body, raw=False)
+                    logs = self._decode_message(first_message)
                     batch_messages.append(first_message)
-                    batch_payloads.append(payload)
+                    batch_message_logs.append(logs)
+                    batch_log_count += len(logs)
                 except Exception as e:
                     logger.error(f"Worker {self.worker_id}: Failed to decode message: {e}")
                     await first_message.nack(requeue=False)
                     continue
 
-                while len(batch_messages) < config.settings.QUEUE_BATCH_SIZE:
+                while batch_log_count < config.settings.QUEUE_BATCH_SIZE:
                     try:
                         message = message_buffer.get_nowait()
                     except asyncio.QueueEmpty:
                         break
 
                     try:
-                        payload = msgpack.unpackb(message.body, raw=False)
+                        logs = self._decode_message(message)
                         batch_messages.append(message)
-                        batch_payloads.append(payload)
+                        batch_message_logs.append(logs)
+                        batch_log_count += len(logs)
                     except Exception as e:
                         logger.error(f"Worker {self.worker_id}: Failed to decode message: {e}")
                         await message.nack(requeue=False)
 
                 if batch_messages:
-                    await self._flush_batch(batch_messages, batch_payloads)
+                    await self._flush_batch(batch_messages, batch_message_logs)
+
+        finally:
+            await queue.cancel(consumer_tag)
+            await channel.close()
+
+    async def run_spans(self) -> None:
+        # Mirrors run() exactly, but against the dedicated spans queue/decoder/
+        # flush path. Kept as a parallel method (rather than parameterizing run())
+        # so the two message types stay independently readable and debuggable.
+        self.running = True
+
+        connection = await rabbitmq_client.get_connection()
+        channel = await connection.channel()
+        await channel.set_qos(prefetch_count=config.settings.RABBITMQ_PREFETCH_COUNT)
+
+        queue = await channel.declare_queue(
+            config.settings.RABBITMQ_SPANS_QUEUE,
+            passive=True,
+        )
+
+        message_buffer: asyncio.Queue[aio_pika.abc.AbstractIncomingMessage] = asyncio.Queue()
+
+        async def on_message(
+            message: aio_pika.abc.AbstractIncomingMessage,
+        ) -> None:
+            await message_buffer.put(message)
+
+        consumer_tag = await queue.consume(on_message)
+        logger.info(
+            f"Worker {self.worker_id}: consuming from {config.settings.RABBITMQ_SPANS_QUEUE}"
+        )
+
+        try:
+            while self.running:
+                batch_messages: list[aio_pika.abc.AbstractIncomingMessage] = []
+                batch_message_spans: list[list[dict]] = []
+                batch_span_count = 0
+
+                try:
+                    first_message = await asyncio.wait_for(
+                        message_buffer.get(),
+                        timeout=config.settings.BATCH_FLUSH_INTERVAL,
+                    )
+                except asyncio.TimeoutError:
+                    continue
+
+                try:
+                    spans = self._decode_spans_message(first_message)
+                    batch_messages.append(first_message)
+                    batch_message_spans.append(spans)
+                    batch_span_count += len(spans)
+                except Exception as e:
+                    logger.error(f"Worker {self.worker_id}: Failed to decode span message: {e}")
+                    await first_message.nack(requeue=False)
+                    continue
+
+                while batch_span_count < config.settings.QUEUE_BATCH_SIZE:
+                    try:
+                        message = message_buffer.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
+
+                    try:
+                        spans = self._decode_spans_message(message)
+                        batch_messages.append(message)
+                        batch_message_spans.append(spans)
+                        batch_span_count += len(spans)
+                    except Exception as e:
+                        logger.error(f"Worker {self.worker_id}: Failed to decode span message: {e}")
+                        await message.nack(requeue=False)
+
+                if batch_messages:
+                    await self._flush_spans_batch(batch_messages, batch_message_spans)
+
+        finally:
+            await queue.cancel(consumer_tag)
+            await channel.close()
+
+    async def run_metrics(self) -> None:
+        # Mirrors run_spans() exactly, but against the dedicated metrics queue/
+        # decoder/flush path. Kept as a parallel method so the three message
+        # types stay independently readable, debuggable, and scalable.
+        self.running = True
+
+        connection = await rabbitmq_client.get_connection()
+        channel = await connection.channel()
+        await channel.set_qos(prefetch_count=config.settings.RABBITMQ_PREFETCH_COUNT)
+
+        queue = await channel.declare_queue(
+            config.settings.RABBITMQ_METRICS_QUEUE,
+            passive=True,
+        )
+
+        message_buffer: asyncio.Queue[aio_pika.abc.AbstractIncomingMessage] = asyncio.Queue()
+
+        async def on_message(
+            message: aio_pika.abc.AbstractIncomingMessage,
+        ) -> None:
+            await message_buffer.put(message)
+
+        consumer_tag = await queue.consume(on_message)
+        logger.info(
+            f"Worker {self.worker_id}: consuming from {config.settings.RABBITMQ_METRICS_QUEUE}"
+        )
+
+        try:
+            while self.running:
+                batch_messages: list[aio_pika.abc.AbstractIncomingMessage] = []
+                batch_message_points: list[list[dict]] = []
+                batch_point_count = 0
+
+                try:
+                    first_message = await asyncio.wait_for(
+                        message_buffer.get(),
+                        timeout=config.settings.BATCH_FLUSH_INTERVAL,
+                    )
+                except asyncio.TimeoutError:
+                    continue
+
+                try:
+                    points = self._decode_metrics_message(first_message)
+                    batch_messages.append(first_message)
+                    batch_message_points.append(points)
+                    batch_point_count += len(points)
+                except Exception as e:
+                    logger.error(
+                        f"Worker {self.worker_id}: Failed to decode metric point message: {e}"
+                    )
+                    await first_message.nack(requeue=False)
+                    continue
+
+                while batch_point_count < config.settings.QUEUE_BATCH_SIZE:
+                    try:
+                        message = message_buffer.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
+
+                    try:
+                        points = self._decode_metrics_message(message)
+                        batch_messages.append(message)
+                        batch_message_points.append(points)
+                        batch_point_count += len(points)
+                    except Exception as e:
+                        logger.error(
+                            f"Worker {self.worker_id}: Failed to decode metric point message: {e}"
+                        )
+                        await message.nack(requeue=False)
+
+                if batch_messages:
+                    await self._flush_metrics_batch(batch_messages, batch_message_points)
 
         finally:
             await queue.cancel(consumer_tag)
@@ -243,8 +866,9 @@ class StorageWorker:
 
 
 class WorkerManager:
-    def __init__(self, worker_count: int):
+    def __init__(self, worker_count: int, run_method: str = "run"):
         self.worker_count = worker_count
+        self.run_method = run_method
         self.workers: list[StorageWorker] = []
         self.tasks: list[asyncio.Task] = []
 
@@ -253,7 +877,7 @@ class WorkerManager:
             worker = StorageWorker(worker_id=i)
             self.workers.append(worker)
 
-            task = asyncio.create_task(worker.run())
+            task = asyncio.create_task(getattr(worker, self.run_method)())
             self.tasks.append(task)
 
     async def stop(self) -> None:
@@ -285,19 +909,41 @@ async def main():
     await rabbitmq_client.setup_topology()
 
     manager = WorkerManager(worker_count=config.settings.WORKER_COUNT)
+    # Spans and metric points each get their own small dedicated worker pool
+    # (WORKER_SPANS_COUNT / WORKER_METRICS_COUNT, default 2) rather than folding
+    # extra consume loops into each log worker instance: it keeps WorkerManager
+    # reusable as-is and lets the three traffic classes scale and fail
+    # independently (a stuck/slow consumer on one queue can't starve the others).
+    spans_manager = WorkerManager(
+        worker_count=config.settings.WORKER_SPANS_COUNT, run_method="run_spans"
+    )
+    metrics_manager = WorkerManager(
+        worker_count=config.settings.WORKER_METRICS_COUNT, run_method="run_metrics"
+    )
 
     loop = asyncio.get_event_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, lambda: asyncio.ensure_future(shutdown(manager)))
+        loop.add_signal_handler(
+            sig,
+            lambda: asyncio.ensure_future(shutdown(manager, spans_manager, metrics_manager)),
+        )
 
     await manager.start()
+    await spans_manager.start()
+    await metrics_manager.start()
 
     while True:
         await asyncio.sleep(1)
 
 
-async def shutdown(manager: WorkerManager):
+async def shutdown(
+    manager: WorkerManager,
+    spans_manager: WorkerManager,
+    metrics_manager: WorkerManager,
+):
     await manager.stop()
+    await spans_manager.stop()
+    await metrics_manager.stop()
 
     if config.settings.ENABLE_PARTITION_SCHEDULER:
         scheduler = partition_scheduler.get_partition_scheduler()

@@ -8,11 +8,17 @@ grpcio==1.75.1
 grpcio-tools==1.75.1
 protobuf==6.33.0
 
+# OpenTelemetry (OTLP ingestion, proto definitions only)
+opentelemetry-proto==1.39.0
+
 # Redis Client
 redis[hiredis]==6.4.0
 
 # HTTP Client (for health checks, external APIs)
 httpx==0.28.1
+
+# Outbound email (verification emails)
+aiosmtplib==3.0.2
 
 # Configuration & Validation
 pydantic==2.12.3
@@ -20,8 +26,6 @@ pydantic-settings==2.11.0
 python-dotenv==1.1.1
 
 # Security
-python-jose[cryptography]==3.5.0
-passlib[bcrypt]==1.7.4
 pyjwt[crypto]==2.10.1
 
 # Testing

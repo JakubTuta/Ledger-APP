@@ -74,6 +74,51 @@ class AuthServiceStub(object):
                 request_serializer=auth__pb2.UpdateNotificationPreferencesRequest.SerializeToString,
                 response_deserializer=auth__pb2.UpdateNotificationPreferencesResponse.FromString,
                 _registered_method=True)
+        self.VerifyEmail = channel.unary_unary(
+                '/auth.AuthService/VerifyEmail',
+                request_serializer=auth__pb2.VerifyEmailRequest.SerializeToString,
+                response_deserializer=auth__pb2.VerifyEmailResponse.FromString,
+                _registered_method=True)
+        self.ResendVerificationEmail = channel.unary_unary(
+                '/auth.AuthService/ResendVerificationEmail',
+                request_serializer=auth__pb2.ResendVerificationEmailRequest.SerializeToString,
+                response_deserializer=auth__pb2.ResendVerificationEmailResponse.FromString,
+                _registered_method=True)
+        self.Setup2FA = channel.unary_unary(
+                '/auth.AuthService/Setup2FA',
+                request_serializer=auth__pb2.Setup2FARequest.SerializeToString,
+                response_deserializer=auth__pb2.Setup2FAResponse.FromString,
+                _registered_method=True)
+        self.Verify2FASetup = channel.unary_unary(
+                '/auth.AuthService/Verify2FASetup',
+                request_serializer=auth__pb2.Verify2FASetupRequest.SerializeToString,
+                response_deserializer=auth__pb2.Verify2FASetupResponse.FromString,
+                _registered_method=True)
+        self.Disable2FA = channel.unary_unary(
+                '/auth.AuthService/Disable2FA',
+                request_serializer=auth__pb2.Disable2FARequest.SerializeToString,
+                response_deserializer=auth__pb2.Disable2FAResponse.FromString,
+                _registered_method=True)
+        self.VerifyTOTPLogin = channel.unary_unary(
+                '/auth.AuthService/VerifyTOTPLogin',
+                request_serializer=auth__pb2.VerifyTOTPLoginRequest.SerializeToString,
+                response_deserializer=auth__pb2.VerifyTOTPLoginResponse.FromString,
+                _registered_method=True)
+        self.ListSessions = channel.unary_unary(
+                '/auth.AuthService/ListSessions',
+                request_serializer=auth__pb2.ListSessionsRequest.SerializeToString,
+                response_deserializer=auth__pb2.ListSessionsResponse.FromString,
+                _registered_method=True)
+        self.RevokeSession = channel.unary_unary(
+                '/auth.AuthService/RevokeSession',
+                request_serializer=auth__pb2.RevokeSessionRequest.SerializeToString,
+                response_deserializer=auth__pb2.RevokeSessionResponse.FromString,
+                _registered_method=True)
+        self.RevokeAllSessions = channel.unary_unary(
+                '/auth.AuthService/RevokeAllSessions',
+                request_serializer=auth__pb2.RevokeAllSessionsRequest.SerializeToString,
+                response_deserializer=auth__pb2.RevokeAllSessionsResponse.FromString,
+                _registered_method=True)
         self.CreateProject = channel.unary_unary(
                 '/auth.AuthService/CreateProject',
                 request_serializer=auth__pb2.CreateProjectRequest.SerializeToString,
@@ -88,6 +133,11 @@ class AuthServiceStub(object):
                 '/auth.AuthService/GetProjectById',
                 request_serializer=auth__pb2.GetProjectByIdRequest.SerializeToString,
                 response_deserializer=auth__pb2.GetProjectByIdResponse.FromString,
+                _registered_method=True)
+        self.UpdateProject = channel.unary_unary(
+                '/auth.AuthService/UpdateProject',
+                request_serializer=auth__pb2.UpdateProjectRequest.SerializeToString,
+                response_deserializer=auth__pb2.UpdateProjectResponse.FromString,
                 _registered_method=True)
         self.GenerateInviteCode = channel.unary_unary(
                 '/auth.AuthService/GenerateInviteCode',
@@ -259,6 +309,16 @@ class AuthServiceStub(object):
                 request_serializer=auth__pb2.ListAlertEventsRequest.SerializeToString,
                 response_deserializer=auth__pb2.ListAlertEventsResponse.FromString,
                 _registered_method=True)
+        self.AckAlertEvent = channel.unary_unary(
+                '/auth.AuthService/AckAlertEvent',
+                request_serializer=auth__pb2.AckAlertEventRequest.SerializeToString,
+                response_deserializer=auth__pb2.AckAlertEventResponse.FromString,
+                _registered_method=True)
+        self.SnoozeAlertEvent = channel.unary_unary(
+                '/auth.AuthService/SnoozeAlertEvent',
+                request_serializer=auth__pb2.SnoozeAlertEventRequest.SerializeToString,
+                response_deserializer=auth__pb2.SnoozeAlertEventResponse.FromString,
+                _registered_method=True)
         self.GetAlertNotificationPreferences = channel.unary_unary(
                 '/auth.AuthService/GetAlertNotificationPreferences',
                 request_serializer=auth__pb2.GetAlertNotificationPreferencesRequest.SerializeToString,
@@ -268,6 +328,51 @@ class AuthServiceStub(object):
                 '/auth.AuthService/UpsertAlertNotificationPreference',
                 request_serializer=auth__pb2.UpsertAlertNotificationPreferenceRequest.SerializeToString,
                 response_deserializer=auth__pb2.UpsertAlertNotificationPreferenceResponse.FromString,
+                _registered_method=True)
+        self.CreateMonitor = channel.unary_unary(
+                '/auth.AuthService/CreateMonitor',
+                request_serializer=auth__pb2.CreateMonitorRequest.SerializeToString,
+                response_deserializer=auth__pb2.CreateMonitorResponse.FromString,
+                _registered_method=True)
+        self.ListMonitors = channel.unary_unary(
+                '/auth.AuthService/ListMonitors',
+                request_serializer=auth__pb2.ListMonitorsRequest.SerializeToString,
+                response_deserializer=auth__pb2.ListMonitorsResponse.FromString,
+                _registered_method=True)
+        self.UpdateMonitor = channel.unary_unary(
+                '/auth.AuthService/UpdateMonitor',
+                request_serializer=auth__pb2.UpdateMonitorRequest.SerializeToString,
+                response_deserializer=auth__pb2.UpdateMonitorResponse.FromString,
+                _registered_method=True)
+        self.DeleteMonitor = channel.unary_unary(
+                '/auth.AuthService/DeleteMonitor',
+                request_serializer=auth__pb2.DeleteMonitorRequest.SerializeToString,
+                response_deserializer=auth__pb2.DeleteMonitorResponse.FromString,
+                _registered_method=True)
+        self.GetMonitorByToken = channel.unary_unary(
+                '/auth.AuthService/GetMonitorByToken',
+                request_serializer=auth__pb2.GetMonitorByTokenRequest.SerializeToString,
+                response_deserializer=auth__pb2.GetMonitorByTokenResponse.FromString,
+                _registered_method=True)
+        self.RecordHeartbeatPing = channel.unary_unary(
+                '/auth.AuthService/RecordHeartbeatPing',
+                request_serializer=auth__pb2.RecordHeartbeatPingRequest.SerializeToString,
+                response_deserializer=auth__pb2.RecordHeartbeatPingResponse.FromString,
+                _registered_method=True)
+        self.ListMaintenanceWindows = channel.unary_unary(
+                '/auth.AuthService/ListMaintenanceWindows',
+                request_serializer=auth__pb2.ListMaintenanceWindowsRequest.SerializeToString,
+                response_deserializer=auth__pb2.ListMaintenanceWindowsResponse.FromString,
+                _registered_method=True)
+        self.CreateMaintenanceWindow = channel.unary_unary(
+                '/auth.AuthService/CreateMaintenanceWindow',
+                request_serializer=auth__pb2.CreateMaintenanceWindowRequest.SerializeToString,
+                response_deserializer=auth__pb2.CreateMaintenanceWindowResponse.FromString,
+                _registered_method=True)
+        self.DeleteMaintenanceWindow = channel.unary_unary(
+                '/auth.AuthService/DeleteMaintenanceWindow',
+                request_serializer=auth__pb2.DeleteMaintenanceWindowRequest.SerializeToString,
+                response_deserializer=auth__pb2.DeleteMaintenanceWindowResponse.FromString,
                 _registered_method=True)
 
 
@@ -323,6 +428,63 @@ class AuthServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def VerifyEmail(self, request, context):
+        """Email verification
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ResendVerificationEmail(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Setup2FA(self, request, context):
+        """TOTP two-factor authentication
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Verify2FASetup(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Disable2FA(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def VerifyTOTPLogin(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListSessions(self, request, context):
+        """Session management (refresh token sessions)
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RevokeSession(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RevokeAllSessions(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def CreateProject(self, request, context):
         """Project operations
         """
@@ -337,6 +499,12 @@ class AuthServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def GetProjectById(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def UpdateProject(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -555,6 +723,18 @@ class AuthServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def AckAlertEvent(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SnoozeAlertEvent(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def GetAlertNotificationPreferences(self, request, context):
         """Notification preferences (alert-specific)
         """
@@ -563,6 +743,62 @@ class AuthServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def UpsertAlertNotificationPreference(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CreateMonitor(self, request, context):
+        """Monitor operations (uptime / heartbeat)
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListMonitors(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def UpdateMonitor(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeleteMonitor(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetMonitorByToken(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RecordHeartbeatPing(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListMaintenanceWindows(self, request, context):
+        """Maintenance window operations
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CreateMaintenanceWindow(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeleteMaintenanceWindow(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -611,6 +847,51 @@ def add_AuthServiceServicer_to_server(servicer, server):
                     request_deserializer=auth__pb2.UpdateNotificationPreferencesRequest.FromString,
                     response_serializer=auth__pb2.UpdateNotificationPreferencesResponse.SerializeToString,
             ),
+            'VerifyEmail': grpc.unary_unary_rpc_method_handler(
+                    servicer.VerifyEmail,
+                    request_deserializer=auth__pb2.VerifyEmailRequest.FromString,
+                    response_serializer=auth__pb2.VerifyEmailResponse.SerializeToString,
+            ),
+            'ResendVerificationEmail': grpc.unary_unary_rpc_method_handler(
+                    servicer.ResendVerificationEmail,
+                    request_deserializer=auth__pb2.ResendVerificationEmailRequest.FromString,
+                    response_serializer=auth__pb2.ResendVerificationEmailResponse.SerializeToString,
+            ),
+            'Setup2FA': grpc.unary_unary_rpc_method_handler(
+                    servicer.Setup2FA,
+                    request_deserializer=auth__pb2.Setup2FARequest.FromString,
+                    response_serializer=auth__pb2.Setup2FAResponse.SerializeToString,
+            ),
+            'Verify2FASetup': grpc.unary_unary_rpc_method_handler(
+                    servicer.Verify2FASetup,
+                    request_deserializer=auth__pb2.Verify2FASetupRequest.FromString,
+                    response_serializer=auth__pb2.Verify2FASetupResponse.SerializeToString,
+            ),
+            'Disable2FA': grpc.unary_unary_rpc_method_handler(
+                    servicer.Disable2FA,
+                    request_deserializer=auth__pb2.Disable2FARequest.FromString,
+                    response_serializer=auth__pb2.Disable2FAResponse.SerializeToString,
+            ),
+            'VerifyTOTPLogin': grpc.unary_unary_rpc_method_handler(
+                    servicer.VerifyTOTPLogin,
+                    request_deserializer=auth__pb2.VerifyTOTPLoginRequest.FromString,
+                    response_serializer=auth__pb2.VerifyTOTPLoginResponse.SerializeToString,
+            ),
+            'ListSessions': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListSessions,
+                    request_deserializer=auth__pb2.ListSessionsRequest.FromString,
+                    response_serializer=auth__pb2.ListSessionsResponse.SerializeToString,
+            ),
+            'RevokeSession': grpc.unary_unary_rpc_method_handler(
+                    servicer.RevokeSession,
+                    request_deserializer=auth__pb2.RevokeSessionRequest.FromString,
+                    response_serializer=auth__pb2.RevokeSessionResponse.SerializeToString,
+            ),
+            'RevokeAllSessions': grpc.unary_unary_rpc_method_handler(
+                    servicer.RevokeAllSessions,
+                    request_deserializer=auth__pb2.RevokeAllSessionsRequest.FromString,
+                    response_serializer=auth__pb2.RevokeAllSessionsResponse.SerializeToString,
+            ),
             'CreateProject': grpc.unary_unary_rpc_method_handler(
                     servicer.CreateProject,
                     request_deserializer=auth__pb2.CreateProjectRequest.FromString,
@@ -625,6 +906,11 @@ def add_AuthServiceServicer_to_server(servicer, server):
                     servicer.GetProjectById,
                     request_deserializer=auth__pb2.GetProjectByIdRequest.FromString,
                     response_serializer=auth__pb2.GetProjectByIdResponse.SerializeToString,
+            ),
+            'UpdateProject': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateProject,
+                    request_deserializer=auth__pb2.UpdateProjectRequest.FromString,
+                    response_serializer=auth__pb2.UpdateProjectResponse.SerializeToString,
             ),
             'GenerateInviteCode': grpc.unary_unary_rpc_method_handler(
                     servicer.GenerateInviteCode,
@@ -796,6 +1082,16 @@ def add_AuthServiceServicer_to_server(servicer, server):
                     request_deserializer=auth__pb2.ListAlertEventsRequest.FromString,
                     response_serializer=auth__pb2.ListAlertEventsResponse.SerializeToString,
             ),
+            'AckAlertEvent': grpc.unary_unary_rpc_method_handler(
+                    servicer.AckAlertEvent,
+                    request_deserializer=auth__pb2.AckAlertEventRequest.FromString,
+                    response_serializer=auth__pb2.AckAlertEventResponse.SerializeToString,
+            ),
+            'SnoozeAlertEvent': grpc.unary_unary_rpc_method_handler(
+                    servicer.SnoozeAlertEvent,
+                    request_deserializer=auth__pb2.SnoozeAlertEventRequest.FromString,
+                    response_serializer=auth__pb2.SnoozeAlertEventResponse.SerializeToString,
+            ),
             'GetAlertNotificationPreferences': grpc.unary_unary_rpc_method_handler(
                     servicer.GetAlertNotificationPreferences,
                     request_deserializer=auth__pb2.GetAlertNotificationPreferencesRequest.FromString,
@@ -805,6 +1101,51 @@ def add_AuthServiceServicer_to_server(servicer, server):
                     servicer.UpsertAlertNotificationPreference,
                     request_deserializer=auth__pb2.UpsertAlertNotificationPreferenceRequest.FromString,
                     response_serializer=auth__pb2.UpsertAlertNotificationPreferenceResponse.SerializeToString,
+            ),
+            'CreateMonitor': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateMonitor,
+                    request_deserializer=auth__pb2.CreateMonitorRequest.FromString,
+                    response_serializer=auth__pb2.CreateMonitorResponse.SerializeToString,
+            ),
+            'ListMonitors': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListMonitors,
+                    request_deserializer=auth__pb2.ListMonitorsRequest.FromString,
+                    response_serializer=auth__pb2.ListMonitorsResponse.SerializeToString,
+            ),
+            'UpdateMonitor': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateMonitor,
+                    request_deserializer=auth__pb2.UpdateMonitorRequest.FromString,
+                    response_serializer=auth__pb2.UpdateMonitorResponse.SerializeToString,
+            ),
+            'DeleteMonitor': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteMonitor,
+                    request_deserializer=auth__pb2.DeleteMonitorRequest.FromString,
+                    response_serializer=auth__pb2.DeleteMonitorResponse.SerializeToString,
+            ),
+            'GetMonitorByToken': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetMonitorByToken,
+                    request_deserializer=auth__pb2.GetMonitorByTokenRequest.FromString,
+                    response_serializer=auth__pb2.GetMonitorByTokenResponse.SerializeToString,
+            ),
+            'RecordHeartbeatPing': grpc.unary_unary_rpc_method_handler(
+                    servicer.RecordHeartbeatPing,
+                    request_deserializer=auth__pb2.RecordHeartbeatPingRequest.FromString,
+                    response_serializer=auth__pb2.RecordHeartbeatPingResponse.SerializeToString,
+            ),
+            'ListMaintenanceWindows': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListMaintenanceWindows,
+                    request_deserializer=auth__pb2.ListMaintenanceWindowsRequest.FromString,
+                    response_serializer=auth__pb2.ListMaintenanceWindowsResponse.SerializeToString,
+            ),
+            'CreateMaintenanceWindow': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateMaintenanceWindow,
+                    request_deserializer=auth__pb2.CreateMaintenanceWindowRequest.FromString,
+                    response_serializer=auth__pb2.CreateMaintenanceWindowResponse.SerializeToString,
+            ),
+            'DeleteMaintenanceWindow': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteMaintenanceWindow,
+                    request_deserializer=auth__pb2.DeleteMaintenanceWindowRequest.FromString,
+                    response_serializer=auth__pb2.DeleteMaintenanceWindowResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -1034,6 +1375,249 @@ class AuthService(object):
             _registered_method=True)
 
     @staticmethod
+    def VerifyEmail(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/VerifyEmail',
+            auth__pb2.VerifyEmailRequest.SerializeToString,
+            auth__pb2.VerifyEmailResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ResendVerificationEmail(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/ResendVerificationEmail',
+            auth__pb2.ResendVerificationEmailRequest.SerializeToString,
+            auth__pb2.ResendVerificationEmailResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Setup2FA(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/Setup2FA',
+            auth__pb2.Setup2FARequest.SerializeToString,
+            auth__pb2.Setup2FAResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Verify2FASetup(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/Verify2FASetup',
+            auth__pb2.Verify2FASetupRequest.SerializeToString,
+            auth__pb2.Verify2FASetupResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Disable2FA(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/Disable2FA',
+            auth__pb2.Disable2FARequest.SerializeToString,
+            auth__pb2.Disable2FAResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def VerifyTOTPLogin(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/VerifyTOTPLogin',
+            auth__pb2.VerifyTOTPLoginRequest.SerializeToString,
+            auth__pb2.VerifyTOTPLoginResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListSessions(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/ListSessions',
+            auth__pb2.ListSessionsRequest.SerializeToString,
+            auth__pb2.ListSessionsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RevokeSession(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/RevokeSession',
+            auth__pb2.RevokeSessionRequest.SerializeToString,
+            auth__pb2.RevokeSessionResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RevokeAllSessions(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/RevokeAllSessions',
+            auth__pb2.RevokeAllSessionsRequest.SerializeToString,
+            auth__pb2.RevokeAllSessionsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
     def CreateProject(request,
             target,
             options=(),
@@ -1104,6 +1688,33 @@ class AuthService(object):
             '/auth.AuthService/GetProjectById',
             auth__pb2.GetProjectByIdRequest.SerializeToString,
             auth__pb2.GetProjectByIdResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UpdateProject(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/UpdateProject',
+            auth__pb2.UpdateProjectRequest.SerializeToString,
+            auth__pb2.UpdateProjectResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -2033,6 +2644,60 @@ class AuthService(object):
             _registered_method=True)
 
     @staticmethod
+    def AckAlertEvent(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/AckAlertEvent',
+            auth__pb2.AckAlertEventRequest.SerializeToString,
+            auth__pb2.AckAlertEventResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SnoozeAlertEvent(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/SnoozeAlertEvent',
+            auth__pb2.SnoozeAlertEventRequest.SerializeToString,
+            auth__pb2.SnoozeAlertEventResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
     def GetAlertNotificationPreferences(request,
             target,
             options=(),
@@ -2076,6 +2741,249 @@ class AuthService(object):
             '/auth.AuthService/UpsertAlertNotificationPreference',
             auth__pb2.UpsertAlertNotificationPreferenceRequest.SerializeToString,
             auth__pb2.UpsertAlertNotificationPreferenceResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CreateMonitor(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/CreateMonitor',
+            auth__pb2.CreateMonitorRequest.SerializeToString,
+            auth__pb2.CreateMonitorResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListMonitors(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/ListMonitors',
+            auth__pb2.ListMonitorsRequest.SerializeToString,
+            auth__pb2.ListMonitorsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UpdateMonitor(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/UpdateMonitor',
+            auth__pb2.UpdateMonitorRequest.SerializeToString,
+            auth__pb2.UpdateMonitorResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteMonitor(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/DeleteMonitor',
+            auth__pb2.DeleteMonitorRequest.SerializeToString,
+            auth__pb2.DeleteMonitorResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetMonitorByToken(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/GetMonitorByToken',
+            auth__pb2.GetMonitorByTokenRequest.SerializeToString,
+            auth__pb2.GetMonitorByTokenResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RecordHeartbeatPing(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/RecordHeartbeatPing',
+            auth__pb2.RecordHeartbeatPingRequest.SerializeToString,
+            auth__pb2.RecordHeartbeatPingResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListMaintenanceWindows(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/ListMaintenanceWindows',
+            auth__pb2.ListMaintenanceWindowsRequest.SerializeToString,
+            auth__pb2.ListMaintenanceWindowsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CreateMaintenanceWindow(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/CreateMaintenanceWindow',
+            auth__pb2.CreateMaintenanceWindowRequest.SerializeToString,
+            auth__pb2.CreateMaintenanceWindowResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteMaintenanceWindow(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/auth.AuthService/DeleteMaintenanceWindow',
+            auth__pb2.DeleteMaintenanceWindowRequest.SerializeToString,
+            auth__pb2.DeleteMaintenanceWindowResponse.FromString,
             options,
             channel_credentials,
             insecure,

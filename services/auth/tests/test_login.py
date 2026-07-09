@@ -15,9 +15,7 @@ class TestLoginEndpoint(BaseGrpcTest):
         )
         register_response = await self.stub.Register(register_request)
 
-        login_request = auth_pb2.LoginRequest(
-            email="login@example.com", password="mypassword123"
-        )
+        login_request = auth_pb2.LoginRequest(email="login@example.com", password="mypassword123")
         login_response = await self.stub.Login(login_request)
 
         assert login_response.account_id == register_response.account_id
@@ -33,16 +31,14 @@ class TestLoginEndpoint(BaseGrpcTest):
             )
         )
 
-        login_request = auth_pb2.LoginRequest(
-            email="test@example.com", password="wrong_password"
-        )
+        login_request = auth_pb2.LoginRequest(email="test@example.com", password="wrong_password")
 
         try:
             await self.stub.Login(login_request)
             assert False, "Should have raised error"
         except Exception as e:
             assert "invalid" in str(e).lower()
-            print(f"✅ Correctly rejected wrong password")
+            print("✅ Correctly rejected wrong password")
 
     async def test_login_nonexistent_user(self):
         """Test login with non-existent email fails."""
@@ -55,7 +51,7 @@ class TestLoginEndpoint(BaseGrpcTest):
             assert False, "Should have raised error"
         except Exception as e:
             assert "invalid" in str(e).lower()
-            print(f"✅ Correctly rejected non-existent user")
+            print("✅ Correctly rejected non-existent user")
 
 
 @pytest.mark.asyncio
@@ -75,9 +71,7 @@ class TestLoginEdgeCases(BaseGrpcTest):
     async def test_login_empty_password(self):
         """Test login with empty password."""
         await self.stub.Register(
-            auth_pb2.RegisterRequest(
-                email="user@example.com", password="realpassword", plan="free"
-            )
+            auth_pb2.RegisterRequest(email="user@example.com", password="realpassword", plan="free")
         )
 
         login_request = auth_pb2.LoginRequest(email="user@example.com", password="")
@@ -175,9 +169,7 @@ class TestLoginSecurity(BaseGrpcTest):
         start = time.time()
         try:
             await self.stub.Login(
-                auth_pb2.LoginRequest(
-                    email="nonexistent@example.com", password="password123"
-                )
+                auth_pb2.LoginRequest(email="nonexistent@example.com", password="password123")
             )
         except:
             pass
@@ -186,9 +178,7 @@ class TestLoginSecurity(BaseGrpcTest):
         start = time.time()
         try:
             await self.stub.Login(
-                auth_pb2.LoginRequest(
-                    email="timing@example.com", password="wrongpassword"
-                )
+                auth_pb2.LoginRequest(email="timing@example.com", password="wrongpassword")
             )
         except:
             pass
@@ -214,9 +204,7 @@ class TestLoginSecurity(BaseGrpcTest):
         for i in range(10):
             try:
                 await self.stub.Login(
-                    auth_pb2.LoginRequest(
-                        email="brute@example.com", password=f"wrong{i}"
-                    )
+                    auth_pb2.LoginRequest(email="brute@example.com", password=f"wrong{i}")
                 )
             except:
                 failures += 1
@@ -237,9 +225,7 @@ class TestLoginSecurity(BaseGrpcTest):
 
         for injection in sql_injections:
             try:
-                await self.stub.Login(
-                    auth_pb2.LoginRequest(email=injection, password="password")
-                )
+                await self.stub.Login(auth_pb2.LoginRequest(email=injection, password="password"))
                 print(f"⚠️  SQL injection not blocked: {injection}")
             except Exception:
                 print(f"✅ SQL injection blocked: {injection}")
@@ -275,9 +261,7 @@ class TestLoginConcurrency(BaseGrpcTest):
         )
 
         async def login():
-            request = auth_pb2.LoginRequest(
-                email="concurrent@example.com", password="password123"
-            )
+            request = auth_pb2.LoginRequest(email="concurrent@example.com", password="password123")
             return await self.stub.Login(request)
 
         tasks = [login() for _ in range(5)]
@@ -339,9 +323,7 @@ class TestLoginConcurrency(BaseGrpcTest):
 
         assert len(successes) == 3
         assert len(failures) == 3
-        print(
-            f"✅ Mixed concurrent logins: {len(successes)} success, {len(failures)} failures"
-        )
+        print(f"✅ Mixed concurrent logins: {len(successes)} success, {len(failures)} failures")
 
 
 @pytest.mark.asyncio
@@ -351,9 +333,7 @@ class TestLoginWithDifferentPlans(BaseGrpcTest):
     async def test_login_free_plan(self):
         """Test login with free plan account."""
         account = await self.stub.Register(
-            auth_pb2.RegisterRequest(
-                email="free@example.com", password="password123", plan="free"
-            )
+            auth_pb2.RegisterRequest(email="free@example.com", password="password123", plan="free")
         )
 
         response = await self.stub.Login(
@@ -366,9 +346,7 @@ class TestLoginWithDifferentPlans(BaseGrpcTest):
     async def test_login_pro_plan(self):
         """Test login with pro plan account."""
         account = await self.stub.Register(
-            auth_pb2.RegisterRequest(
-                email="pro@example.com", password="password123", plan="pro"
-            )
+            auth_pb2.RegisterRequest(email="pro@example.com", password="password123", plan="pro")
         )
 
         response = await self.stub.Login(
@@ -389,9 +367,7 @@ class TestLoginWithDifferentPlans(BaseGrpcTest):
         )
 
         response = await self.stub.Login(
-            auth_pb2.LoginRequest(
-                email="enterprise@example.com", password="password123"
-            )
+            auth_pb2.LoginRequest(email="enterprise@example.com", password="password123")
         )
 
         assert response.plan == "enterprise"
@@ -405,9 +381,7 @@ class TestLoginPasswordVariations(BaseGrpcTest):
     async def test_login_numeric_password(self):
         """Test login with numeric-only password."""
         await self.stub.Register(
-            auth_pb2.RegisterRequest(
-                email="numeric@example.com", password="123456789", plan="free"
-            )
+            auth_pb2.RegisterRequest(email="numeric@example.com", password="123456789", plan="free")
         )
 
         response = await self.stub.Login(
@@ -428,9 +402,7 @@ class TestLoginPasswordVariations(BaseGrpcTest):
         )
 
         response = await self.stub.Login(
-            auth_pb2.LoginRequest(
-                email="unicode@example.com", password=unicode_password
-            )
+            auth_pb2.LoginRequest(email="unicode@example.com", password=unicode_password)
         )
 
         assert response.account_id > 0
@@ -447,9 +419,7 @@ class TestLoginPasswordVariations(BaseGrpcTest):
         )
 
         response = await self.stub.Login(
-            auth_pb2.LoginRequest(
-                email="spaces@example.com", password=password_with_spaces
-            )
+            auth_pb2.LoginRequest(email="spaces@example.com", password=password_with_spaces)
         )
 
         assert response.account_id > 0
@@ -467,9 +437,7 @@ class TestLoginPasswordVariations(BaseGrpcTest):
             )
 
             response = await self.stub.Login(
-                auth_pb2.LoginRequest(
-                    email="emoji@example.com", password=emoji_password
-                )
+                auth_pb2.LoginRequest(email="emoji@example.com", password=emoji_password)
             )
 
             assert response.account_id > 0
@@ -491,9 +459,7 @@ class TestLoginDataConsistency(BaseGrpcTest):
         )
 
         login_response = await self.stub.Login(
-            auth_pb2.LoginRequest(
-                email="consistency@example.com", password="password123"
-            )
+            auth_pb2.LoginRequest(email="consistency@example.com", password="password123")
         )
 
         assert login_response.account_id == register_response.account_id
@@ -512,9 +478,7 @@ class TestLoginDataConsistency(BaseGrpcTest):
         responses = []
         for i in range(5):
             response = await self.stub.Login(
-                auth_pb2.LoginRequest(
-                    email="multilogin@example.com", password="password123"
-                )
+                auth_pb2.LoginRequest(email="multilogin@example.com", password="password123")
             )
             responses.append(response)
 

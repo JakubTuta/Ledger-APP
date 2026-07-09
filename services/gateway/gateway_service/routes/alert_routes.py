@@ -7,6 +7,7 @@ import gateway_service.proto.auth_pb2_grpc as auth_pb2_grpc
 import grpc
 import httpx
 from gateway_service import dependencies
+from gateway_service.services import net_guard
 from pydantic import BaseModel, Field
 
 router = fastapi.APIRouter(tags=["Alerts"])
@@ -18,9 +19,6 @@ def _require_account(request: fastapi.Request) -> int:
     if not account_id:
         raise fastapi.HTTPException(status_code=401, detail="Authentication required")
     return account_id
-
-
-# ==================== Schemas ====================
 
 
 class ConnectorResponse(BaseModel):
@@ -59,6 +57,8 @@ class AlertRuleResponse(BaseModel):
     last_fired_at: str | None
     created_at: str
     updated_at: str
+    escalation_after_minutes: int | None = None
+    escalate_connector_id: int | None = None
 
 
 class CreateAlertRuleRequest(BaseModel):
@@ -70,6 +70,8 @@ class CreateAlertRuleRequest(BaseModel):
     unit: str = Field(default="count")
     severity: int = Field(default=1, ge=0, le=2)
     connector_ids: list[int] = Field(default_factory=list)
+    escalation_after_minutes: int | None = Field(default=None, ge=1, le=1440)
+    escalate_connector_id: int | None = None
 
 
 class UpdateAlertRuleRequest(BaseModel):
@@ -81,6 +83,9 @@ class UpdateAlertRuleRequest(BaseModel):
     comparator: str | None = None
     metric: str | None = None
     connector_ids: list[int] | None = None
+    escalation_after_minutes: int | None = Field(default=None, ge=1, le=1440)
+    escalate_connector_id: int | None = None
+    clear_escalate_connector_id: bool = False
 
 
 class AlertEventResponse(BaseModel):
@@ -96,14 +101,18 @@ class AlertEventResponse(BaseModel):
     severity: int
     connectors_sent: str
     fired_at: str
+    acked_by: int | None = None
+    acked_at: str | None = None
+    snoozed_until: str | None = None
+
+
+class SnoozeAlertEventRequest(BaseModel):
+    minutes: int = Field(gt=0, le=7 * 24 * 60)
 
 
 class AlertEventListResponse(BaseModel):
     events: list[AlertEventResponse]
     has_more: bool
-
-
-# ==================== Converters ====================
 
 
 def _proto_connector_to_response(c) -> ConnectorResponse:
@@ -133,6 +142,12 @@ def _proto_rule_to_response(r) -> AlertRuleResponse:
         last_fired_at=r.last_fired_at if r.HasField("last_fired_at") else None,
         created_at=r.created_at,
         updated_at=r.updated_at,
+        escalation_after_minutes=(
+            r.escalation_after_minutes if r.HasField("escalation_after_minutes") else None
+        ),
+        escalate_connector_id=(
+            r.escalate_connector_id if r.HasField("escalate_connector_id") else None
+        ),
     )
 
 
@@ -150,6 +165,9 @@ def _proto_event_to_response(e) -> AlertEventResponse:
         severity=e.severity,
         connectors_sent=e.connectors_sent,
         fired_at=e.fired_at,
+        acked_by=e.acked_by if e.HasField("acked_by") else None,
+        acked_at=e.acked_at if e.HasField("acked_at") else None,
+        snoozed_until=e.snoozed_until if e.HasField("snoozed_until") else None,
     )
 
 
@@ -157,9 +175,6 @@ def _stub(request: fastapi.Request) -> auth_pb2_grpc.AuthServiceStub:
     grpc_pool = request.app.state.grpc_pool
     channel = grpc_pool.get_channel("auth")
     return auth_pb2_grpc.AuthServiceStub(channel)
-
-
-# ==================== Connector Endpoints ====================
 
 
 @router.get(
@@ -214,9 +229,7 @@ async def update_connector(
     request: fastapi.Request,
 ) -> ConnectorResponse:
     account_id = _require_account(request)
-    proto_req = auth_pb2.UpdateConnectorRequest(
-        connector_id=connector_id, account_id=account_id
-    )
+    proto_req = auth_pb2.UpdateConnectorRequest(connector_id=connector_id, account_id=account_id)
     if payload.name is not None:
         proto_req.name = payload.name
     if payload.enabled is not None:
@@ -235,15 +248,11 @@ async def update_connector(
     status_code=204,
     summary="Delete connector",
 )
-async def delete_connector(
-    connector_id: int, request: fastapi.Request
-) -> None:
+async def delete_connector(connector_id: int, request: fastapi.Request) -> None:
     account_id = _require_account(request)
     try:
         await _stub(request).DeleteConnector(
-            auth_pb2.DeleteConnectorRequest(
-                connector_id=connector_id, account_id=account_id
-            ),
+            auth_pb2.DeleteConnectorRequest(connector_id=connector_id, account_id=account_id),
             timeout=5.0,
         )
     except grpc.RpcError as e:
@@ -255,15 +264,11 @@ async def delete_connector(
     status_code=204,
     summary="Send a test notification through a connector",
 )
-async def test_connector(
-    connector_id: int, request: fastapi.Request
-) -> None:
+async def test_connector(connector_id: int, request: fastapi.Request) -> None:
     account_id = _require_account(request)
     try:
         ch_response = await _stub(request).GetConnector(
-            auth_pb2.GetConnectorRequest(
-                connector_id=connector_id, account_id=account_id
-            ),
+            auth_pb2.GetConnectorRequest(connector_id=connector_id, account_id=account_id),
             timeout=5.0,
         )
     except grpc.RpcError as e:
@@ -302,17 +307,7 @@ async def test_connector(
             raise fastapi.HTTPException(
                 status_code=400, detail="Webhook connector has no URL configured"
             )
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as http:
-                await http.post(
-                    url,
-                    json=test_payload,
-                    headers={"Content-Type": "application/json"},
-                )
-        except httpx.RequestError as e:
-            raise fastapi.HTTPException(
-                status_code=502, detail=f"Webhook delivery failed: {str(e)}"
-            )
+        await _guarded_post(url, json=test_payload, headers={"Content-Type": "application/json"})
 
     elif c.kind == "email":
         logger.info(
@@ -320,8 +315,109 @@ async def test_connector(
             f"(account {account_id}): {test_payload}"
         )
 
+    elif c.kind == "slack":
+        url = config_dict.get("url")
+        if not url:
+            raise fastapi.HTTPException(
+                status_code=400, detail="Slack connector has no URL configured"
+            )
+        await _guarded_post(url, json={"text": "Ledger test notification: this connector works."})
 
-# ==================== Alert Rule Endpoints ====================
+    elif c.kind == "discord":
+        url = config_dict.get("url")
+        if not url:
+            raise fastapi.HTTPException(
+                status_code=400, detail="Discord connector has no URL configured"
+            )
+        await _guarded_post(
+            url, json={"content": "Ledger test notification: this connector works."}
+        )
+
+    elif c.kind == "pagerduty":
+        integration_key = config_dict.get("integration_key")
+        if not isinstance(integration_key, str) or not integration_key:
+            raise fastapi.HTTPException(
+                status_code=400,
+                detail="PagerDuty connector has no integration_key configured",
+            )
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as http:
+                response = await http.post(
+                    "https://events.pagerduty.com/v2/enqueue",
+                    json={
+                        "routing_key": integration_key,
+                        "event_action": "trigger",
+                        "dedup_key": f"ledger-test-connector-{connector_id}",
+                        "payload": {
+                            "summary": "Ledger test notification: this connector works.",
+                            "severity": "warning",
+                            "source": "ledger",
+                        },
+                    },
+                )
+                if response.status_code >= 400:
+                    raise fastapi.HTTPException(
+                        status_code=502,
+                        detail=f"PagerDuty returned HTTP {response.status_code}",
+                    )
+        except httpx.RequestError as e:
+            raise fastapi.HTTPException(
+                status_code=502, detail=f"PagerDuty delivery failed: {str(e)}"
+            )
+
+    elif c.kind == "opsgenie":
+        api_key = config_dict.get("api_key")
+        if not isinstance(api_key, str) or not api_key:
+            raise fastapi.HTTPException(
+                status_code=400, detail="Opsgenie connector has no api_key configured"
+            )
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as http:
+                response = await http.post(
+                    "https://api.opsgenie.com/v2/alerts",
+                    json={
+                        "message": "Ledger test notification: this connector works.",
+                        "alias": f"ledger-test-connector-{connector_id}",
+                        "priority": "P3",
+                    },
+                    headers={"Authorization": f"GenieKey {api_key}"},
+                )
+                if response.status_code >= 400:
+                    raise fastapi.HTTPException(
+                        status_code=502,
+                        detail=f"Opsgenie returned HTTP {response.status_code}",
+                    )
+        except httpx.RequestError as e:
+            raise fastapi.HTTPException(
+                status_code=502, detail=f"Opsgenie delivery failed: {str(e)}"
+            )
+
+    else:
+        raise fastapi.HTTPException(
+            status_code=400, detail=f"Unsupported connector kind '{c.kind}' for test-fire"
+        )
+
+
+async def _guarded_post(url: str, **kwargs) -> None:
+    """POST to a user-supplied connector URL, after an SSRF check.
+
+    Used for webhook/slack/discord test-fire delivery. PagerDuty/Opsgenie
+    hit fixed vendor hosts and don't go through this helper.
+    """
+    try:
+        await net_guard.validate_webhook_url(url)
+    except net_guard.UnsafeWebhookURLError as e:
+        raise fastapi.HTTPException(status_code=400, detail=f"Unsafe URL: {str(e)}")
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as http:
+            response = await http.post(url, **kwargs)
+            if response.status_code >= 400:
+                raise fastapi.HTTPException(
+                    status_code=502, detail=f"Delivery returned HTTP {response.status_code}"
+                )
+    except httpx.RequestError as e:
+        raise fastapi.HTTPException(status_code=502, detail=f"Delivery failed: {str(e)}")
 
 
 @router.get(
@@ -377,20 +473,22 @@ async def create_alert_rule(
     request: fastapi.Request,
 ) -> AlertRuleResponse:
     _require_account(request)
+    proto_req = auth_pb2.CreateAlertRuleRequest(
+        project_id=payload.project_id,
+        name=payload.name,
+        metric=payload.metric,
+        comparator=payload.comparator,
+        threshold=payload.threshold,
+        unit=payload.unit,
+        severity=payload.severity,
+        connector_ids=payload.connector_ids,
+    )
+    if payload.escalation_after_minutes is not None:
+        proto_req.escalation_after_minutes = payload.escalation_after_minutes
+    if payload.escalate_connector_id is not None:
+        proto_req.escalate_connector_id = payload.escalate_connector_id
     try:
-        response = await _stub(request).CreateAlertRule(
-            auth_pb2.CreateAlertRuleRequest(
-                project_id=payload.project_id,
-                name=payload.name,
-                metric=payload.metric,
-                comparator=payload.comparator,
-                threshold=payload.threshold,
-                unit=payload.unit,
-                severity=payload.severity,
-                connector_ids=payload.connector_ids,
-            ),
-            timeout=5.0,
-        )
+        response = await _stub(request).CreateAlertRule(proto_req, timeout=5.0)
     except grpc.RpcError as e:
         raise fastapi.HTTPException(status_code=502, detail=str(e.details()))
     return _proto_rule_to_response(response.rule)
@@ -408,9 +506,7 @@ async def update_alert_rule(
     project_id: int = fastapi.Depends(dependencies.require_project_member),
 ) -> AlertRuleResponse:
     _require_account(request)
-    proto_req = auth_pb2.UpdateAlertRuleRequest(
-        rule_id=rule_id, project_id=project_id
-    )
+    proto_req = auth_pb2.UpdateAlertRuleRequest(rule_id=rule_id, project_id=project_id)
     if payload.name is not None:
         proto_req.name = payload.name
     if payload.enabled is not None:
@@ -428,6 +524,12 @@ async def update_alert_rule(
     if payload.connector_ids is not None:
         proto_req.update_connectors = True
         proto_req.connector_ids.extend(payload.connector_ids)
+    if payload.escalation_after_minutes is not None:
+        proto_req.escalation_after_minutes = payload.escalation_after_minutes
+    if payload.clear_escalate_connector_id:
+        proto_req.clear_escalate_connector_id = True
+    elif payload.escalate_connector_id is not None:
+        proto_req.escalate_connector_id = payload.escalate_connector_id
     try:
         response = await _stub(request).UpdateAlertRule(proto_req, timeout=5.0)
     except grpc.RpcError as e:
@@ -455,9 +557,6 @@ async def delete_alert_rule(
         raise fastapi.HTTPException(status_code=502, detail=str(e.details()))
 
 
-# ==================== Alert History Endpoint ====================
-
-
 @router.get(
     "/alerts/history",
     response_model=AlertEventListResponse,
@@ -470,9 +569,7 @@ async def list_alert_history(
     before_id: int | None = fastapi.Query(None),
 ) -> AlertEventListResponse:
     _require_account(request)
-    proto_req = auth_pb2.ListAlertEventsRequest(
-        project_id=project_id, limit=limit
-    )
+    proto_req = auth_pb2.ListAlertEventsRequest(project_id=project_id, limit=limit)
     if before_id is not None:
         proto_req.before_id = before_id
     try:
@@ -483,3 +580,155 @@ async def list_alert_history(
         events=[_proto_event_to_response(e) for e in response.events],
         has_more=response.has_more,
     )
+
+
+@router.post(
+    "/alerts/history/{event_id}/ack",
+    response_model=AlertEventResponse,
+    summary="Acknowledge an alert event",
+)
+async def ack_alert_event(
+    event_id: int,
+    request: fastapi.Request,
+    project_id: int = fastapi.Depends(dependencies.require_project_member),
+) -> AlertEventResponse:
+    account_id = _require_account(request)
+    try:
+        response = await _stub(request).AckAlertEvent(
+            auth_pb2.AckAlertEventRequest(
+                event_id=event_id, project_id=project_id, account_id=account_id
+            ),
+            timeout=5.0,
+        )
+    except grpc.RpcError as e:
+        raise fastapi.HTTPException(status_code=502, detail=str(e.details()))
+    if not response.success:
+        raise fastapi.HTTPException(
+            status_code=404, detail=response.error_message or "Alert event not found"
+        )
+    return _proto_event_to_response(response.event)
+
+
+@router.post(
+    "/alerts/history/{event_id}/snooze",
+    response_model=AlertEventResponse,
+    summary="Snooze re-notification for an alert event",
+)
+async def snooze_alert_event(
+    event_id: int,
+    payload: SnoozeAlertEventRequest,
+    request: fastapi.Request,
+    project_id: int = fastapi.Depends(dependencies.require_project_member),
+) -> AlertEventResponse:
+    _require_account(request)
+    try:
+        response = await _stub(request).SnoozeAlertEvent(
+            auth_pb2.SnoozeAlertEventRequest(
+                event_id=event_id, project_id=project_id, minutes=payload.minutes
+            ),
+            timeout=5.0,
+        )
+    except grpc.RpcError as e:
+        raise fastapi.HTTPException(status_code=502, detail=str(e.details()))
+    if not response.success:
+        raise fastapi.HTTPException(
+            status_code=404, detail=response.error_message or "Alert event not found"
+        )
+    return _proto_event_to_response(response.event)
+
+
+class MaintenanceWindowResponse(BaseModel):
+    id: int
+    project_id: int
+    name: str
+    starts_at: str
+    ends_at: str
+    recurrence: str | None
+    created_at: str
+    updated_at: str
+
+
+class CreateMaintenanceWindowRequest(BaseModel):
+    project_id: int
+    name: str
+    starts_at: str
+    ends_at: str
+    recurrence: str | None = Field(default=None, pattern="^(none|daily|weekly)$")
+
+
+def _proto_window_to_response(w) -> MaintenanceWindowResponse:
+    return MaintenanceWindowResponse(
+        id=w.id,
+        project_id=w.project_id,
+        name=w.name,
+        starts_at=w.starts_at,
+        ends_at=w.ends_at,
+        recurrence=w.recurrence if w.HasField("recurrence") else None,
+        created_at=w.created_at,
+        updated_at=w.updated_at,
+    )
+
+
+@router.get(
+    "/maintenance-windows",
+    response_model=list[MaintenanceWindowResponse],
+    summary="List maintenance windows for a project",
+)
+async def list_maintenance_windows(
+    request: fastapi.Request,
+    project_id: int = fastapi.Depends(dependencies.require_project_member),
+) -> list[MaintenanceWindowResponse]:
+    _require_account(request)
+    try:
+        response = await _stub(request).ListMaintenanceWindows(
+            auth_pb2.ListMaintenanceWindowsRequest(project_id=project_id), timeout=5.0
+        )
+    except grpc.RpcError as e:
+        raise fastapi.HTTPException(status_code=502, detail=str(e.details()))
+    return [_proto_window_to_response(w) for w in response.windows]
+
+
+@router.post(
+    "/maintenance-windows",
+    status_code=201,
+    response_model=MaintenanceWindowResponse,
+    summary="Create a maintenance window",
+)
+async def create_maintenance_window(
+    payload: CreateMaintenanceWindowRequest,
+    request: fastapi.Request,
+) -> MaintenanceWindowResponse:
+    _require_account(request)
+    proto_req = auth_pb2.CreateMaintenanceWindowRequest(
+        project_id=payload.project_id,
+        name=payload.name,
+        starts_at=payload.starts_at,
+        ends_at=payload.ends_at,
+    )
+    if payload.recurrence:
+        proto_req.recurrence = payload.recurrence
+    try:
+        response = await _stub(request).CreateMaintenanceWindow(proto_req, timeout=5.0)
+    except grpc.RpcError as e:
+        raise fastapi.HTTPException(status_code=502, detail=str(e.details()))
+    return _proto_window_to_response(response.window)
+
+
+@router.delete(
+    "/maintenance-windows/{window_id}",
+    status_code=204,
+    summary="Delete a maintenance window",
+)
+async def delete_maintenance_window(
+    window_id: int,
+    request: fastapi.Request,
+    project_id: int = fastapi.Depends(dependencies.require_project_member),
+) -> None:
+    _require_account(request)
+    try:
+        await _stub(request).DeleteMaintenanceWindow(
+            auth_pb2.DeleteMaintenanceWindowRequest(window_id=window_id, project_id=project_id),
+            timeout=5.0,
+        )
+    except grpc.RpcError as e:
+        raise fastapi.HTTPException(status_code=502, detail=str(e.details()))

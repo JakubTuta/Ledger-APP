@@ -14,11 +14,9 @@ class Settings(pydantic_settings.BaseSettings):
         extra="ignore",
     )
 
-    ENV: typing.Literal["development", "staging", "production", "test"] = (
-        pydantic.Field(
-            default="development",
-            description="Application environment",
-        )
+    ENV: typing.Literal["development", "staging", "production", "test"] = pydantic.Field(
+        default="development",
+        description="Application environment",
     )
 
     DEBUG: bool = pydantic.Field(
@@ -76,19 +74,8 @@ class Settings(pydantic_settings.BaseSettings):
         description="Auth database password",
     )
 
-    DB_POOL_SIZE: int = pydantic.Field(
-        default=20,
-        ge=5,
-        le=100,
-        description="Database connection pool size",
-    )
-
-    DB_MAX_OVERFLOW: int = pydantic.Field(
-        default=10,
-        ge=0,
-        le=50,
-        description="Max overflow connections",
-    )
+    DB_POOL_SIZE: typing.ClassVar[int] = 20
+    DB_MAX_OVERFLOW: typing.ClassVar[int] = 10
 
     @property
     def LOGS_DATABASE_URL(self) -> str:
@@ -114,23 +101,12 @@ class Settings(pydantic_settings.BaseSettings):
         description="Redis port",
     )
 
-    REDIS_DB: int = pydantic.Field(
-        default=0,
-        ge=0,
-        le=15,
-        description="Redis database number",
-    )
+    REDIS_DB: typing.ClassVar[int] = 0
+    REDIS_MAX_CONNECTIONS: typing.ClassVar[int] = 30
 
     REDIS_PASSWORD: str | None = pydantic.Field(
         default=None,
         description="Redis password (optional)",
-    )
-
-    REDIS_MAX_CONNECTIONS: int = pydantic.Field(
-        default=30,
-        ge=10,
-        le=100,
-        description="Redis connection pool size",
     )
 
     @property
@@ -169,10 +145,7 @@ class Settings(pydantic_settings.BaseSettings):
         description="From address; falls back to SMTP_USER when empty",
     )
 
-    SMTP_USE_TLS: bool = pydantic.Field(
-        default=True,
-        description="Use STARTTLS for SMTP connection",
-    )
+    SMTP_USE_TLS: typing.ClassVar[bool] = True
 
     ANALYTICS_LOG_METRICS_CRON: str = pydantic.Field(
         default="*/10 * * * *",
@@ -224,9 +197,29 @@ class Settings(pydantic_settings.BaseSettings):
         description="span_latency_1h rollup cron schedule",
     )
 
+    ANALYTICS_METRIC_POINTS_1H_ROLLUP_CRON: str = pydantic.Field(
+        default="*/10 * * * *",
+        description="metric_points_1h rollup cron schedule",
+    )
+
     ANALYTICS_ALERT_EVALUATOR_CRON: str = pydantic.Field(
         default="*/1 * * * *",
         description="Alert rule evaluator cron schedule",
+    )
+
+    ANALYTICS_MONITOR_CHECK_CRON: str = pydantic.Field(
+        default="*/1 * * * *",
+        description="Uptime/heartbeat monitor checker cron schedule",
+    )
+
+    ANALYTICS_ERROR_REGRESSION_CRON: str = pydantic.Field(
+        default="*/5 * * * *",
+        description="Error group regression detector cron schedule",
+    )
+
+    ALERT_WEBHOOK_ALLOW_HTTP: bool = pydantic.Field(
+        default=False,
+        description="Allow plain-http webhook URLs (dev/testing only; https required otherwise)",
     )
 
     ANALYTICS_NOTIFICATION_CLEANUP_CRON: str = pydantic.Field(
@@ -234,74 +227,24 @@ class Settings(pydantic_settings.BaseSettings):
         description="Expired notification cleanup cron schedule (daily at 03:00)",
     )
 
-    ANALYTICS_MAX_SERIES_PER_PROJECT: int = pydantic.Field(
-        default=500,
-        ge=10,
-        le=10000,
-        description="Max distinct (name, tags) series per project",
+    ANALYTICS_RETENTION_CRON: str = pydantic.Field(
+        default="0 3 * * *",
+        description="Data retention enforcement cron schedule (daily at 03:00)",
     )
 
-    ANALYTICS_ERROR_RATE_TTL: int = pydantic.Field(
-        default=600,
-        ge=300,
-        le=3600,
-        description="Error rate cache TTL (seconds)",
-    )
+    ANALYTICS_MAX_SERIES_PER_PROJECT: typing.ClassVar[int] = 500
+    ANALYTICS_ERROR_RATE_TTL: typing.ClassVar[int] = 600
+    ANALYTICS_LOG_VOLUME_TTL: typing.ClassVar[int] = 600
+    ANALYTICS_TOP_ERRORS_TTL: typing.ClassVar[int] = 900
+    ANALYTICS_TOP_ERRORS_LIMIT: typing.ClassVar[int] = 50
+    ANALYTICS_USAGE_STATS_TTL: typing.ClassVar[int] = 3600
+    DEFAULT_DAILY_QUOTA: typing.ClassVar[int] = 100_000
+    ANALYTICS_JOB_MISFIRE_GRACE_TIME: typing.ClassVar[int] = 60
+    ANALYTICS_QUERY_TIMEOUT: typing.ClassVar[int] = 60
 
-    ANALYTICS_LOG_VOLUME_TTL: int = pydantic.Field(
-        default=600,
-        ge=300,
-        le=3600,
-        description="Log volume cache TTL (seconds)",
-    )
-
-    ANALYTICS_TOP_ERRORS_TTL: int = pydantic.Field(
-        default=900,
-        ge=300,
-        le=3600,
-        description="Top errors cache TTL (seconds)",
-    )
-
-    ANALYTICS_TOP_ERRORS_LIMIT: int = pydantic.Field(
-        default=50,
-        ge=10,
-        le=500,
-        description="Max top errors per project cached",
-    )
-
-    ANALYTICS_USAGE_STATS_TTL: int = pydantic.Field(
-        default=3600,
-        ge=600,
-        le=86400,
-        description="Usage stats cache TTL (seconds)",
-    )
-
-    DEFAULT_DAILY_QUOTA: int = pydantic.Field(
-        default=100_000,
-        ge=1_000,
-        le=100_000,
-        description="Default daily log quota",
-    )
-
-    ANALYTICS_JOB_MISFIRE_GRACE_TIME: int = pydantic.Field(
-        default=60,
-        ge=10,
-        le=300,
-        description="Job misfire grace time (seconds)",
-    )
-
-    ANALYTICS_QUERY_TIMEOUT: int = pydantic.Field(
-        default=60,
-        ge=10,
-        le=300,
-        description="Analytics query timeout (seconds)",
-    )
-
-    LOG_LEVEL: typing.Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = (
-        pydantic.Field(
-            default="INFO",
-            description="Logging level",
-        )
+    LOG_LEVEL: typing.Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = pydantic.Field(
+        default="INFO",
+        description="Logging level",
     )
 
     def get_log_config(self) -> dict:

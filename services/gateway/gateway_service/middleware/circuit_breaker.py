@@ -6,9 +6,7 @@ import typing
 
 import fastapi
 from gateway_service import config
-from gateway_service.services import grpc_pool
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 logger = logging.getLogger(__name__)
 
@@ -62,10 +60,7 @@ class CircuitBreaker:
 
         if current_state == CircuitState.OPEN:
             self._rejected_calls += 1
-            logger.warning(
-                f"Circuit breaker OPEN for {self.service_name}, "
-                f"fast-failing request"
-            )
+            logger.warning(f"Circuit breaker OPEN for {self.service_name}, fast-failing request")
             raise fastapi.HTTPException(
                 status_code=fastapi.status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=f"{self.service_name} is currently unavailable",
@@ -115,7 +110,6 @@ class CircuitBreaker:
                     self.last_failure_time
                     and time.time() - self.last_failure_time >= self.recovery_timeout
                 ):
-
                     self.state = CircuitState.HALF_OPEN
                     self.half_open_calls = 0
 
@@ -140,8 +134,7 @@ class CircuitBreaker:
 
             if self.state == CircuitState.HALF_OPEN:
                 logger.warning(
-                    f"Circuit breaker transitioning back to OPEN for "
-                    f"{self.service_name}"
+                    f"Circuit breaker transitioning back to OPEN for {self.service_name}"
                 )
                 self.state = CircuitState.OPEN
 
@@ -176,16 +169,16 @@ class CircuitBreaker:
         }
 
 
-class CircuitBreakerMiddleware(BaseHTTPMiddleware):
+class CircuitBreakerMiddleware:
     """
-    Middleware that wraps gRPC calls with circuit breakers.
+    Pure ASGI middleware that wraps gRPC calls with circuit breakers.
 
     Design: Per-service circuit breakers prevent one failing service
     from bringing down the entire system.
     """
 
-    def __init__(self, app):
-        super().__init__(app)
+    def __init__(self, app: ASGIApp):
+        self.app = app
         self.breakers: typing.Dict[str, CircuitBreaker] = {}
 
     def _init_breaker(self, service_name: str):
@@ -201,20 +194,21 @@ class CircuitBreakerMiddleware(BaseHTTPMiddleware):
             self._init_breaker(service_name)
         return self.breakers[service_name]
 
-    async def dispatch(self, request: fastapi.Request, call_next) -> Response:
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         """
-        Middleware dispatch.
-
         Note: Circuit breaker logic is applied at the gRPC call level,
         not at the HTTP request level. This middleware just exposes
         breaker stats and manages state.
         """
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
 
-        request.state.circuit_breakers = self
+        state = scope.setdefault("state", {})
+        state["circuit_breakers"] = self
 
         try:
-            response = await call_next(request)
-            return response
+            await self.app(scope, receive, send)
 
         except fastapi.HTTPException:
             raise

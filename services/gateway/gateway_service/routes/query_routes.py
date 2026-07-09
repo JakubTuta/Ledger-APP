@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import json
 import logging
@@ -7,7 +8,9 @@ import fastapi
 import gateway_service.proto.query_pb2 as query_pb2
 import gateway_service.schemas as schemas
 import grpc
-from gateway_service import dependencies
+import redis.asyncio as redis
+from gateway_service import config, dependencies
+from sse_starlette.sse import EventSourceResponse
 
 router = fastapi.APIRouter(tags=["Query"])
 logger = logging.getLogger(__name__)
@@ -27,9 +30,7 @@ def _calculate_granularity_for_period(
     - currentMonth: daily
     - currentYear: monthly
     """
-    granularity_map: dict[
-        str, typing.Literal["hourly", "daily", "weekly", "monthly"]
-    ] = {
+    granularity_map: dict[str, typing.Literal["hourly", "daily", "weekly", "monthly"]] = {
         "today": "hourly",
         "last7days": "daily",
         "last30days": "daily",
@@ -117,6 +118,313 @@ def _calculate_time_range_for_period(
 
 
 @router.get(
+    "/logs/facets",
+    status_code=200,
+    summary="Get log facet counts for filter sidebar",
+    description="Retrieve counts per facet value (level, log_type, status_class, environment) for the current filter set. Used to render clickable facet filters on the Explore page.",
+    response_description="Facet counts grouped by field",
+    response_model=schemas.LogFacetsResponse,
+    responses={
+        400: {
+            "description": "Invalid parameters",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Either 'period' or both 'periodFrom' and 'periodTo' must be provided"
+                    }
+                }
+            },
+        },
+        500: {
+            "description": "Server error",
+            "content": {
+                "application/json": {"example": {"detail": "Failed to retrieve log facets"}}
+            },
+        },
+    },
+)
+async def get_log_facets(
+    request: fastapi.Request,
+    project_id: int = fastapi.Depends(dependencies.require_project_member),
+    period: typing.Optional[
+        typing.Literal[
+            "today",
+            "last7days",
+            "last30days",
+            "currentWeek",
+            "currentMonth",
+            "currentYear",
+        ]
+    ] = fastapi.Query(
+        None,
+        description="Predefined time period. Mutually exclusive with periodFrom/periodTo.",
+    ),
+    periodFrom: typing.Optional[str] = fastapi.Query(
+        None,
+        description="Start date in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ). Must be used with periodTo.",
+    ),
+    periodTo: typing.Optional[str] = fastapi.Query(
+        None,
+        description="End date in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ). Must be used with periodFrom.",
+    ),
+    level: typing.Optional[
+        typing.Literal["debug", "info", "warning", "error", "critical"]
+    ] = fastapi.Query(
+        None,
+        description="Filter by log level. If not specified, returns all levels.",
+    ),
+    log_type: typing.Optional[
+        typing.Literal[
+            "console",
+            "logger",
+            "exception",
+            "network",
+            "database",
+            "endpoint",
+            "custom",
+        ]
+    ] = fastapi.Query(
+        None,
+        description="Filter by log type. If not specified, returns all types.",
+    ),
+    status_class: typing.Optional[typing.List[typing.Literal["2xx", "4xx", "5xx"]]] = fastapi.Query(
+        None,
+        description="Filter by HTTP status class (2xx, 4xx, 5xx). Can be repeated.",
+    ),
+    search: typing.Optional[str] = fastapi.Query(
+        None,
+        description="Substring search on HTTP method, path, message, or error message.",
+        max_length=200,
+    ),
+) -> schemas.LogFacetsResponse:
+    """
+    Get facet counts (level, log_type, status_class, environment) for the
+    Explore page's filter sidebar, computed under the same filters as
+    `GET /logs`.
+    """
+    grpc_pool = request.app.state.grpc_pool
+
+    if not period and not (periodFrom and periodTo):
+        raise fastapi.HTTPException(
+            status_code=400,
+            detail="Either 'period' or both 'periodFrom' and 'periodTo' must be provided",
+        )
+
+    if period and (periodFrom or periodTo):
+        raise fastapi.HTTPException(
+            status_code=400,
+            detail="Cannot use both 'period' and 'periodFrom'/'periodTo' parameters",
+        )
+
+    try:
+        if period:
+            start_time, end_time = _calculate_time_range_for_period(period)
+        else:
+            try:
+                start_time = datetime.datetime.fromisoformat(periodFrom.replace("Z", "+00:00"))
+                end_time = datetime.datetime.fromisoformat(periodTo.replace("Z", "+00:00"))
+            except (ValueError, AttributeError) as e:
+                raise fastapi.HTTPException(
+                    status_code=400,
+                    detail=f"Invalid date format. Use ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ): {str(e)}",
+                )
+
+        grpc_request = query_pb2.GetLogFacetsRequest(
+            project_id=project_id,
+            start_time=start_time.isoformat(),
+            end_time=end_time.isoformat(),
+            level=level if level else "",
+            log_type=log_type if log_type else "",
+        )
+        if status_class:
+            grpc_request.status_class.extend(status_class)
+        if search:
+            grpc_request.search = search
+
+        async with grpc_pool.get_query_stub() as stub:
+            response = await stub.GetLogFacets(
+                grpc_request,
+                timeout=10.0,
+            )
+
+        return schemas.LogFacetsResponse(
+            project_id=response.project_id,
+            level=[
+                schemas.LogFacetValueResponse(value=v.value, count=v.count) for v in response.level
+            ],
+            log_type=[
+                schemas.LogFacetValueResponse(value=v.value, count=v.count)
+                for v in response.log_type
+            ],
+            status_class=[
+                schemas.LogFacetValueResponse(value=v.value, count=v.count)
+                for v in response.status_class
+            ],
+            environment=[
+                schemas.LogFacetValueResponse(value=v.value, count=v.count)
+                for v in response.environment
+            ],
+        )
+
+    except grpc.RpcError as e:
+        if e.code() == grpc.StatusCode.INVALID_ARGUMENT:
+            raise fastapi.HTTPException(
+                status_code=400,
+                detail=e.details(),
+            )
+        else:
+            logger.error(f"gRPC error retrieving log facets: {e.code()} - {e.details()}")
+            raise fastapi.HTTPException(
+                status_code=500,
+                detail="Failed to retrieve log facets",
+            )
+
+    except fastapi.HTTPException:
+        raise
+
+    except Exception as e:
+        logger.error(f"Failed to retrieve log facets: {e}", exc_info=True)
+        raise fastapi.HTTPException(
+            status_code=500,
+            detail="Failed to retrieve log facets",
+        )
+
+
+# Mirrors routes/notifications.py's NotificationStream/EventSourceResponse
+# pattern, but subscribes directly to the ingestion worker's per-project
+# `logs:tail:{project_id}` channel (see notifications/publisher.py::
+# TailPublisher) instead of going through query_service - the whole point is
+# sub-second delivery of newly-ingested logs, which a gRPC round-trip to the
+# query service's Postgres-backed endpoints would defeat.
+#
+# Registered before /logs/{log_id} below: Starlette matches path routes in
+# registration order, and {log_id} would otherwise greedily match "tail" as
+# its path parameter (and fail int parsing) before this route is ever tried.
+
+
+class LogTailStream:
+    def __init__(self, redis_url: str, project_id: int):
+        self.redis_url = redis_url
+        self.project_id = project_id
+        self.redis_client: redis.Redis | None = None
+        self.pubsub = None
+
+    async def subscribe(self) -> None:
+        self.redis_client = redis.Redis.from_url(
+            self.redis_url, decode_responses=True, max_connections=10
+        )
+        self.pubsub = self.redis_client.pubsub()
+        await self.pubsub.subscribe(f"logs:tail:{self.project_id}")
+
+    async def unsubscribe(self) -> None:
+        if self.pubsub:
+            await self.pubsub.unsubscribe()
+            await self.pubsub.close()
+        if self.redis_client:
+            await self.redis_client.close()
+
+    async def listen(self) -> typing.AsyncGenerator[dict, None]:
+        try:
+            async for message in self.pubsub.listen():
+                if message["type"] == "message":
+                    try:
+                        data = json.loads(message["data"])
+                        yield {"event": "log", "data": json.dumps(data)}
+                    except json.JSONDecodeError:
+                        logger.error(f"Failed to decode tail message: {message['data']}")
+        except asyncio.CancelledError:
+            logger.info("Log tail stream cancelled")
+            raise
+        except Exception as e:
+            logger.error(f"Error in log tail stream: {e}", exc_info=True)
+            yield {"event": "error", "data": json.dumps({"error": "Stream error occurred"})}
+
+
+@router.get(
+    "/logs/tail",
+    summary="Real-time log tail stream (SSE)",
+    description="""
+Server-Sent Events (SSE) stream of newly-ingested logs for a project, for the
+Explore page's live tail. Polling (`GET /logs` on an interval) remains the
+automatic fallback if the stream can't be established.
+
+**Authentication:** Required (API Key or Session Token), scoped to a single project.
+
+**Events:**
+- `connected` - Initial connection confirmation
+- `log` - A newly-ingested log (compact fields only - open the log for full detail)
+- `heartbeat` - Keep-alive ping
+    """,
+    response_class=EventSourceResponse,
+    responses={
+        200: {"description": "SSE stream established"},
+        401: {"description": "Authentication required"},
+        403: {"description": "Not a member of this project"},
+        503: {"description": "Live tail is currently disabled"},
+    },
+)
+async def stream_log_tail(
+    request: fastapi.Request,
+    project_id: int = fastapi.Depends(dependencies.require_project_member),
+):
+    if not config.settings.NOTIFICATIONS_ENABLED:
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Live tail is currently disabled",
+        )
+
+    stream = LogTailStream(config.settings.REDIS_URL, project_id)
+    await stream.subscribe()
+
+    async def event_generator():
+        queue: asyncio.Queue = asyncio.Queue()
+        tasks: list[asyncio.Task] = []
+
+        async def pump_stream():
+            async for event in stream.listen():
+                await queue.put(event)
+
+        async def pump_heartbeat():
+            while True:
+                await asyncio.sleep(config.settings.NOTIFICATIONS_HEARTBEAT_INTERVAL)
+                await queue.put(
+                    {
+                        "event": "heartbeat",
+                        "data": json.dumps(
+                            {"timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()}
+                        ),
+                    }
+                )
+
+        try:
+            yield {
+                "event": "connected",
+                "data": json.dumps({"project_id": project_id}),
+            }
+
+            tasks.append(asyncio.create_task(pump_heartbeat()))
+            tasks.append(asyncio.create_task(pump_stream()))
+
+            while True:
+                event = await queue.get()
+                yield event
+
+        except asyncio.CancelledError:
+            logger.info(f"Client disconnected from log tail stream (project: {project_id})")
+        finally:
+            for task in tasks:
+                task.cancel()
+            for task in tasks:
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
+            await stream.unsubscribe()
+
+    return EventSourceResponse(event_generator())
+
+
+@router.get(
     "/logs/{log_id}",
     status_code=200,
     summary="Get log by ID",
@@ -127,22 +435,16 @@ def _calculate_time_range_for_period(
         404: {
             "description": "Log not found",
             "content": {
-                "application/json": {
-                    "example": {"detail": "Log not found or access denied"}
-                }
+                "application/json": {"example": {"detail": "Log not found or access denied"}}
             },
         },
         400: {
             "description": "Invalid log ID",
-            "content": {
-                "application/json": {"example": {"detail": "Invalid log ID format"}}
-            },
+            "content": {"application/json": {"example": {"detail": "Invalid log ID format"}}},
         },
         500: {
             "description": "Server error",
-            "content": {
-                "application/json": {"example": {"detail": "Failed to retrieve log"}}
-            },
+            "content": {"application/json": {"example": {"detail": "Failed to retrieve log"}}},
         },
     },
 )
@@ -296,9 +598,7 @@ async def get_log_by_id(
         },
         500: {
             "description": "Server error",
-            "content": {
-                "application/json": {"example": {"detail": "Failed to retrieve logs"}}
-            },
+            "content": {"application/json": {"example": {"detail": "Failed to retrieve logs"}}},
         },
     },
 )
@@ -346,6 +646,11 @@ async def query_logs(
         None,
         description="Filter by log type. If not specified, returns all types.",
     ),
+    environment: typing.Optional[str] = fastapi.Query(
+        None,
+        description="Filter by environment (e.g. production, staging). If not specified, returns all environments.",
+        max_length=20,
+    ),
     limit: int = fastapi.Query(
         100,
         description="Maximum number of logs to return",
@@ -354,8 +659,13 @@ async def query_logs(
     ),
     offset: int = fastapi.Query(
         0,
-        description="Number of logs to skip for pagination",
+        description="Number of logs to skip for pagination. Ignored when 'cursor' is set.",
         ge=0,
+    ),
+    cursor: typing.Optional[str] = fastapi.Query(
+        None,
+        description="Opaque keyset cursor from a previous response's next_cursor. "
+        "Preferred over offset for deep pagination - takes precedence when set.",
     ),
     status_class: typing.Optional[typing.List[typing.Literal["2xx", "4xx", "5xx"]]] = fastapi.Query(
         None,
@@ -363,7 +673,7 @@ async def query_logs(
     ),
     search: typing.Optional[str] = fastapi.Query(
         None,
-        description="Substring search on HTTP method or path.",
+        description="Substring search on HTTP method, path, message, or error message.",
         max_length=200,
     ),
 ) -> schemas.LogsListResponse:
@@ -470,12 +780,8 @@ async def query_logs(
             start_time, end_time = _calculate_time_range_for_period(period)
         else:
             try:
-                start_time = datetime.datetime.fromisoformat(
-                    periodFrom.replace("Z", "+00:00")
-                )
-                end_time = datetime.datetime.fromisoformat(
-                    periodTo.replace("Z", "+00:00")
-                )
+                start_time = datetime.datetime.fromisoformat(periodFrom.replace("Z", "+00:00"))
+                end_time = datetime.datetime.fromisoformat(periodTo.replace("Z", "+00:00"))
             except (ValueError, AttributeError) as e:
                 raise fastapi.HTTPException(
                     status_code=400,
@@ -491,10 +797,14 @@ async def query_logs(
             limit=limit,
             offset=offset,
         )
+        if environment:
+            grpc_request.environment = environment
         if status_class:
             grpc_request.status_class.extend(status_class)
         if search:
             grpc_request.search = search
+        if cursor:
+            grpc_request.cursor = cursor
 
         async with grpc_pool.get_query_stub() as stub:
             response = await stub.QueryLogs(
@@ -511,6 +821,7 @@ async def query_logs(
             logs=logs,
             total=response.total,
             has_more=response.has_more,
+            next_cursor=response.next_cursor if response.HasField("next_cursor") else None,
         )
 
     except grpc.RpcError as e:
@@ -585,9 +896,7 @@ async def query_logs(
         500: {
             "description": "Server error",
             "content": {
-                "application/json": {
-                    "example": {"detail": "Failed to retrieve aggregated metrics"}
-                }
+                "application/json": {"example": {"detail": "Failed to retrieve aggregated metrics"}}
             },
         },
     },
@@ -831,9 +1140,7 @@ async def get_aggregated_metrics(
     if period:
         granularity = _calculate_granularity_for_period(period)
     elif period_from_date and period_to_date:
-        granularity = _calculate_granularity_for_date_range(
-            period_from_date, period_to_date
-        )
+        granularity = _calculate_granularity_for_date_range(period_from_date, period_to_date)
     else:
         granularity = "daily"
 
@@ -844,9 +1151,7 @@ async def get_aggregated_metrics(
                     project_id=project_id,
                     metric_type=type,
                     period=period if period else "",
-                    period_from=(
-                        period_from_date.isoformat() if period_from_date else ""
-                    ),
+                    period_from=(period_from_date.isoformat() if period_from_date else ""),
                     period_to=period_to_date.isoformat() if period_to_date else "",
                     endpoint_path=endpointPath if endpointPath else "",
                     granularity=granularity,
@@ -864,21 +1169,11 @@ async def get_aggregated_metrics(
                 log_type=item.log_type if item.log_type else None,
                 log_count=item.log_count,
                 error_count=item.error_count,
-                avg_duration_ms=(
-                    item.avg_duration_ms if item.avg_duration_ms > 0 else None
-                ),
-                min_duration_ms=(
-                    item.min_duration_ms if item.min_duration_ms > 0 else None
-                ),
-                max_duration_ms=(
-                    item.max_duration_ms if item.max_duration_ms > 0 else None
-                ),
-                p95_duration_ms=(
-                    item.p95_duration_ms if item.p95_duration_ms > 0 else None
-                ),
-                p99_duration_ms=(
-                    item.p99_duration_ms if item.p99_duration_ms > 0 else None
-                ),
+                avg_duration_ms=(item.avg_duration_ms if item.avg_duration_ms > 0 else None),
+                min_duration_ms=(item.min_duration_ms if item.min_duration_ms > 0 else None),
+                max_duration_ms=(item.max_duration_ms if item.max_duration_ms > 0 else None),
+                p95_duration_ms=(item.p95_duration_ms if item.p95_duration_ms > 0 else None),
+                p99_duration_ms=(item.p99_duration_ms if item.p99_duration_ms > 0 else None),
             )
             for item in response.data
         ]
@@ -899,9 +1194,7 @@ async def get_aggregated_metrics(
                 detail=e.details(),
             )
         else:
-            logger.error(
-                f"gRPC error retrieving aggregated metrics: {e.code()} - {e.details()}"
-            )
+            logger.error(f"gRPC error retrieving aggregated metrics: {e.code()} - {e.details()}")
             raise fastapi.HTTPException(
                 status_code=500,
                 detail="Failed to retrieve aggregated metrics",
@@ -950,9 +1243,7 @@ async def get_aggregated_metrics(
         500: {
             "description": "Server error",
             "content": {
-                "application/json": {
-                    "example": {"detail": "Failed to retrieve error list"}
-                }
+                "application/json": {"example": {"detail": "Failed to retrieve error list"}}
             },
         },
     },
@@ -1039,9 +1330,7 @@ async def get_error_list(
                 try:
                     attributes = json.loads(error.attributes)
                 except json.JSONDecodeError:
-                    logger.warning(
-                        f"Failed to parse attributes JSON for error {error.log_id}"
-                    )
+                    logger.warning(f"Failed to parse attributes JSON for error {error.log_id}")
                     attributes = None
 
             errors.append(
@@ -1083,9 +1372,7 @@ async def get_error_list(
                 detail=e.details(),
             )
         else:
-            logger.error(
-                f"gRPC error retrieving error list: {e.code()} - {e.details()}"
-            )
+            logger.error(f"gRPC error retrieving error list: {e.code()} - {e.details()}")
             raise fastapi.HTTPException(
                 status_code=500,
                 detail="Failed to retrieve error list",
@@ -1244,17 +1531,96 @@ def _proto_to_pydantic_log(proto_log: query_pb2.LogEntry) -> schemas.LogEntryRes
         attributes=attributes,
         sdk_version=proto_log.sdk_version if proto_log.sdk_version else None,
         platform=proto_log.platform if proto_log.platform else None,
-        platform_version=(
-            proto_log.platform_version if proto_log.platform_version else None
-        ),
-        processing_time_ms=(
-            proto_log.processing_time_ms if proto_log.processing_time_ms else None
-        ),
-        error_fingerprint=(
-            proto_log.error_fingerprint if proto_log.error_fingerprint else None
-        ),
+        platform_version=(proto_log.platform_version if proto_log.platform_version else None),
+        processing_time_ms=(proto_log.processing_time_ms if proto_log.processing_time_ms else None),
+        error_fingerprint=(proto_log.error_fingerprint if proto_log.error_fingerprint else None),
         method=proto_log.method if proto_log.HasField("method") else None,
         path=proto_log.path if proto_log.HasField("path") else None,
         status_code=proto_log.status_code if proto_log.HasField("status_code") else None,
         duration_ms=proto_log.duration_ms if proto_log.HasField("duration_ms") else None,
     )
+
+
+@router.get(
+    "/metrics/series",
+    status_code=200,
+    summary="List distinct metric names + tag keys for a project",
+    tags=["Custom Metrics"],
+)
+async def get_metric_series(
+    request: fastapi.Request,
+    project_id: int = fastapi.Depends(dependencies.require_project_member),
+) -> dict:
+    grpc_pool = request.app.state.grpc_pool
+    try:
+        async with grpc_pool.get_query_stub() as stub:
+            response = await stub.GetMetricSeries(
+                query_pb2.GetMetricSeriesRequest(project_id=project_id),
+                timeout=10.0,
+            )
+        return {
+            "project_id": response.project_id,
+            "series": [
+                {"name": s.name, "type": s.type, "tag_keys": list(s.tag_keys)}
+                for s in response.series
+            ],
+        }
+    except grpc.RpcError as e:
+        logger.error(f"gRPC error during GetMetricSeries: {e.code()} - {e.details()}")
+        raise fastapi.HTTPException(status_code=500, detail="Failed to fetch metric series")
+
+
+@router.get(
+    "/metrics/query",
+    status_code=200,
+    summary="Query a metric's time series",
+    tags=["Custom Metrics"],
+)
+async def query_metrics(
+    request: fastapi.Request,
+    name: str = fastapi.Query(...),
+    aggregation: typing.Literal["avg", "sum", "min", "max", "count"] = fastapi.Query("avg"),
+    fromTime: typing.Optional[str] = fastapi.Query(None),
+    toTime: typing.Optional[str] = fastapi.Query(None),
+    tags: typing.Optional[str] = fastapi.Query(
+        None, description="JSON object of tag key/value filters"
+    ),
+    project_id: int = fastapi.Depends(dependencies.require_project_member),
+) -> dict:
+    grpc_pool = request.app.state.grpc_pool
+
+    tags_map: dict[str, str] = {}
+    if tags:
+        try:
+            parsed = json.loads(tags)
+            if isinstance(parsed, dict):
+                tags_map = {str(k): str(v) for k, v in parsed.items()}
+        except json.JSONDecodeError:
+            raise fastapi.HTTPException(status_code=400, detail="tags must be valid JSON")
+
+    try:
+        req_kwargs: dict = dict(
+            project_id=project_id,
+            name=name,
+            tags=tags_map,
+            aggregation=aggregation,
+        )
+        if fromTime:
+            req_kwargs["from_time"] = fromTime
+        if toTime:
+            req_kwargs["to_time"] = toTime
+
+        async with grpc_pool.get_query_stub() as stub:
+            response = await stub.QueryMetrics(
+                query_pb2.QueryMetricsRequest(**req_kwargs),
+                timeout=10.0,
+            )
+        return {
+            "project_id": response.project_id,
+            "name": response.name,
+            "aggregation": response.aggregation,
+            "data": [{"bucket": d.bucket, "value": d.value} for d in response.data],
+        }
+    except grpc.RpcError as e:
+        logger.error(f"gRPC error during QueryMetrics: {e.code()} - {e.details()}")
+        raise fastapi.HTTPException(status_code=500, detail="Failed to query metric")

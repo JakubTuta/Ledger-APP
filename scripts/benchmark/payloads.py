@@ -3,7 +3,6 @@ import gzip
 import json
 import random
 
-
 _ENDPOINT_PATHS = [
     "/api/v1/users/:id",
     "/api/v1/orders",
@@ -36,12 +35,16 @@ _STACK_TRACE_TEMPLATE = (
 )
 
 _LEVELS_WEIGHTED = (
-    ["debug"] * 25
-    + ["info"] * 30
-    + ["warning"] * 20
-    + ["error"] * 15
-    + ["critical"] * 10
+    ["debug"] * 25 + ["info"] * 30 + ["warning"] * 20 + ["error"] * 15 + ["critical"] * 10
 )
+
+_SEVERITY_NUMBER_BY_LEVEL = {
+    "debug": 5,
+    "info": 9,
+    "warning": 13,
+    "error": 17,
+    "critical": 21,
+}
 
 _SERVICES = ["auth", "gateway", "ingestion", "query", "analytics"]
 
@@ -66,11 +69,6 @@ def _make_logger_template(rng: random.Random) -> dict:
         "log_type": rng.choice(["logger", "console"]),
         "importance": rng.choice(["standard", "standard", "standard", "low", "high"]),
         "message": f"Service event: operation completed in {rng.randint(1, 500)}ms",
-        "environment": "production",
-        "release": "v1.0.0",
-        "sdk_version": "1.0.0",
-        "platform": "python",
-        "platform_version": "3.12",
         "attributes": {
             "service": rng.choice(_SERVICES),
             "request_id": f"req_{rng.randint(100000, 999999)}",
@@ -89,18 +87,11 @@ def _make_endpoint_template(rng: random.Random) -> dict:
         "log_type": "endpoint",
         "importance": "standard",
         "message": f"{method} {path}",
-        "environment": "production",
-        "release": "v1.0.0",
-        "sdk_version": "1.0.0",
-        "platform": "python",
-        "platform_version": "3.12",
         "attributes": {
-            "endpoint": {
-                "method": method,
-                "path": path,
-                "status_code": status,
-                "duration_ms": round(rng.uniform(5.0, 500.0), 2),
-            },
+            "http.request.method": method,
+            "http.route": path,
+            "http.response.status_code": status,
+            "ledger.duration_ms": round(rng.uniform(5.0, 500.0), 2),
             "user_id": f"usr_{rng.randint(1000, 9999)}",
         },
     }
@@ -114,21 +105,45 @@ def _make_exception_template(rng: random.Random) -> dict:
         "log_type": "exception",
         "importance": rng.choice(["high", "critical"]),
         "message": message,
-        "error_type": error_type,
-        "error_message": message,
-        "stack_trace": _STACK_TRACE_TEMPLATE.format(
-            line1=rng.randint(20, 200),
-            line2=rng.randint(20, 100),
-            line3=rng.randint(50, 120),
-            error_type=error_type,
-            message=message,
-        ),
-        "environment": "production",
-        "release": "v1.0.0",
-        "sdk_version": "1.0.0",
-        "platform": "python",
-        "platform_version": "3.12",
-        "attributes": {"retry_count": rng.randint(0, 3)},
+        "attributes": {
+            "exception.type": error_type,
+            "exception.message": message,
+            "exception.stacktrace": _STACK_TRACE_TEMPLATE.format(
+                line1=rng.randint(20, 200),
+                line2=rng.randint(20, 100),
+                line3=rng.randint(50, 120),
+                error_type=error_type,
+                message=message,
+            ),
+            "retry_count": rng.randint(0, 3),
+        },
+    }
+
+
+def _any_value(value) -> dict:
+    if isinstance(value, bool):
+        return {"boolValue": value}
+    if isinstance(value, int):
+        return {"intValue": str(value)}
+    if isinstance(value, float):
+        return {"doubleValue": value}
+    return {"stringValue": str(value)}
+
+
+def _template_to_log_record(template: dict, timestamp: datetime.datetime) -> dict:
+    attributes = [
+        {"key": "ledger.log_type", "value": _any_value(template["log_type"])},
+        {"key": "ledger.importance", "value": _any_value(template["importance"])},
+    ]
+    for key, value in template.get("attributes", {}).items():
+        attributes.append({"key": key, "value": _any_value(value)})
+
+    return {
+        "timeUnixNano": str(int(timestamp.timestamp() * 1e9)),
+        "severityNumber": _SEVERITY_NUMBER_BY_LEVEL.get(template["level"], 9),
+        "severityText": template["level"].upper(),
+        "body": {"stringValue": template["message"]},
+        "attributes": attributes,
     }
 
 
@@ -139,13 +154,30 @@ def build_batch_body(
 ) -> bytes:
     now = datetime.datetime.now(datetime.timezone.utc)
     templates = rng.choices(pool, k=batch_size)
-    logs = []
+    log_records = []
     for tmpl in templates:
         jitter = datetime.timedelta(seconds=rng.uniform(0, 2))
-        entry = dict(tmpl)
-        entry["timestamp"] = (now - jitter).isoformat()
-        logs.append(entry)
-    return json.dumps({"logs": logs}).encode()
+        log_records.append(_template_to_log_record(tmpl, now - jitter))
+
+    body = {
+        "resourceLogs": [
+            {
+                "resource": {
+                    "attributes": [
+                        {"key": "service.name", "value": _any_value("benchmark")},
+                        {
+                            "key": "deployment.environment.name",
+                            "value": _any_value("production"),
+                        },
+                        {"key": "service.version", "value": _any_value("v1.0.0")},
+                        {"key": "telemetry.sdk.language", "value": _any_value("python")},
+                    ]
+                },
+                "scopeLogs": [{"logRecords": log_records}],
+            }
+        ]
+    }
+    return json.dumps(body).encode()
 
 
 def maybe_gzip(body: bytes, enabled: bool) -> tuple[bytes, dict]:

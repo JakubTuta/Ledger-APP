@@ -1,9 +1,9 @@
 import asyncio
-import os
 
 import asyncpg
 import ingestion_service.config as config
 import ingestion_service.database as database
+import ingestion_service.models  # noqa: F401 - registers tables on database.Base.metadata
 import sqlalchemy
 import sqlalchemy.ext.asyncio as sa_async
 import sqlalchemy.pool as sa_pool
@@ -58,6 +58,18 @@ class TestDatabase:
                 except Exception as e:
                     print(f"Note: Partitions may already exist: {e}")
 
+                try:
+                    conn_sync.execute(
+                        sqlalchemy.text(
+                            """
+                            CREATE TABLE IF NOT EXISTS spans_test_partition PARTITION OF spans
+                            FOR VALUES FROM ('2020-01-01') TO ('2030-12-31');
+                        """
+                        )
+                    )
+                except Exception as e:
+                    print(f"Note: Partitions may already exist: {e}")
+
             await conn.run_sync(create_all_and_partitions)
 
         print("Logs tables created with test partitions")
@@ -71,9 +83,7 @@ class TestDatabase:
         if not self.engine:
             return
         async with self.engine.begin() as conn:
-            table_names = [
-                t.name for t in reversed(database.Base.metadata.sorted_tables)
-            ]
+            table_names = [t.name for t in reversed(database.Base.metadata.sorted_tables)]
             if table_names:
                 await conn.execute(
                     sqlalchemy.text(

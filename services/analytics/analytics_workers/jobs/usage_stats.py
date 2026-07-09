@@ -23,12 +23,8 @@ async def generate_usage_stats() -> None:
         upsert_params: list[dict] = []
 
         for project_id, date, log_count in log_rows:
-            daily_quota = projects_map.get(
-                project_id, settings.DEFAULT_DAILY_QUOTA
-            )
-            quota_used_percent = (
-                round((log_count / daily_quota * 100), 2) if daily_quota > 0 else 0
-            )
+            daily_quota = projects_map.get(project_id, settings.DEFAULT_DAILY_QUOTA)
+            quota_used_percent = round((log_count / daily_quota * 100), 2) if daily_quota > 0 else 0
 
             if project_id not in by_project:
                 by_project[project_id] = []
@@ -42,9 +38,7 @@ async def generate_usage_stats() -> None:
                 }
             )
 
-            upsert_params.append(
-                {"project_id": project_id, "date": date, "log_count": log_count}
-            )
+            upsert_params.append({"project_id": project_id, "date": date, "log_count": log_count})
 
         if upsert_params:
             await _batch_upsert_daily_usage(upsert_params)
@@ -58,9 +52,7 @@ async def generate_usage_stats() -> None:
             )
 
         elapsed = time.perf_counter() - start
-        logger.info(
-            f"Usage stats generation done in {elapsed:.2f}s for {len(by_project)} projects"
-        )
+        logger.info(f"Usage stats generation done in {elapsed:.2f}s for {len(by_project)} projects")
 
     except Exception as e:
         logger.error(f"Usage stats generation failed: {e}", exc_info=True)
@@ -69,9 +61,7 @@ async def generate_usage_stats() -> None:
 
 async def _fetch_projects() -> dict[int, int]:
     async with database.get_auth_session() as session:
-        result = await session.execute(
-            sa.text("SELECT id, daily_quota FROM projects")
-        )
+        result = await session.execute(sa.text("SELECT id, daily_quota FROM projects"))
         return {row[0]: row[1] for row in result.fetchall()}
 
 

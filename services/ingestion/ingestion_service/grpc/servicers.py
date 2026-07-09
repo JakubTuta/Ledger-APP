@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import hashlib
 import json
@@ -5,10 +6,8 @@ import logging
 import re
 
 import grpc
-import sqlalchemy as sa
 
 import ingestion_service.config as config
-import ingestion_service.database as database
 import ingestion_service.notifications as notifications
 import ingestion_service.proto.ingestion_pb2 as ingestion_pb2
 import ingestion_service.proto.ingestion_pb2_grpc as ingestion_pb2_grpc
@@ -22,14 +21,24 @@ _HEX32_RE = re.compile(r"^[0-9a-f]{32}$")
 _HEX16_RE = re.compile(r"^[0-9a-f]{16}$")
 
 
+def _compute_tags_hash(tags: dict) -> str:
+    # Canonicalize (sorted keys, no whitespace) before hashing so the same tag
+    # map always yields the same fixed-width key, regardless of insertion
+    # order. blake2b with digest_size=8 gives a 16-char hex string, short
+    # enough to embed in the primary key / partition locality without the
+    # fragility of using raw tags JSONB in a composite PK (see migration 014).
+    canonical = json.dumps(tags, sort_keys=True, separators=(",", ":"))
+    return hashlib.blake2b(canonical.encode(), digest_size=8).hexdigest()
+
+
 class IngestionServicer(ingestion_pb2_grpc.IngestionServiceServicer):
     def __init__(self, redis_client=None):
         self.notification_publisher = None
         if redis_client and config.settings.NOTIFICATIONS_ENABLED:
             self.notification_publisher = notifications.NotificationPublisher(
-                redis_client,
-                enabled=config.settings.NOTIFICATIONS_ENABLED
+                redis_client, enabled=config.settings.NOTIFICATIONS_ENABLED
             )
+
     async def IngestLog(
         self, request: ingestion_pb2.IngestLogRequest, context: grpc.aio.ServicerContext
     ) -> ingestion_pb2.IngestLogResponse:
@@ -46,7 +55,7 @@ class IngestionServicer(ingestion_pb2_grpc.IngestionServiceServicer):
                     log.level,
                     log.log_type,
                     config.settings.NOTIFICATIONS_PUBLISH_ERRORS,
-                    config.settings.NOTIFICATIONS_PUBLISH_CRITICAL
+                    config.settings.NOTIFICATIONS_PUBLISH_CRITICAL,
                 ):
                     notification = notifications.ErrorNotification(
                         project_id=enriched_log.project_id,
@@ -58,11 +67,10 @@ class IngestionServicer(ingestion_pb2_grpc.IngestionServiceServicer):
                         error_fingerprint=enriched_log.error_fingerprint,
                         attributes=log.attributes or {},
                         sdk_version=log.sdk_version,
-                        platform=log.platform
+                        platform=log.platform,
                     )
                     await self.notification_publisher.publish_error_notification(
-                        enriched_log.project_id,
-                        notification
+                        enriched_log.project_id, notification
                     )
 
             return ingestion_pb2.IngestLogResponse(
@@ -106,9 +114,7 @@ class IngestionServicer(ingestion_pb2_grpc.IngestionServiceServicer):
             for idx, proto_log in enumerate(request.logs):
                 try:
                     log_entry = _proto_to_log_entry(proto_log)
-                    enriched_log = enricher.enrich_log_entry(
-                        log_entry, request.project_id
-                    )
+                    enriched_log = enricher.enrich_log_entry(log_entry, request.project_id)
                     enriched_logs.append(enriched_log)
                     queued += 1
 
@@ -130,13 +136,14 @@ class IngestionServicer(ingestion_pb2_grpc.IngestionServiceServicer):
                 await queue_service.enqueue_logs_batch(enriched_logs)
 
                 if self.notification_publisher:
+                    notification_tasks = []
                     for enriched_log in enriched_logs:
                         log = enriched_log.log_entry
                         if self.notification_publisher.should_notify(
                             log.level,
                             log.log_type,
                             config.settings.NOTIFICATIONS_PUBLISH_ERRORS,
-                            config.settings.NOTIFICATIONS_PUBLISH_CRITICAL
+                            config.settings.NOTIFICATIONS_PUBLISH_CRITICAL,
                         ):
                             notification = notifications.ErrorNotification(
                                 project_id=enriched_log.project_id,
@@ -148,12 +155,15 @@ class IngestionServicer(ingestion_pb2_grpc.IngestionServiceServicer):
                                 error_fingerprint=enriched_log.error_fingerprint,
                                 attributes=log.attributes or {},
                                 sdk_version=log.sdk_version,
-                                platform=log.platform
+                                platform=log.platform,
                             )
-                            await self.notification_publisher.publish_error_notification(
-                                enriched_log.project_id,
-                                notification
+                            notification_tasks.append(
+                                self.notification_publisher.publish_error_notification(
+                                    enriched_log.project_id, notification
+                                )
                             )
+                    if notification_tasks:
+                        await asyncio.gather(*notification_tasks, return_exceptions=True)
 
             error_str = "; ".join(error_messages) if error_messages else None
 
@@ -210,26 +220,21 @@ class IngestionServicer(ingestion_pb2_grpc.IngestionServiceServicer):
                 rejected += 1
                 continue
 
-            start_dt = datetime.datetime.fromtimestamp(
-                span.start_unix_nano / 1e9, tz=datetime.timezone.utc
-            )
-            end_dt = datetime.datetime.fromtimestamp(
-                span.end_unix_nano / 1e9, tz=datetime.timezone.utc
-            )
-            duration_ns = span.end_unix_nano - span.start_unix_nano
+            # Guard unix_nano parsing: a malformed/out-of-range timestamp from a
+            # single bad span must only reject that span, not blow up the whole
+            # batch (fromtimestamp raises ValueError/OverflowError/OSError on
+            # out-of-range or nonsensical values).
+            try:
+                start_dt = datetime.datetime.fromtimestamp(
+                    span.start_unix_nano / 1e9, tz=datetime.timezone.utc
+                )
+                duration_ns = span.end_unix_nano - span.start_unix_nano
+            except (ValueError, OverflowError, OSError, TypeError) as e:
+                rejected += 1
+                logger.warning(f"Invalid span timestamp for project {request.project_id}: {e}")
+                continue
 
             status_code = int(span.status)
-            attrs_json = json.dumps(dict(span.attributes))
-            events_json = json.dumps(
-                [
-                    {
-                        "name": e.name,
-                        "ts": e.ts_unix_nano,
-                        "attrs": dict(e.attrs),
-                    }
-                    for e in span.events
-                ]
-            )
 
             error_fingerprint = None
             if status_code == 2:
@@ -241,16 +246,22 @@ class IngestionServicer(ingestion_pb2_grpc.IngestionServiceServicer):
                     "span_id": span_id,
                     "trace_id": trace_id,
                     "parent_span_id": span.parent_span_id or None,
-                    "project_id": request.project_id,
                     "service_name": span.service_name[:255],
                     "name": span.name[:255],
                     "kind": int(span.kind),
-                    "start_time": start_dt,
+                    "start_time": start_dt.isoformat(),
                     "duration_ns": duration_ns,
                     "status_code": status_code,
                     "status_message": span.status_message[:500],
-                    "attributes": attrs_json,
-                    "events": events_json,
+                    "attributes": dict(span.attributes),
+                    "events": [
+                        {
+                            "name": e.name,
+                            "ts": e.ts_unix_nano,
+                            "attrs": dict(e.attrs),
+                        }
+                        for e in span.events
+                    ],
                     "error_fingerprint": error_fingerprint,
                 }
             )
@@ -258,29 +269,86 @@ class IngestionServicer(ingestion_pb2_grpc.IngestionServiceServicer):
 
         if rows:
             try:
-                async with database.get_session() as session:
-                    await session.execute(
-                        sa.text("""
-                            INSERT INTO spans (
-                                span_id, trace_id, parent_span_id, project_id,
-                                service_name, name, kind, start_time, duration_ns,
-                                status_code, status_message, attributes, events, error_fingerprint
-                            ) VALUES (
-                                :span_id, :trace_id, :parent_span_id, :project_id,
-                                :service_name, :name, :kind, :start_time, :duration_ns,
-                                :status_code, :status_message, :attributes, :events, :error_fingerprint
-                            )
-                            ON CONFLICT (span_id, start_time) DO NOTHING
-                        """),
-                        rows,
-                    )
-                    await session.commit()
+                await queue_service.enqueue_spans_envelope(request.project_id, rows)
+            except queue_service.QueueFullError as e:
+                logger.warning(f"Spans queue full for project {request.project_id}: {e}")
+                await context.abort(
+                    grpc.StatusCode.RESOURCE_EXHAUSTED,
+                    "Service temporarily unavailable - queue full",
+                )
+                return
             except Exception as e:
-                logger.error(f"Failed to insert spans batch: {e}", exc_info=True)
+                logger.error(f"Failed to enqueue spans batch: {e}", exc_info=True)
                 await context.abort(grpc.StatusCode.INTERNAL, "Failed to store spans")
                 return
 
         return ingestion_pb2.IngestSpansBatchResponse(
+            success=True, accepted=accepted, rejected=rejected
+        )
+
+    async def IngestMetricPointsBatch(
+        self,
+        request: ingestion_pb2.IngestMetricPointsBatchRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> ingestion_pb2.IngestMetricPointsBatchResponse:
+        accepted = 0
+        rejected = 0
+        rows = []
+
+        for point in request.points:
+            name = point.name.strip()[:255]
+            if not name:
+                rejected += 1
+                continue
+
+            # Guard timestamp parsing: a malformed timestamp from a single bad
+            # point must only reject that point, not blow up the whole batch.
+            try:
+                ts = datetime.datetime.fromisoformat(point.timestamp.replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                rejected += 1
+                logger.warning(
+                    f"Invalid metric point timestamp for project {request.project_id}: "
+                    f"{point.timestamp!r}"
+                )
+                continue
+
+            point_type = int(point.type)
+            tags = dict(point.tags)
+
+            rows.append(
+                {
+                    "name": name,
+                    "type": point_type,
+                    "ts": ts.isoformat(),
+                    "value": point.value if point.HasField("value") else None,
+                    "count": point.count if point.HasField("count") else None,
+                    "sum": point.sum if point.HasField("sum") else None,
+                    "bucket_counts": list(point.bucket_counts) or None,
+                    "explicit_bounds": list(point.explicit_bounds) or None,
+                    "tags": tags,
+                    "tags_hash": _compute_tags_hash(tags),
+                    "service_name": point.service_name[:255] if point.service_name else None,
+                }
+            )
+            accepted += 1
+
+        if rows:
+            try:
+                await queue_service.enqueue_metrics_envelope(request.project_id, rows)
+            except queue_service.QueueFullError as e:
+                logger.warning(f"Metrics queue full for project {request.project_id}: {e}")
+                await context.abort(
+                    grpc.StatusCode.RESOURCE_EXHAUSTED,
+                    "Service temporarily unavailable - queue full",
+                )
+                return
+            except Exception as e:
+                logger.error(f"Failed to enqueue metric points batch: {e}", exc_info=True)
+                await context.abort(grpc.StatusCode.INTERNAL, "Failed to store metric points")
+                return
+
+        return ingestion_pb2.IngestMetricPointsBatchResponse(
             success=True, accepted=accepted, rejected=rejected
         )
 
@@ -311,6 +379,9 @@ def _proto_to_log_entry(proto_log: ingestion_pb2.LogEntry) -> schemas.LogEntry:
         release=proto_log.release if proto_log.HasField("release") else None,
         sdk_version=proto_log.sdk_version if proto_log.HasField("sdk_version") else None,
         platform=proto_log.platform if proto_log.HasField("platform") else None,
-        platform_version=proto_log.platform_version if proto_log.HasField("platform_version") else None,
+        platform_version=proto_log.platform_version
+        if proto_log.HasField("platform_version")
+        else None,
         attributes=attributes,
+        log_id=proto_log.log_id if proto_log.HasField("log_id") else None,
     )

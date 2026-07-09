@@ -1,11 +1,67 @@
+import base64
 import datetime
 
 import sqlalchemy as sa
-import sqlalchemy.ext.asyncio as async_sqlalchemy
 
 import query_service.database as database
 import query_service.models as models
 import query_service.schemas as schemas
+
+
+def _encode_cursor(timestamp: datetime.datetime, log_id: int) -> str:
+    raw = f"{timestamp.isoformat()}|{log_id}"
+    return base64.urlsafe_b64encode(raw.encode()).decode()
+
+
+def _decode_cursor(cursor: str) -> tuple[datetime.datetime, int]:
+    raw = base64.urlsafe_b64decode(cursor.encode()).decode()
+    ts_str, id_str = raw.rsplit("|", 1)
+    return datetime.datetime.fromisoformat(ts_str), int(id_str)
+
+
+def _apply_log_filters(query: sa.Select, filters: schemas.LogFilters) -> sa.Select:
+    """
+    Apply the shared LogFilters where-clauses to a select() that already
+    filters on project_id. Used by query_logs() and get_log_facets() so both
+    stay in sync.
+    """
+    if filters.start_time:
+        query = query.where(models.Log.timestamp >= filters.start_time)
+    if filters.end_time:
+        query = query.where(models.Log.timestamp <= filters.end_time)
+    if filters.level:
+        query = query.where(models.Log.level == filters.level)
+    if filters.log_type:
+        query = query.where(models.Log.log_type == filters.log_type)
+    if filters.environment:
+        query = query.where(models.Log.environment == filters.environment)
+    if filters.error_fingerprint:
+        query = query.where(models.Log.error_fingerprint == filters.error_fingerprint)
+    if filters.status_class:
+        status_conditions = []
+        for sc in filters.status_class:
+            if sc == "2xx":
+                status_conditions.append(models.Log.status_code.between(200, 299))
+            elif sc == "4xx":
+                status_conditions.append(models.Log.status_code.between(400, 499))
+            elif sc == "5xx":
+                status_conditions.append(models.Log.status_code.between(500, 599))
+        if status_conditions:
+            query = query.where(sa.or_(*status_conditions))
+    if filters.search:
+        term = f"%{filters.search}%"
+        # Message/error_message are backed by GIN trigram indexes
+        # (ix_logs_message_trgm / ix_logs_error_message_trgm), so this ILIKE
+        # substring search stays index-assisted even at scale.
+        query = query.where(
+            sa.or_(
+                models.Log.method.ilike(term),
+                models.Log.path.ilike(term),
+                models.Log.message.ilike(term),
+                models.Log.error_message.ilike(term),
+            )
+        )
+    return query
 
 
 async def query_logs(
@@ -15,49 +71,23 @@ async def query_logs(
 ) -> schemas.LogsQueryResponse:
     async with database.get_logs_session() as session:
         query = sa.select(models.Log).where(models.Log.project_id == project_id)
+        query = _apply_log_filters(query, filters)
 
-        if filters.start_time:
-            query = query.where(models.Log.timestamp >= filters.start_time)
-        if filters.end_time:
-            query = query.where(models.Log.timestamp <= filters.end_time)
-        if filters.level:
-            query = query.where(models.Log.level == filters.level)
-        if filters.log_type:
-            query = query.where(models.Log.log_type == filters.log_type)
-        if filters.environment:
-            query = query.where(models.Log.environment == filters.environment)
-        if filters.error_fingerprint:
+        # Keyset (cursor) pagination takes precedence over offset: offset
+        # pagination degrades on deep pages (the DB still has to walk/skip all
+        # prior rows), and duplicate timestamps make plain OFFSET unstable
+        # across pages. The cursor is opaque to the caller - it just echoes
+        # back next_cursor from the previous response.
+        if pagination.cursor:
+            cursor_ts, cursor_id = _decode_cursor(pagination.cursor)
             query = query.where(
-                models.Log.error_fingerprint == filters.error_fingerprint
-            )
-        if filters.status_class:
-            status_conditions = []
-            for sc in filters.status_class:
-                if sc == "2xx":
-                    status_conditions.append(
-                        models.Log.status_code.between(200, 299)
-                    )
-                elif sc == "4xx":
-                    status_conditions.append(
-                        models.Log.status_code.between(400, 499)
-                    )
-                elif sc == "5xx":
-                    status_conditions.append(
-                        models.Log.status_code.between(500, 599)
-                    )
-            if status_conditions:
-                query = query.where(sa.or_(*status_conditions))
-        if filters.search:
-            term = f"%{filters.search}%"
-            query = query.where(
-                sa.or_(
-                    models.Log.method.ilike(term),
-                    models.Log.path.ilike(term),
-                )
+                sa.tuple_(models.Log.timestamp, models.Log.id) < (cursor_ts, cursor_id)
             )
 
-        query = query.order_by(models.Log.timestamp.desc())
-        query = query.limit(pagination.limit + 1).offset(pagination.offset)
+        query = query.order_by(models.Log.timestamp.desc(), models.Log.id.desc())
+        query = query.limit(pagination.limit + 1)
+        if not pagination.cursor:
+            query = query.offset(pagination.offset)
 
         result = await session.execute(query)
         logs = result.scalars().all()
@@ -66,10 +96,77 @@ async def query_logs(
         if has_more:
             logs = logs[: pagination.limit]
 
+        next_cursor = None
+        if has_more and logs:
+            last = logs[-1]
+            next_cursor = _encode_cursor(last.timestamp, last.id)
+
         return schemas.LogsQueryResponse(
             logs=[schemas.LogResponse.model_validate(log) for log in logs],
             total=None,
             has_more=has_more,
+            next_cursor=next_cursor,
+        )
+
+
+_STATUS_CLASS_EXPR = sa.case(
+    (models.Log.status_code.between(200, 299), sa.literal("2xx")),
+    (models.Log.status_code.between(300, 399), sa.literal("3xx")),
+    (models.Log.status_code.between(400, 499), sa.literal("4xx")),
+    (models.Log.status_code.between(500, 599), sa.literal("5xx")),
+    else_=sa.null(),
+)
+
+
+async def get_log_facets(
+    project_id: int,
+    filters: schemas.LogFilters,
+) -> schemas.LogFacetsResponse:
+    """
+    Aggregate counts per facet value (level, log_type, status_class,
+    environment) under the current filter set. Reuses the same
+    _apply_log_filters() where-clauses as query_logs() so facet counts always
+    match what the log table itself would show.
+    """
+    async with database.get_logs_session() as session:
+
+        def _facet_query(column: sa.ColumnElement, label: str) -> sa.Select:
+            value_col = column.label("value")
+            count_col = sa.func.count().label("count")
+            q = sa.select(value_col, count_col).where(models.Log.project_id == project_id)
+            q = _apply_log_filters(q, filters)
+            return q.group_by(value_col).order_by(count_col.desc())
+
+        def _rows_to_values(rows) -> list[schemas.LogFacetValue]:
+            return [
+                schemas.LogFacetValue(value=row.value, count=row.count)
+                for row in rows
+                if row.value is not None
+            ]
+
+        level_result = await session.execute(_facet_query(models.Log.level, "level"))
+        log_type_result = await session.execute(_facet_query(models.Log.log_type, "log_type"))
+        environment_result = await session.execute(
+            _facet_query(models.Log.environment, "environment")
+        )
+        status_class_query = sa.select(
+            _STATUS_CLASS_EXPR.label("value"), sa.func.count().label("count")
+        ).where(
+            models.Log.project_id == project_id,
+            models.Log.status_code.isnot(None),
+        )
+        status_class_query = _apply_log_filters(status_class_query, filters)
+        status_class_query = status_class_query.group_by(_STATUS_CLASS_EXPR).order_by(
+            sa.func.count().desc()
+        )
+        status_class_result = await session.execute(status_class_query)
+
+        return schemas.LogFacetsResponse(
+            project_id=project_id,
+            level=_rows_to_values(level_result.all()),
+            log_type=_rows_to_values(log_type_result.all()),
+            status_class=_rows_to_values(status_class_result.all()),
+            environment=_rows_to_values(environment_result.all()),
         )
 
 
@@ -112,9 +209,7 @@ async def search_logs(
         )
 
 
-async def get_log_by_id(
-    log_id: int, project_id: int
-) -> schemas.LogResponse | None:
+async def get_log_by_id(log_id: int, project_id: int) -> schemas.LogResponse | None:
     async with database.get_logs_session() as session:
         query = sa.select(models.Log).where(
             models.Log.id == log_id, models.Log.project_id == project_id

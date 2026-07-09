@@ -8,18 +8,22 @@ class LogFilters(pydantic.BaseModel):
     start_time: datetime.datetime | None = None
     end_time: datetime.datetime | None = None
     level: typing.Literal["debug", "info", "warning", "error", "critical"] | None = None
-    log_type: typing.Literal[
-        "console", "logger", "exception", "network", "database", "endpoint", "custom"
-    ] | None = None
+    log_type: (
+        typing.Literal[
+            "console", "logger", "exception", "network", "database", "endpoint", "custom"
+        ]
+        | None
+    ) = None
     environment: str | None = None
     error_fingerprint: str | None = None
     status_class: list[str] | None = None  # ["2xx", "4xx", "5xx"]
-    search: str | None = None              # substring match on method or path
+    search: str | None = None  # substring match on method or path
 
 
 class Pagination(pydantic.BaseModel):
     limit: int = pydantic.Field(default=100, ge=1, le=1000)
     offset: int = pydantic.Field(default=0, ge=0)
+    cursor: str | None = None  # keyset cursor; takes precedence over offset when set
 
 
 class LogResponse(pydantic.BaseModel):
@@ -61,6 +65,20 @@ class LogsQueryResponse(pydantic.BaseModel):
     logs: list[LogResponse]
     total: int | None = None
     has_more: bool
+    next_cursor: str | None = None
+
+
+class LogFacetValue(pydantic.BaseModel):
+    value: str
+    count: int
+
+
+class LogFacetsResponse(pydantic.BaseModel):
+    project_id: int
+    level: list[LogFacetValue]
+    log_type: list[LogFacetValue]
+    status_class: list[LogFacetValue]
+    environment: list[LogFacetValue]
 
 
 class ErrorGroupResponse(pydantic.BaseModel):
@@ -73,7 +91,10 @@ class ErrorGroupResponse(pydantic.BaseModel):
     last_seen: datetime.datetime
     occurrence_count: int
     status: str
+    assigned_to: int | None = None
     sample_log_id: int | None
+    resolved_at: datetime.datetime | None = None
+    resolved_in_release: str | None = None
 
     model_config = pydantic.ConfigDict(from_attributes=True)
 
@@ -83,6 +104,31 @@ class ErrorGroupResponse(pydantic.BaseModel):
         if v is not None and isinstance(v, str):
             return v.strip()
         return v
+
+
+class ErrorGroupListResponse(pydantic.BaseModel):
+    project_id: int
+    groups: list[ErrorGroupResponse]
+    total: int
+    has_more: bool
+
+
+class ErrorGroupDetailResponse(pydantic.BaseModel):
+    group: ErrorGroupResponse
+    sample_stack_trace: str | None = None
+    sample_log: LogResponse | None = None
+
+
+class ErrorOccurrenceBucket(pydantic.BaseModel):
+    bucket: datetime.datetime
+    count: int
+
+
+class ErrorOccurrenceSparklineResponse(pydantic.BaseModel):
+    project_id: int
+    fingerprint: str
+    hours: int
+    buckets: list[ErrorOccurrenceBucket]
 
 
 class ErrorRateData(pydantic.BaseModel):

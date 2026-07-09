@@ -51,9 +51,7 @@ async def compute_top_errors() -> None:
             """
             )
 
-            result = await session.execute(
-                query, {"limit": settings.ANALYTICS_TOP_ERRORS_LIMIT}
-            )
+            result = await session.execute(query, {"limit": settings.ANALYTICS_TOP_ERRORS_LIMIT})
             rows = result.fetchall()
 
             by_project: dict[int, list] = {}
@@ -86,9 +84,7 @@ async def compute_top_errors() -> None:
                 )
 
         elapsed = time.perf_counter() - start
-        logger.info(
-            f"Top errors computation done in {elapsed:.2f}s for {len(by_project)} projects"
-        )
+        logger.info(f"Top errors computation done in {elapsed:.2f}s for {len(by_project)} projects")
 
     except Exception as e:
         logger.error(f"Top errors computation failed: {e}", exc_info=True)

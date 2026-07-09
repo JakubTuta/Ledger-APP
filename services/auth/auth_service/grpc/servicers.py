@@ -1,4 +1,6 @@
+import datetime
 import json
+import secrets
 
 import grpc
 import sqlalchemy as sa
@@ -8,6 +10,8 @@ from auth_service.proto import auth_pb2, auth_pb2_grpc
 from auth_service.services import auth_service, dashboard_service
 from auth_service.utils import jwt_utils
 from redis.asyncio import Redis
+
+_MAX_SNOOZE_MINUTES = 7 * 24 * 60
 
 
 def _panel_dict_to_proto(panel: dict) -> auth_pb2.Panel:
@@ -72,8 +76,6 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
         self.auth_service = auth_service.AuthService(redis)
         self.dashboard_service = dashboard_service.DashboardService(redis)
 
-    # ==================== Account Operations ====================
-
     async def Register(
         self,
         request: auth_pb2.RegisterRequest,
@@ -95,6 +97,7 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     email=account.email,
                     plan=account.plan,
                     name=account.name,
+                    email_verification_token=account.email_verification_token or "",
                 )
 
         except ValueError as e:
@@ -120,6 +123,18 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     email=request.email,
                     password=request.password,
                 )
+
+                if account.totp_enabled:
+                    # Password verified, but a second factor is still
+                    # required. Return account identity only — the caller
+                    # (gateway) is responsible for tracking the pending
+                    # login and completing it via VerifyTOTPLogin.
+                    return auth_pb2.LoginResponse(
+                        account_id=account.id,
+                        email=account.email,
+                        plan=account.plan,
+                        requires_2fa=True,
+                    )
 
                 access_token = jwt_utils.create_access_token(
                     account_id=account.id,
@@ -229,6 +244,8 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     status=account.status,
                     name=account.name,
                     created_at=account.created_at.isoformat(),
+                    email_verified=account.email_verified,
+                    totp_enabled=account.totp_enabled,
                 )
 
         except Exception as e:
@@ -307,9 +324,7 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
 
                 proto_preferences = self._convert_to_proto_preferences(preferences)
 
-                return auth_pb2.GetNotificationPreferencesResponse(
-                    preferences=proto_preferences
-                )
+                return auth_pb2.GetNotificationPreferencesResponse(preferences=proto_preferences)
 
         except ValueError as e:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
@@ -329,9 +344,7 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
         """Update notification preferences for account."""
         try:
             async with database.get_session() as session:
-                preferences_dict = self._convert_from_proto_preferences(
-                    request.preferences
-                )
+                preferences_dict = self._convert_from_proto_preferences(request.preferences)
 
                 updated_preferences = await self.auth_service.update_notification_preferences(
                     session=session,
@@ -339,9 +352,7 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     preferences=preferences_dict,
                 )
 
-                proto_preferences = self._convert_to_proto_preferences(
-                    updated_preferences
-                )
+                proto_preferences = self._convert_to_proto_preferences(updated_preferences)
 
                 return auth_pb2.UpdateNotificationPreferencesResponse(
                     success=True, preferences=proto_preferences
@@ -357,9 +368,7 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
             context.set_details(f"Internal error: {str(e)}")
             return auth_pb2.UpdateNotificationPreferencesResponse(success=False)
 
-    def _convert_to_proto_preferences(
-        self, preferences: dict
-    ) -> auth_pb2.NotificationPreferences:
+    def _convert_to_proto_preferences(self, preferences: dict) -> auth_pb2.NotificationPreferences:
         """Convert dict preferences to protobuf NotificationPreferences."""
         projects_map = {}
         for project_id_str, settings in preferences.get("projects", {}).items():
@@ -388,7 +397,261 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
 
         return {"enabled": proto_preferences.enabled, "projects": projects}
 
-    # ==================== Project Operations ====================
+    async def VerifyEmail(
+        self,
+        request: auth_pb2.VerifyEmailRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.VerifyEmailResponse:
+        """Verify an account's email using its verification token."""
+        try:
+            async with database.get_session() as session:
+                await self.auth_service.verify_email(session=session, token=request.token)
+                return auth_pb2.VerifyEmailResponse(success=True)
+
+        except ValueError as e:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(str(e))
+            return auth_pb2.VerifyEmailResponse(success=False, error_message=str(e))
+
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.VerifyEmailResponse(success=False)
+
+    async def ResendVerificationEmail(
+        self,
+        request: auth_pb2.ResendVerificationEmailRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.ResendVerificationEmailResponse:
+        """Regenerate an account's email verification token."""
+        try:
+            async with database.get_session() as session:
+                already_verified, email, token = await self.auth_service.resend_verification_email(
+                    session=session, account_id=request.account_id
+                )
+                return auth_pb2.ResendVerificationEmailResponse(
+                    success=True,
+                    already_verified=already_verified,
+                    email=email,
+                    verification_token=token or "",
+                )
+
+        except ValueError as e:
+            context.set_code(grpc.StatusCode.NOT_FOUND)
+            context.set_details(str(e))
+            return auth_pb2.ResendVerificationEmailResponse(success=False, error_message=str(e))
+
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.ResendVerificationEmailResponse(success=False)
+
+    async def Setup2FA(
+        self,
+        request: auth_pb2.Setup2FARequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.Setup2FAResponse:
+        """Generate a pending TOTP secret + provisioning URI (not yet enabled)."""
+        try:
+            async with database.get_session() as session:
+                secret, provisioning_uri = await self.auth_service.setup_2fa(
+                    session=session, account_id=request.account_id
+                )
+                return auth_pb2.Setup2FAResponse(secret=secret, provisioning_uri=provisioning_uri)
+
+        except ValueError as e:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(str(e))
+            return auth_pb2.Setup2FAResponse()
+
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.Setup2FAResponse()
+
+    async def Verify2FASetup(
+        self,
+        request: auth_pb2.Verify2FASetupRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.Verify2FASetupResponse:
+        """Verify the pending TOTP secret and enable 2FA."""
+        try:
+            async with database.get_session() as session:
+                backup_codes = await self.auth_service.verify_2fa_setup(
+                    session=session,
+                    account_id=request.account_id,
+                    code=request.code,
+                )
+                return auth_pb2.Verify2FASetupResponse(success=True, backup_codes=backup_codes)
+
+        except ValueError as e:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(str(e))
+            return auth_pb2.Verify2FASetupResponse(success=False, error_message=str(e))
+
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.Verify2FASetupResponse(success=False)
+
+    async def Disable2FA(
+        self,
+        request: auth_pb2.Disable2FARequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.Disable2FAResponse:
+        """Disable 2FA for the account (requires current password)."""
+        try:
+            async with database.get_session() as session:
+                await self.auth_service.disable_2fa(
+                    session=session,
+                    account_id=request.account_id,
+                    password=request.password,
+                )
+                return auth_pb2.Disable2FAResponse(success=True)
+
+        except ValueError as e:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(str(e))
+            return auth_pb2.Disable2FAResponse(success=False, error_message=str(e))
+
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.Disable2FAResponse(success=False)
+
+    async def VerifyTOTPLogin(
+        self,
+        request: auth_pb2.VerifyTOTPLoginRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.VerifyTOTPLoginResponse:
+        """Complete a login that was pending a second factor."""
+        try:
+            async with database.get_session() as session:
+                account = await self.auth_service.verify_totp_code_or_backup(
+                    session=session,
+                    account_id=request.account_id,
+                    code=request.code,
+                )
+
+                access_token = jwt_utils.create_access_token(
+                    account_id=account.id, email=account.email
+                )
+                refresh_token, _ = await self.auth_service.create_refresh_token(
+                    session=session,
+                    account_id=account.id,
+                    device_info=request.device_info or None,
+                )
+
+                settings = config.get_settings()
+                expires_in = settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60
+
+                return auth_pb2.VerifyTOTPLoginResponse(
+                    success=True,
+                    access_token=access_token,
+                    refresh_token=refresh_token,
+                    expires_in=expires_in,
+                    account_id=account.id,
+                    email=account.email,
+                )
+
+        except ValueError as e:
+            context.set_code(grpc.StatusCode.UNAUTHENTICATED)
+            context.set_details(str(e))
+            return auth_pb2.VerifyTOTPLoginResponse(success=False, error_message=str(e))
+
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.VerifyTOTPLoginResponse(success=False)
+
+    async def ListSessions(
+        self,
+        request: auth_pb2.ListSessionsRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.ListSessionsResponse:
+        """List the caller's active refresh-token sessions."""
+        try:
+            async with database.get_session() as session:
+                sessions = await self.auth_service.list_sessions(
+                    session=session,
+                    account_id=request.account_id,
+                    current_raw_token=request.current_refresh_token
+                    if request.HasField("current_refresh_token")
+                    else None,
+                )
+
+                current_hash = (
+                    jwt_utils.hash_refresh_token(request.current_refresh_token)
+                    if request.HasField("current_refresh_token")
+                    else None
+                )
+
+                session_infos = [
+                    auth_pb2.SessionInfo(
+                        id=s.id,
+                        device_info=s.device_info,
+                        created_at=s.created_at.isoformat(),
+                        last_used_at=s.last_used_at.isoformat() if s.last_used_at else None,
+                        expires_at=s.expires_at.isoformat(),
+                        is_current=current_hash is not None and s.token_hash == current_hash,
+                    )
+                    for s in sessions
+                ]
+
+                return auth_pb2.ListSessionsResponse(sessions=session_infos)
+
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.ListSessionsResponse()
+
+    async def RevokeSession(
+        self,
+        request: auth_pb2.RevokeSessionRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.RevokeSessionResponse:
+        """Revoke a single session belonging to the caller."""
+        try:
+            async with database.get_session() as session:
+                await self.auth_service.revoke_session(
+                    session=session,
+                    account_id=request.account_id,
+                    session_id=request.session_id,
+                )
+                return auth_pb2.RevokeSessionResponse(success=True)
+
+        except ValueError as e:
+            context.set_code(grpc.StatusCode.NOT_FOUND)
+            context.set_details(str(e))
+            return auth_pb2.RevokeSessionResponse(success=False, error_message=str(e))
+
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.RevokeSessionResponse(success=False)
+
+    async def RevokeAllSessions(
+        self,
+        request: auth_pb2.RevokeAllSessionsRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.RevokeAllSessionsResponse:
+        """Revoke all of the caller's sessions, optionally excluding the current one."""
+        try:
+            async with database.get_session() as session:
+                count = await self.auth_service.revoke_all_sessions(
+                    session=session,
+                    account_id=request.account_id,
+                    current_raw_token=request.current_refresh_token
+                    if request.HasField("current_refresh_token")
+                    else None,
+                    include_current=request.include_current,
+                )
+                return auth_pb2.RevokeAllSessionsResponse(revoked_count=count)
+
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.RevokeAllSessionsResponse()
 
     async def CreateProject(
         self,
@@ -492,7 +755,45 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
             context.set_details(f"Internal error: {str(e)}")
             return auth_pb2.GetProjectByIdResponse()
 
-    # ==================== API Key Operations ====================
+    async def UpdateProject(
+        self,
+        request: auth_pb2.UpdateProjectRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.UpdateProjectResponse:
+        """Update a project's retention/quota settings (owner only)."""
+        try:
+            async with database.get_session() as session:
+                project = await self.auth_service.update_project(
+                    session=session,
+                    project_id=request.project_id,
+                    requester_account_id=request.requester_account_id,
+                    retention_days=(
+                        request.retention_days if request.HasField("retention_days") else None
+                    ),
+                    daily_quota=(request.daily_quota if request.HasField("daily_quota") else None),
+                )
+                await session.commit()
+
+                return auth_pb2.UpdateProjectResponse(
+                    project_id=project.id,
+                    name=project.name,
+                    slug=project.slug,
+                    environment=project.environment,
+                    retention_days=project.retention_days,
+                    daily_quota=project.daily_quota,
+                )
+        except PermissionError as e:
+            context.set_code(grpc.StatusCode.PERMISSION_DENIED)
+            context.set_details(str(e))
+            return auth_pb2.UpdateProjectResponse()
+        except ValueError as e:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(str(e))
+            return auth_pb2.UpdateProjectResponse()
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.UpdateProjectResponse()
 
     async def CreateApiKey(
         self,
@@ -567,19 +868,31 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
         request: auth_pb2.RevokeApiKeyRequest,
         context: grpc.aio.ServicerContext,
     ) -> auth_pb2.RevokeApiKeyResponse:
-        """Revoke API key."""
+        """Revoke API key (owner-only when requester_account_id is set)."""
         try:
             async with database.get_session() as session:
                 await self.auth_service.revoke_api_key(
                     session=session,
                     key_id=request.key_id,
+                    requester_account_id=request.requester_account_id or None,
                 )
 
                 return auth_pb2.RevokeApiKeyResponse(success=True)
 
+        except PermissionError as e:
+            context.set_code(grpc.StatusCode.PERMISSION_DENIED)
+            context.set_details(str(e))
+            return auth_pb2.RevokeApiKeyResponse(success=False)
+
         except ValueError as e:
             context.set_code(grpc.StatusCode.NOT_FOUND)
             context.set_details(str(e))
+            return auth_pb2.RevokeApiKeyResponse(success=False)
+
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.RevokeApiKeyResponse(success=False)
 
     async def ListApiKeys(
         self,
@@ -616,8 +929,6 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f"Internal error: {str(e)}")
             return auth_pb2.ListApiKeysResponse()
-
-    # ==================== Project Sharing Operations ====================
 
     async def GenerateInviteCode(
         self,
@@ -782,8 +1093,6 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
             context.set_details(f"Internal error: {str(e)}")
             return auth_pb2.GetProjectRoleResponse(is_member=False, role="")
 
-    # ==================== Usage Tracking Operations ====================
-
     async def GetDailyUsage(
         self,
         request: auth_pb2.GetDailyUsageRequest,
@@ -813,8 +1122,6 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f"Internal error: {str(e)}")
             return auth_pb2.GetDailyUsageResponse(log_count=0, date=request.date)
-
-    # ==================== Dashboard Panel Operations ====================
 
     async def GetDashboardPanels(
         self,
@@ -848,7 +1155,12 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
             async with database.get_session() as session:
                 req_layout = None
                 if request.HasField("layout"):
-                    req_layout = {"x": request.layout.x, "y": request.layout.y, "w": request.layout.w, "h": request.layout.h}
+                    req_layout = {
+                        "x": request.layout.x,
+                        "y": request.layout.y,
+                        "w": request.layout.w,
+                        "h": request.layout.h,
+                    }
 
                 panel = await self.dashboard_service.create_dashboard_panel(
                     session=session,
@@ -865,9 +1177,15 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     statistic=request.statistic if request.statistic else None,
                     layout=req_layout,
                     trace_id=request.trace_id if request.HasField("trace_id") else None,
-                    service_filter=request.service_filter if request.HasField("service_filter") else None,
-                    operation_filter=request.operation_filter if request.HasField("operation_filter") else None,
-                    min_duration_ms=request.min_duration_ms if request.HasField("min_duration_ms") else None,
+                    service_filter=request.service_filter
+                    if request.HasField("service_filter")
+                    else None,
+                    operation_filter=request.operation_filter
+                    if request.HasField("operation_filter")
+                    else None,
+                    min_duration_ms=request.min_duration_ms
+                    if request.HasField("min_duration_ms")
+                    else None,
                     has_error=request.has_error if request.HasField("has_error") else None,
                     status_class=request.status_class if request.HasField("status_class") else None,
                     logs_search=request.logs_search if request.HasField("logs_search") else None,
@@ -895,7 +1213,12 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
             async with database.get_session() as session:
                 req_layout = None
                 if request.HasField("layout"):
-                    req_layout = {"x": request.layout.x, "y": request.layout.y, "w": request.layout.w, "h": request.layout.h}
+                    req_layout = {
+                        "x": request.layout.x,
+                        "y": request.layout.y,
+                        "w": request.layout.w,
+                        "h": request.layout.h,
+                    }
 
                 panel = await self.dashboard_service.update_dashboard_panel(
                     session=session,
@@ -913,9 +1236,15 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     statistic=request.statistic if request.statistic else None,
                     layout=req_layout,
                     trace_id=request.trace_id if request.HasField("trace_id") else None,
-                    service_filter=request.service_filter if request.HasField("service_filter") else None,
-                    operation_filter=request.operation_filter if request.HasField("operation_filter") else None,
-                    min_duration_ms=request.min_duration_ms if request.HasField("min_duration_ms") else None,
+                    service_filter=request.service_filter
+                    if request.HasField("service_filter")
+                    else None,
+                    operation_filter=request.operation_filter
+                    if request.HasField("operation_filter")
+                    else None,
+                    min_duration_ms=request.min_duration_ms
+                    if request.HasField("min_duration_ms")
+                    else None,
                     has_error=request.has_error if request.HasField("has_error") else None,
                     status_class=request.status_class if request.HasField("status_class") else None,
                     logs_search=request.logs_search if request.HasField("logs_search") else None,
@@ -958,8 +1287,6 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f"Internal error: {str(e)}")
             return auth_pb2.DeleteDashboardPanelResponse(success=False)
-
-    # ==================== Dashboard Tab Operations ====================
 
     async def GetDashboardTabs(
         self,
@@ -1008,8 +1335,6 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
             context.set_details(f"Internal error: {str(e)}")
             return auth_pb2.SaveDashboardTabsResponse(success=False)
 
-    # ==================== Notification Inbox Operations ====================
-
     async def ListNotifications(
         self,
         request: auth_pb2.ListNotificationsRequest,
@@ -1031,9 +1356,7 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                 has_more = len(rows) > limit
                 rows = rows[:limit]
                 items = [_notification_to_proto(n) for n in rows]
-                return auth_pb2.ListNotificationsResponse(
-                    notifications=items, has_more=has_more
-                )
+                return auth_pb2.ListNotificationsResponse(notifications=items, has_more=has_more)
         except Exception as e:
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f"Internal error: {str(e)}")
@@ -1098,9 +1421,7 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     .values(read_at=sa.func.now())
                 )
                 await session.commit()
-                return auth_pb2.MarkAllNotificationsReadResponse(
-                    updated_count=result.rowcount
-                )
+                return auth_pb2.MarkAllNotificationsReadResponse(updated_count=result.rowcount)
         except Exception as e:
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f"Internal error: {str(e)}")
@@ -1154,8 +1475,6 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
             context.set_details(f"Internal error: {str(e)}")
             return auth_pb2.CreateNotificationResponse()
 
-    # ==================== Alert Rule Operations ====================
-
     async def ListAlertRules(
         self,
         request: auth_pb2.ListAlertRulesRequest,
@@ -1170,9 +1489,7 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                 )
                 rules = result.scalars().all()
                 proto_rules = [
-                    _alert_rule_to_proto(
-                        r, await _connector_ids_for_rule(session, r.id)
-                    )
+                    _alert_rule_to_proto(r, await _connector_ids_for_rule(session, r.id))
                     for r in rules
                 ]
                 return auth_pb2.ListAlertRulesResponse(rules=proto_rules)
@@ -1223,16 +1540,22 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     severity=_SEVERITY_INT_TO_STR.get(request.severity, "warning"),
                     enabled=True,
                     state="ok",
+                    escalation_after_minutes=(
+                        request.escalation_after_minutes
+                        if request.HasField("escalation_after_minutes")
+                        else None
+                    ),
+                    escalate_connector_id=(
+                        request.escalate_connector_id
+                        if request.HasField("escalate_connector_id")
+                        else None
+                    ),
                 )
                 session.add(rule)
                 await session.flush()
                 connector_ids = list(request.connector_ids)
                 for cid in connector_ids:
-                    session.add(
-                        models.AlertRuleConnector(
-                            rule_id=rule.id, connector_id=cid
-                        )
-                    )
+                    session.add(models.AlertRuleConnector(rule_id=rule.id, connector_id=cid))
                 await session.commit()
                 await session.refresh(rule)
                 return auth_pb2.CreateAlertRuleResponse(
@@ -1270,13 +1593,20 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                 if request.HasField("unit"):
                     rule.unit = request.unit
                 if request.HasField("severity"):
-                    rule.severity = _SEVERITY_INT_TO_STR.get(
-                        request.severity, rule.severity
-                    )
+                    rule.severity = _SEVERITY_INT_TO_STR.get(request.severity, rule.severity)
                 if request.HasField("comparator"):
                     rule.comparator = request.comparator
                 if request.HasField("metric"):
                     rule.metric_type = request.metric
+                if request.HasField("escalation_after_minutes"):
+                    rule.escalation_after_minutes = request.escalation_after_minutes
+                if (
+                    request.HasField("clear_escalate_connector_id")
+                    and request.clear_escalate_connector_id
+                ):
+                    rule.escalate_connector_id = None
+                elif request.HasField("escalate_connector_id"):
+                    rule.escalate_connector_id = request.escalate_connector_id
                 if request.HasField("update_connectors") and request.update_connectors:
                     await session.execute(
                         sa.delete(models.AlertRuleConnector).where(
@@ -1284,11 +1614,7 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                         )
                     )
                     for cid in request.connector_ids:
-                        session.add(
-                            models.AlertRuleConnector(
-                                rule_id=rule.id, connector_id=cid
-                            )
-                        )
+                        session.add(models.AlertRuleConnector(rule_id=rule.id, connector_id=cid))
                 await session.commit()
                 await session.refresh(rule)
                 connector_ids = await _connector_ids_for_rule(session, rule.id)
@@ -1319,8 +1645,6 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f"Internal error: {str(e)}")
             return auth_pb2.DeleteAlertRuleResponse(success=False)
-
-    # ==================== Connector Operations ====================
 
     async def ListConnectors(
         self,
@@ -1402,9 +1726,7 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                 session.add(connector)
                 await session.commit()
                 await session.refresh(connector)
-                return auth_pb2.CreateConnectorResponse(
-                    connector=_connector_to_proto(connector)
-                )
+                return auth_pb2.CreateConnectorResponse(connector=_connector_to_proto(connector))
         except Exception as e:
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f"Internal error: {str(e)}")
@@ -1435,14 +1757,13 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                 if request.HasField("config"):
                     new_config = json.loads(request.config) if request.config else {}
                     existing = dict(connector.config or {})
-                    if "hmac_secret" in existing and "hmac_secret" not in new_config:
-                        new_config["hmac_secret"] = existing["hmac_secret"]
+                    for field in _CONNECTOR_SECRET_FIELDS:
+                        if field in existing and field not in new_config:
+                            new_config[field] = existing[field]
                     connector.config = new_config
                 await session.commit()
                 await session.refresh(connector)
-                return auth_pb2.UpdateConnectorResponse(
-                    connector=_connector_to_proto(connector)
-                )
+                return auth_pb2.UpdateConnectorResponse(connector=_connector_to_proto(connector))
         except Exception as e:
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f"Internal error: {str(e)}")
@@ -1467,8 +1788,6 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f"Internal error: {str(e)}")
             return auth_pb2.DeleteConnectorResponse(success=False)
-
-    # ==================== Alert Event History ====================
 
     async def ListAlertEvents(
         self,
@@ -1497,7 +1816,70 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
             context.set_details(f"Internal error: {str(e)}")
             return auth_pb2.ListAlertEventsResponse()
 
-    # ==================== Alert Notification Preference Operations ====================
+    async def AckAlertEvent(
+        self,
+        request: auth_pb2.AckAlertEventRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.AckAlertEventResponse:
+        try:
+            async with database.get_session() as session:
+                result = await session.execute(
+                    sa.select(models.AlertEvent).where(models.AlertEvent.id == request.event_id)
+                )
+                event = result.scalar_one_or_none()
+                if event is None or event.project_id != request.project_id:
+                    return auth_pb2.AckAlertEventResponse(
+                        success=False, error_message="Alert event not found"
+                    )
+
+                event.acked_by = request.account_id
+                event.acked_at = datetime.datetime.now(datetime.timezone.utc)
+                await session.commit()
+                await session.refresh(event)
+
+                return auth_pb2.AckAlertEventResponse(
+                    success=True, event=_alert_event_to_proto(event)
+                )
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.AckAlertEventResponse(success=False, error_message=str(e))
+
+    async def SnoozeAlertEvent(
+        self,
+        request: auth_pb2.SnoozeAlertEventRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.SnoozeAlertEventResponse:
+        try:
+            if request.minutes <= 0 or request.minutes > _MAX_SNOOZE_MINUTES:
+                return auth_pb2.SnoozeAlertEventResponse(
+                    success=False,
+                    error_message=f"minutes must be between 1 and {_MAX_SNOOZE_MINUTES}",
+                )
+
+            async with database.get_session() as session:
+                result = await session.execute(
+                    sa.select(models.AlertEvent).where(models.AlertEvent.id == request.event_id)
+                )
+                event = result.scalar_one_or_none()
+                if event is None or event.project_id != request.project_id:
+                    return auth_pb2.SnoozeAlertEventResponse(
+                        success=False, error_message="Alert event not found"
+                    )
+
+                event.snoozed_until = datetime.datetime.now(
+                    datetime.timezone.utc
+                ) + datetime.timedelta(minutes=request.minutes)
+                await session.commit()
+                await session.refresh(event)
+
+                return auth_pb2.SnoozeAlertEventResponse(
+                    success=True, event=_alert_event_to_proto(event)
+                )
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.SnoozeAlertEventResponse(success=False, error_message=str(e))
 
     async def GetAlertNotificationPreferences(
         self,
@@ -1530,9 +1912,7 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
             async with database.get_session() as session:
                 severity_map = {0: None, 1: "info", 2: "warning", 3: "critical"}
                 severity_str = (
-                    severity_map.get(request.severity)
-                    if request.HasField("severity")
-                    else None
+                    severity_map.get(request.severity) if request.HasField("severity") else None
                 )
                 rule_id = request.rule_id if request.HasField("rule_id") else None
                 channels_dict = (
@@ -1554,9 +1934,7 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                         else models.NotificationPreference.severity == None  # noqa: E711
                     ),
                 )
-                await session.execute(
-                    sa.delete(models.NotificationPreference).where(*delete_cond)
-                )
+                await session.execute(sa.delete(models.NotificationPreference).where(*delete_cond))
                 session.add(
                     models.NotificationPreference(
                         user_id=request.user_id,
@@ -1595,8 +1973,280 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
             context.set_details(f"Internal error: {str(e)}")
             return auth_pb2.UpsertAlertNotificationPreferenceResponse()
 
+    async def ListMaintenanceWindows(
+        self,
+        request: auth_pb2.ListMaintenanceWindowsRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.ListMaintenanceWindowsResponse:
+        try:
+            async with database.get_session() as session:
+                result = await session.execute(
+                    sa.select(models.MaintenanceWindow)
+                    .where(models.MaintenanceWindow.project_id == request.project_id)
+                    .order_by(models.MaintenanceWindow.starts_at.desc())
+                )
+                windows = result.scalars().all()
+                return auth_pb2.ListMaintenanceWindowsResponse(
+                    windows=[_maintenance_window_to_proto(w) for w in windows]
+                )
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.ListMaintenanceWindowsResponse()
 
-# ==================== Proto conversion helpers ====================
+    async def CreateMaintenanceWindow(
+        self,
+        request: auth_pb2.CreateMaintenanceWindowRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.CreateMaintenanceWindowResponse:
+        try:
+            async with database.get_session() as session:
+                recurrence = request.recurrence if request.HasField("recurrence") else None
+                window = models.MaintenanceWindow(
+                    project_id=request.project_id,
+                    name=request.name,
+                    starts_at=datetime.datetime.fromisoformat(request.starts_at),
+                    ends_at=datetime.datetime.fromisoformat(request.ends_at),
+                    recurrence=recurrence if recurrence else None,
+                )
+                session.add(window)
+                await session.commit()
+                await session.refresh(window)
+                return auth_pb2.CreateMaintenanceWindowResponse(
+                    window=_maintenance_window_to_proto(window)
+                )
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.CreateMaintenanceWindowResponse()
+
+    async def DeleteMaintenanceWindow(
+        self,
+        request: auth_pb2.DeleteMaintenanceWindowRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.DeleteMaintenanceWindowResponse:
+        try:
+            async with database.get_session() as session:
+                await session.execute(
+                    sa.delete(models.MaintenanceWindow).where(
+                        models.MaintenanceWindow.id == request.window_id,
+                        models.MaintenanceWindow.project_id == request.project_id,
+                    )
+                )
+                await session.commit()
+                return auth_pb2.DeleteMaintenanceWindowResponse(success=True)
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.DeleteMaintenanceWindowResponse(success=False)
+
+    async def CreateMonitor(
+        self,
+        request: auth_pb2.CreateMonitorRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.CreateMonitorResponse:
+        """Create an uptime (http) or heartbeat monitor."""
+        try:
+            if request.kind not in ("http", "heartbeat"):
+                context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+                context.set_details("kind must be 'http' or 'heartbeat'")
+                return auth_pb2.CreateMonitorResponse()
+
+            async with database.get_session() as session:
+                token = secrets.token_urlsafe(24) if request.kind == "heartbeat" else None
+                monitor = models.Monitor(
+                    project_id=request.project_id,
+                    kind=request.kind,
+                    name=request.name,
+                    target_url=(request.target_url if request.HasField("target_url") else None),
+                    token=token,
+                    interval_s=request.interval_s or 60,
+                    timeout_s=request.timeout_s or 10,
+                    expected_status=request.expected_status or 200,
+                    grace_s=request.grace_s or 0,
+                    enabled=True,
+                    state="unknown",
+                )
+                session.add(monitor)
+                await session.commit()
+                await session.refresh(monitor)
+                return auth_pb2.CreateMonitorResponse(monitor=_monitor_to_proto(monitor))
+
+        except ValueError as e:
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details(str(e))
+            return auth_pb2.CreateMonitorResponse()
+
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.CreateMonitorResponse()
+
+    async def ListMonitors(
+        self,
+        request: auth_pb2.ListMonitorsRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.ListMonitorsResponse:
+        """List monitors for a project with latest status + 24h uptime %."""
+        try:
+            async with database.get_session() as session:
+                result = await session.execute(
+                    sa.select(models.Monitor)
+                    .where(models.Monitor.project_id == request.project_id)
+                    .order_by(models.Monitor.id)
+                )
+                monitors = result.scalars().all()
+
+                proto_monitors = []
+                for m in monitors:
+                    status = await _monitor_status(session, m.id)
+                    proto_monitors.append(_monitor_to_proto(m, status))
+
+                return auth_pb2.ListMonitorsResponse(monitors=proto_monitors)
+
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.ListMonitorsResponse()
+
+    async def UpdateMonitor(
+        self,
+        request: auth_pb2.UpdateMonitorRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.UpdateMonitorResponse:
+        """Update a monitor's configuration."""
+        try:
+            async with database.get_session() as session:
+                result = await session.execute(
+                    sa.select(models.Monitor).where(
+                        models.Monitor.id == request.monitor_id,
+                        models.Monitor.project_id == request.project_id,
+                    )
+                )
+                monitor = result.scalar_one_or_none()
+                if not monitor:
+                    context.set_code(grpc.StatusCode.NOT_FOUND)
+                    context.set_details("Monitor not found")
+                    return auth_pb2.UpdateMonitorResponse()
+
+                if request.HasField("name"):
+                    monitor.name = request.name
+                if request.HasField("target_url"):
+                    monitor.target_url = request.target_url
+                if request.HasField("interval_s"):
+                    monitor.interval_s = request.interval_s
+                if request.HasField("timeout_s"):
+                    monitor.timeout_s = request.timeout_s
+                if request.HasField("expected_status"):
+                    monitor.expected_status = request.expected_status
+                if request.HasField("grace_s"):
+                    monitor.grace_s = request.grace_s
+                if request.HasField("enabled"):
+                    monitor.enabled = request.enabled
+
+                await session.commit()
+                await session.refresh(monitor)
+                status = await _monitor_status(session, monitor.id)
+                return auth_pb2.UpdateMonitorResponse(monitor=_monitor_to_proto(monitor, status))
+
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.UpdateMonitorResponse()
+
+    async def DeleteMonitor(
+        self,
+        request: auth_pb2.DeleteMonitorRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.DeleteMonitorResponse:
+        """Delete a monitor (and its checks, via cascade)."""
+        try:
+            async with database.get_session() as session:
+                await session.execute(
+                    sa.delete(models.Monitor).where(
+                        models.Monitor.id == request.monitor_id,
+                        models.Monitor.project_id == request.project_id,
+                    )
+                )
+                await session.commit()
+                return auth_pb2.DeleteMonitorResponse(success=True)
+
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.DeleteMonitorResponse(success=False)
+
+    async def GetMonitorByToken(
+        self,
+        request: auth_pb2.GetMonitorByTokenRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.GetMonitorByTokenResponse:
+        """Look up a heartbeat monitor by its public ping token."""
+        try:
+            async with database.get_session() as session:
+                result = await session.execute(
+                    sa.select(models.Monitor).where(
+                        models.Monitor.token == request.token,
+                        models.Monitor.kind == "heartbeat",
+                    )
+                )
+                monitor = result.scalar_one_or_none()
+                if not monitor:
+                    return auth_pb2.GetMonitorByTokenResponse(found=False)
+                return auth_pb2.GetMonitorByTokenResponse(
+                    found=True, monitor=_monitor_to_proto(monitor)
+                )
+
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.GetMonitorByTokenResponse(found=False)
+
+    async def RecordHeartbeatPing(
+        self,
+        request: auth_pb2.RecordHeartbeatPingRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> auth_pb2.RecordHeartbeatPingResponse:
+        """Record a heartbeat ping event as a monitor_checks row (ok=True).
+
+        State transitions (down -> up) and alerting are handled by the
+        analytics service's periodic monitor checker job, not here, so this
+        stays a fast, side-effect-light write path for the public ping
+        endpoint.
+        """
+        try:
+            async with database.get_session() as session:
+                result = await session.execute(
+                    sa.select(models.Monitor).where(
+                        models.Monitor.token == request.token,
+                        models.Monitor.kind == "heartbeat",
+                    )
+                )
+                monitor = result.scalar_one_or_none()
+                if not monitor:
+                    return auth_pb2.RecordHeartbeatPingResponse(
+                        success=False, error_message="Monitor not found"
+                    )
+                if not monitor.enabled:
+                    return auth_pb2.RecordHeartbeatPingResponse(
+                        success=False, error_message="Monitor is disabled"
+                    )
+
+                session.add(
+                    models.MonitorCheck(
+                        monitor_id=monitor.id,
+                        checked_at=datetime.datetime.now(datetime.timezone.utc),
+                        ok=True,
+                    )
+                )
+                await session.commit()
+                return auth_pb2.RecordHeartbeatPingResponse(success=True)
+
+        except Exception as e:
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Internal error: {str(e)}")
+            return auth_pb2.RecordHeartbeatPingResponse(success=False, error_message=str(e))
+
 
 def _severity_str_to_int(s: str) -> int:
     return {"info": 0, "warning": 1, "critical": 2}.get(s, 0)
@@ -1618,9 +2268,7 @@ def _notification_to_proto(n: models.Notification) -> auth_pb2.NotificationItem:
     return item
 
 
-def _alert_rule_to_proto(
-    r: models.AlertRule, connector_ids: list[int]
-) -> auth_pb2.AlertRule:
+def _alert_rule_to_proto(r: models.AlertRule, connector_ids: list[int]) -> auth_pb2.AlertRule:
     rule = auth_pb2.AlertRule(
         id=r.id,
         project_id=r.project_id,
@@ -1637,12 +2285,20 @@ def _alert_rule_to_proto(
     )
     if r.last_fired_at:
         rule.last_fired_at = r.last_fired_at.isoformat()
+    if r.escalation_after_minutes is not None:
+        rule.escalation_after_minutes = r.escalation_after_minutes
+    if r.escalate_connector_id is not None:
+        rule.escalate_connector_id = r.escalate_connector_id
     return rule
+
+
+_CONNECTOR_SECRET_FIELDS = ("hmac_secret", "integration_key", "api_key")
 
 
 def _connector_to_proto(c: models.Connector) -> auth_pb2.Connector:
     config_safe = dict(c.config or {})
-    config_safe.pop("hmac_secret", None)
+    for field in _CONNECTOR_SECRET_FIELDS:
+        config_safe.pop(field, None)
     return auth_pb2.Connector(
         id=c.id,
         account_id=c.account_id,
@@ -1670,7 +2326,30 @@ def _alert_event_to_proto(e: models.AlertEvent) -> auth_pb2.AlertEvent:
     )
     if e.rule_id is not None:
         event.rule_id = e.rule_id
+    if e.acked_by is not None:
+        event.acked_by = e.acked_by
+    if e.acked_at is not None:
+        event.acked_at = e.acked_at.isoformat()
+    if e.snoozed_until is not None:
+        event.snoozed_until = e.snoozed_until.isoformat()
     return event
+
+
+def _maintenance_window_to_proto(
+    w: models.MaintenanceWindow,
+) -> auth_pb2.MaintenanceWindow:
+    window = auth_pb2.MaintenanceWindow(
+        id=w.id,
+        project_id=w.project_id,
+        name=w.name,
+        starts_at=w.starts_at.isoformat(),
+        ends_at=w.ends_at.isoformat(),
+        created_at=w.created_at.isoformat(),
+        updated_at=w.updated_at.isoformat(),
+    )
+    if w.recurrence:
+        window.recurrence = w.recurrence
+    return window
 
 
 _SEVERITY_INT_TO_STR = {0: "info", 1: "warning", 2: "critical"}
@@ -1701,3 +2380,75 @@ def _notif_pref_to_proto(
     if p.severity is not None:
         pref.severity = _severity_str_to_int(p.severity)
     return pref
+
+
+def _monitor_to_proto(m: models.Monitor, status: dict | None = None) -> auth_pb2.Monitor:
+    monitor = auth_pb2.Monitor(
+        id=m.id,
+        project_id=m.project_id,
+        kind=m.kind,
+        name=m.name,
+        interval_s=m.interval_s,
+        timeout_s=m.timeout_s,
+        expected_status=m.expected_status,
+        grace_s=m.grace_s,
+        enabled=m.enabled,
+        state=m.state,
+        created_at=m.created_at.isoformat(),
+        updated_at=m.updated_at.isoformat(),
+        uptime_pct_24h=(status or {}).get("uptime_pct_24h") or 0.0,
+    )
+    if m.target_url is not None:
+        monitor.target_url = m.target_url
+    if m.token is not None:
+        monitor.token = m.token
+    if status:
+        if status.get("last_checked_at") is not None:
+            monitor.last_checked_at = status["last_checked_at"]
+        if status.get("last_ok") is not None:
+            monitor.last_ok = status["last_ok"]
+        if status.get("last_latency_ms") is not None:
+            monitor.last_latency_ms = status["last_latency_ms"]
+    return monitor
+
+
+async def _monitor_status(session: "sa.ext.asyncio.AsyncSession", monitor_id: int) -> dict:
+    """Latest check + 24h uptime % for a monitor, computed from monitor_checks."""
+    latest_result = await session.execute(
+        sa.text(
+            """
+            SELECT checked_at, ok, latency_ms
+            FROM monitor_checks
+            WHERE monitor_id = :mid
+            ORDER BY checked_at DESC
+            LIMIT 1
+            """
+        ),
+        {"mid": monitor_id},
+    )
+    latest = latest_result.fetchone()
+
+    since = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=24)
+    uptime_result = await session.execute(
+        sa.text(
+            """
+            SELECT
+                COUNT(*) FILTER (WHERE ok) AS ok_count,
+                COUNT(*) AS total_count
+            FROM monitor_checks
+            WHERE monitor_id = :mid AND checked_at >= :since
+            """
+        ),
+        {"mid": monitor_id, "since": since},
+    )
+    row = uptime_result.fetchone()
+    ok_count = (row[0] or 0) if row else 0
+    total_count = (row[1] or 0) if row else 0
+    uptime_pct = (100.0 * ok_count / total_count) if total_count > 0 else 0.0
+
+    return {
+        "last_checked_at": latest[0].isoformat() if latest else None,
+        "last_ok": bool(latest[1]) if latest else None,
+        "last_latency_ms": latest[2] if latest and latest[2] is not None else None,
+        "uptime_pct_24h": uptime_pct,
+    }

@@ -1,15 +1,39 @@
-import pytest
+import asyncio
+
+import pytest_asyncio
+
+import tests.db_setup as db_setup
 
 
-@pytest.fixture
-def mock_settings():
-    from analytics_workers.config import Settings
+def pytest_configure(config):
+    if not hasattr(config, "workerinput"):
+        asyncio.run(db_setup.setup_test_databases())
 
-    return Settings(
-        ENV="test",
-        DEBUG=True,
-        ERROR_RATE_TTL=600,
-        LOG_VOLUME_TTL=600,
-        TOP_ERRORS_TTL=900,
-        USAGE_STATS_TTL=3600,
-    )
+
+def pytest_unconfigure(config):
+    if not hasattr(config, "workerinput"):
+        asyncio.run(db_setup.teardown_test_databases())
+
+
+@pytest_asyncio.fixture
+async def test_dbs():
+    dbs = await db_setup.get_test_dbs()
+    try:
+        await db_setup.clear_test_databases()
+    except Exception as e:
+        print(f"Error clearing tables, recreating: {e}")
+        try:
+            await dbs.create_tables()
+            await db_setup.clear_test_databases()
+        except Exception as e2:
+            print(f"Error creating tables: {e2}")
+            raise
+
+    import analytics_workers.database as database
+
+    database.auth_session_maker = dbs.auth.session_factory
+    database.auth_engine = dbs.auth.engine
+    database.logs_session_maker = dbs.logs.session_factory
+    database.logs_engine = dbs.logs.engine
+
+    yield dbs

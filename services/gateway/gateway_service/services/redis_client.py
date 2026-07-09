@@ -9,11 +9,21 @@ from redis.exceptions import RedisError
 
 logger = logging.getLogger(__name__)
 
+_QUOTA_CONSUME_LUA = """
+local current = redis.call('INCRBY', KEYS[1], ARGV[1])
+if current == tonumber(ARGV[1]) then
+    redis.call('EXPIRE', KEYS[1], ARGV[3])
+end
+if current > tonumber(ARGV[2]) then
+    redis.call('DECRBY', KEYS[1], ARGV[1])
+    return {0, current - tonumber(ARGV[1])}
+end
+return {1, current}
+"""
+
 
 class RedisClient:
-    def __init__(
-        self, url: str, max_connections: int = 50, decode_responses: bool = False
-    ):
+    def __init__(self, url: str, max_connections: int = 50, decode_responses: bool = False):
         self.url = url
         self.max_connections = max_connections
         self.decode_responses = decode_responses
@@ -51,8 +61,6 @@ class RedisClient:
         except RedisError:
             return False
 
-    # ==================== CACHING OPERATIONS ====================
-
     async def get_cached_api_key(self, api_key: str) -> typing.Optional[typing.Dict]:
         cache_key = self._api_key_cache_key(api_key)
 
@@ -85,14 +93,13 @@ class RedisClient:
     async def get_stale_cache(self, api_key: str) -> typing.Optional[typing.Dict]:
         return await self.get_cached_api_key(api_key)
 
-    # ==================== RATE LIMITING OPERATIONS ====================
-
     async def check_rate_limit(
         self,
         entity_id: int,
         limit_per_minute: int,
         limit_per_hour: int,
         key_prefix: str = "project",
+        amount: int = 1,
     ) -> tuple[bool, typing.Dict]:
         import time
 
@@ -102,9 +109,9 @@ class RedisClient:
 
         try:
             pipe = self.client.pipeline()  # type: ignore
-            pipe.incr(minute_key)
+            pipe.incrby(minute_key, amount)
             pipe.expire(minute_key, 60)
-            pipe.incr(hour_key)
+            pipe.incrby(hour_key, amount)
             pipe.expire(hour_key, 3600)
 
             minute_count, _, hour_count, _ = await pipe.execute()
@@ -154,6 +161,38 @@ class RedisClient:
         except RedisError as e:
             logger.error(f"Redis DELETE project_access error: {e}")
 
+    # Short-lived (~5 min) mapping from an opaque totp_session_token to the
+    # account_id it belongs to, created after password verification when an
+    # account has 2FA enabled and consumed by /accounts/2fa/login.
+
+    _TOTP_SESSION_TTL = 300
+
+    def _totp_session_key(self, totp_session_token: str) -> str:
+        return f"totp_session:{totp_session_token}"
+
+    async def set_totp_session(
+        self, totp_session_token: str, account_id: int, ttl: int = _TOTP_SESSION_TTL
+    ):
+        key = self._totp_session_key(totp_session_token)
+        try:
+            await self.client.setex(key, ttl, str(account_id))  # type: ignore
+        except RedisError as e:
+            logger.error(f"Redis SETEX totp_session error: {e}")
+
+    async def get_totp_session(self, totp_session_token: str) -> typing.Optional[int]:
+        key = self._totp_session_key(totp_session_token)
+        try:
+            val = await self.client.get(key)  # type: ignore
+            if val is None:
+                return None
+            return int(val)
+        except (RedisError, ValueError) as e:
+            logger.error(f"Redis GET totp_session error: {e}")
+            return None
+
+    async def delete_totp_session(self, totp_session_token: str):
+        await self.delete(self._totp_session_key(totp_session_token))
+
     async def get_daily_usage(self, project_id: int) -> int:
         import datetime
 
@@ -168,22 +207,29 @@ class RedisClient:
             logger.error(f"Get daily usage error: {e}")
             return 0
 
-    async def increment_daily_usage(self, project_id: int, amount: int = 1):
+    async def try_consume_quota(
+        self, project_id: int, amount: int, daily_quota: int
+    ) -> tuple[bool, int]:
+        """Atomically reserve `amount` against the daily quota.
+
+        Returns (allowed, usage_after). On denial the reservation is rolled back
+        so usage reflects only accepted items, avoiding the increment-after-accept
+        race where a burst could overshoot the quota by a full request.
+        """
         import datetime
 
         today = datetime.date.today().strftime("%Y%m%d")
         key = f"usage:{project_id}:{today}"
 
         try:
-            pipe = self.client.pipeline()  # type: ignore
-            pipe.incrby(key, amount)
-            pipe.expire(key, 48 * 3600)
-            await pipe.execute()
+            allowed, usage = await self.client.eval(  # type: ignore
+                _QUOTA_CONSUME_LUA, 1, key, amount, daily_quota, 48 * 3600
+            )
+            return bool(allowed), int(usage)
 
         except RedisError as e:
-            logger.error(f"Increment usage error: {e}")
-
-    # ==================== CIRCUIT BREAKER STATE ====================
+            logger.error(f"Quota consume error: {e}")
+            return True, 0
 
     async def get_circuit_state(self, service_name: str) -> str:
         key = f"circuit:{service_name}:state"
@@ -227,11 +273,7 @@ class RedisClient:
         except RedisError as e:
             logger.error(f"Reset failures error: {e}")
 
-    # ==================== BATCH OPERATIONS ====================
-
-    async def batch_get(
-        self, keys: typing.List[str]
-    ) -> typing.List[typing.Optional[bytes]]:
+    async def batch_get(self, keys: typing.List[str]) -> typing.List[typing.Optional[bytes]]:
         if not keys:
             return []
 
@@ -262,8 +304,6 @@ class RedisClient:
 
         except RedisError as e:
             logger.error(f"Batch SET error: {e}")
-
-    # ==================== HELPER METHODS ====================
 
     def _api_key_cache_key(self, api_key: str) -> str:
         key_hash = hashlib.sha256(api_key.encode()).hexdigest()
@@ -306,8 +346,6 @@ class RedisClient:
 
         except RedisError as e:
             logger.error(f"Clear pattern error: {e}")
-
-    # ==================== STATISTICS ====================
 
     async def get_stats(self) -> typing.Dict[str, typing.Any]:
         try:

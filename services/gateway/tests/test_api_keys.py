@@ -1,6 +1,5 @@
 import grpc
 import pytest
-from gateway_service.proto import auth_pb2
 
 from .test_base import BaseGatewayTest
 
@@ -11,7 +10,7 @@ class TestCreateApiKey(BaseGatewayTest):
 
     async def test_create_api_key_success(self):
         """Test successful API key creation."""
-        api_key = "test_api_key_123"
+        api_key = "ledger_test_api_key_123"
         await self.mock_redis.set_cached_api_key(
             api_key,
             {
@@ -42,7 +41,7 @@ class TestCreateApiKey(BaseGatewayTest):
 
     async def test_create_api_key_with_name(self):
         """Test API key creation with custom name."""
-        api_key = "test_api_key_123"
+        api_key = "ledger_test_api_key_123"
         await self.mock_redis.set_cached_api_key(
             api_key,
             {
@@ -74,7 +73,7 @@ class TestCreateApiKey(BaseGatewayTest):
 
     async def test_create_api_key_project_not_found(self):
         """Test creating API key for non-existent project."""
-        api_key = "test_api_key_123"
+        api_key = "ledger_test_api_key_123"
         await self.mock_redis.set_cached_api_key(
             api_key,
             {
@@ -89,7 +88,7 @@ class TestCreateApiKey(BaseGatewayTest):
 
         stub = self.get_mock_auth_stub()
 
-        async def mock_create_not_found(request):
+        async def mock_create_not_found(request, timeout=None):
             error = grpc.RpcError()
             error.code = lambda: grpc.StatusCode.NOT_FOUND
             error.details = lambda: f"Project {request.project_id} not found"
@@ -109,7 +108,7 @@ class TestCreateApiKey(BaseGatewayTest):
 
     async def test_create_api_key_permission_denied(self):
         """Test creating API key for project user doesn't own."""
-        api_key = "test_api_key_123"
+        api_key = "ledger_test_api_key_123"
         await self.mock_redis.set_cached_api_key(
             api_key,
             {
@@ -124,7 +123,7 @@ class TestCreateApiKey(BaseGatewayTest):
 
         stub = self.get_mock_auth_stub()
 
-        async def mock_create_forbidden(request):
+        async def mock_create_forbidden(request, timeout=None):
             error = grpc.RpcError()
             error.code = lambda: grpc.StatusCode.PERMISSION_DENIED
             error.details = lambda: "You don't have permission"
@@ -154,7 +153,7 @@ class TestCreateApiKey(BaseGatewayTest):
 
     async def test_create_api_key_validation_empty_name(self):
         """Test API key name validation."""
-        api_key = "test_api_key_123"
+        api_key = "ledger_test_api_key_123"
         await self.mock_redis.set_cached_api_key(
             api_key,
             {
@@ -178,7 +177,7 @@ class TestCreateApiKey(BaseGatewayTest):
 
     async def test_create_api_key_validation_long_name(self):
         """Test API key name length validation."""
-        api_key = "test_api_key_123"
+        api_key = "ledger_test_api_key_123"
         await self.mock_redis.set_cached_api_key(
             api_key,
             {
@@ -209,7 +208,7 @@ class TestRevokeApiKey(BaseGatewayTest):
 
     async def test_revoke_api_key_success(self):
         """Test successful API key revocation."""
-        api_key = "test_api_key_123"
+        api_key = "ledger_test_api_key_123"
         await self.mock_redis.set_cached_api_key(
             api_key,
             {
@@ -235,7 +234,7 @@ class TestRevokeApiKey(BaseGatewayTest):
 
     async def test_revoke_api_key_not_found(self):
         """Test revoking non-existent API key."""
-        api_key = "test_api_key_123"
+        api_key = "ledger_test_api_key_123"
         await self.mock_redis.set_cached_api_key(
             api_key,
             {
@@ -250,7 +249,7 @@ class TestRevokeApiKey(BaseGatewayTest):
 
         stub = self.get_mock_auth_stub()
 
-        async def mock_revoke_not_found(request):
+        async def mock_revoke_not_found(request, timeout=None):
             error = grpc.RpcError()
             error.code = lambda: grpc.StatusCode.NOT_FOUND
             error.details = lambda: f"API key {request.key_id} not found"
@@ -269,7 +268,7 @@ class TestRevokeApiKey(BaseGatewayTest):
 
     async def test_revoke_api_key_permission_denied(self):
         """Test revoking API key user doesn't own."""
-        api_key = "test_api_key_123"
+        api_key = "ledger_test_api_key_123"
         await self.mock_redis.set_cached_api_key(
             api_key,
             {
@@ -284,7 +283,7 @@ class TestRevokeApiKey(BaseGatewayTest):
 
         stub = self.get_mock_auth_stub()
 
-        async def mock_revoke_forbidden(request):
+        async def mock_revoke_forbidden(request, timeout=None):
             error = grpc.RpcError()
             error.code = lambda: grpc.StatusCode.PERMISSION_DENIED
             error.details = lambda: "You don't have permission"
@@ -310,7 +309,7 @@ class TestRevokeApiKey(BaseGatewayTest):
 
     async def test_revoke_api_key_cache_invalidation(self):
         """Test that revoking API key should invalidate cache."""
-        api_key = "test_api_key_123"
+        api_key = "ledger_test_api_key_123"
         await self.mock_redis.set_cached_api_key(
             api_key,
             {
@@ -373,10 +372,13 @@ class TestApiKeyValidation(BaseGatewayTest):
                 },
             )
 
+            # X-API-Key is the format-agnostic auth path (unlike Authorization:
+            # Bearer, which only classifies ledger_-prefixed tokens as API keys
+            # and treats everything else as a session JWT) - this test is about
+            # whether varied key *contents* are accepted, not header classification.
             response = await self.client.get(
                 "/api/v1/projects",
-                headers={"Authorization": f"Bearer {key}"},
+                headers={"X-API-Key": key},
             )
 
             assert response.status_code == 200
-            print(f"✅ Valid API key format accepted: {key[:20]}...")

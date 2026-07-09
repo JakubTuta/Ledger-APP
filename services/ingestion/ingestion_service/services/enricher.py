@@ -12,9 +12,7 @@ def generate_error_fingerprint(log_entry: schemas.LogEntry) -> str | None:
     stack_frames = parse_stack_trace(log_entry.stack_trace)
 
     first_three_frames = stack_frames[:3]
-    frame_signature = "|".join(
-        [f"{frame['file']}:{frame['line']}" for frame in first_three_frames]
-    )
+    frame_signature = "|".join([f"{frame['file']}:{frame['line']}" for frame in first_three_frames])
 
     platform = log_entry.platform or "unknown"
     error_type = log_entry.error_type or "UnknownError"
@@ -47,9 +45,7 @@ def parse_stack_trace(stack_trace: str) -> list[dict[str, str]]:
     return frames
 
 
-def enrich_log_entry(
-    log_entry: schemas.LogEntry, project_id: int
-) -> schemas.EnrichedLogEntry:
+def enrich_log_entry(log_entry: schemas.LogEntry, project_id: int) -> schemas.EnrichedLogEntry:
     error_fingerprint = generate_error_fingerprint(log_entry)
 
     return schemas.EnrichedLogEntry(

@@ -57,7 +57,9 @@ def print_report(report: result_models.RunReport) -> None:
         print(f"Duration:     {phase.duration_s:.1f}s")
         print(f"Accepted:     {phase.accepted}")
         print(f"Rejected:     {phase.rejected}")
-        print(f"Errors:       {phase.errors.total} (429={phase.errors.rate_429} 503={phase.errors.queue_503} 500={phase.errors.server_500} transport={phase.errors.transport})")
+        print(
+            f"Errors:       {phase.errors.total} (429={phase.errors.rate_429} 503={phase.errors.queue_503} 500={phase.errors.server_500} transport={phase.errors.transport})"
+        )
         print(f"Ingress rate: {phase.ingress_rate:.0f} logs/s")
         print(f"Latency p50:  {phase.latency.p50_ms:.1f}ms")
         print(f"Latency p99:  {phase.latency.p99_ms:.1f}ms")
@@ -82,6 +84,7 @@ def print_report(report: result_models.RunReport) -> None:
 
 def write_json(report: result_models.RunReport, path: str) -> None:
     import os
+
     os.makedirs(os.path.dirname(path), exist_ok=True) if os.path.dirname(path) else None
     data = report.model_dump()
     with open(path, "w", encoding="utf-8") as f:

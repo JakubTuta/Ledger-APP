@@ -3,7 +3,10 @@
 
 param(
     [Parameter(Position=0)]
-    [string]$Command = "help"
+    [string]$Command = "help",
+
+    [Parameter(Position=1, ValueFromRemainingArguments=$true)]
+    [string[]]$Rest = @()
 )
 
 function Load-EnvFile {
@@ -44,6 +47,7 @@ function Show-Help {
     Write-Host "  test-ingestion - Run ingestion service tests"
     Write-Host "  test-analytics - Run analytics workers tests"
     Write-Host "  test-query   - Run query service tests"
+    Write-Host "  test-e2e     - Run the end-to-end suite against a live stack (requires 'up' first)"
     Write-Host "  benchmark    - Measure max sustainable ingestion logs/s (auto-ramp, gzip, fresh key, DB verify)"
     Write-Host ""
     Write-Host "Production:" -ForegroundColor Yellow
@@ -168,6 +172,36 @@ function Run-Tests {
     Write-Host "All tests passed" -ForegroundColor Green
 }
 
+function Run-E2ETests {
+    if (-not (Test-Path "venv")) {
+        Write-Host "Virtual environment not found. Run '.\Make.ps1 setup' first." -ForegroundColor Red
+        exit 1
+    }
+
+    $baseUrl = if ($env:E2E_BASE_URL) { $env:E2E_BASE_URL } else { "http://localhost:8020" }
+    Write-Host "Checking stack health at $baseUrl/health..." -ForegroundColor Cyan
+    try {
+        $response = Invoke-WebRequest -Uri "$baseUrl/health" -TimeoutSec 5 -UseBasicParsing
+        if ($response.StatusCode -ne 200) { throw "unhealthy" }
+    } catch {
+        Write-Host "Stack is not reachable/healthy at $baseUrl. Run '.\Make.ps1 up' first." -ForegroundColor Red
+        exit 1
+    }
+
+    $python = Get-VenvPython
+    Write-Host "Running E2E suite (local-only, no CI job) against $baseUrl..." -ForegroundColor Cyan
+    Push-Location "tests\e2e"
+    & $python -m pytest . -v
+    $exitCode = $LASTEXITCODE
+    Pop-Location
+
+    if ($exitCode -ne 0) {
+        Write-Host "E2E tests failed" -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "All E2E tests passed" -ForegroundColor Green
+}
+
 function Run-Benchmark {
     if (-not (Test-Path "venv")) {
         Write-Host "Virtual environment not found. Run '.\Make.ps1 setup' first." -ForegroundColor Red
@@ -264,6 +298,7 @@ switch ($Command.ToLower()) {
     "test-ingestion"   { Run-Tests -Service "ingestion" }
     "test-analytics"   { Run-Tests -Service "analytics" }
     "test-query"       { Run-Tests -Service "query" }
+    "test-e2e"         { Run-E2ETests }
     "benchmark"        { Run-Benchmark }
     "prod-deploy"      { Run-ProdDeploy }
     "prod-up"          { Start-ProdServices }

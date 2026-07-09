@@ -2,12 +2,16 @@ import pydantic
 
 
 class GenerateInviteCodeResponse(pydantic.BaseModel):
-    code: str = pydantic.Field(..., description="Invite code (format: XXXX-XXXX-XXXX). Valid for 1 hour.")
+    code: str = pydantic.Field(
+        ..., description="Invite code (format: XXXX-XXXX-XXXX). Valid for 1 hour."
+    )
     expires_at: str = pydantic.Field(..., description="Expiration time (ISO 8601)")
 
 
 class AcceptInviteCodeRequest(pydantic.BaseModel):
-    code: str = pydantic.Field(..., min_length=1, description="Invite code (with or without dashes)")
+    code: str = pydantic.Field(
+        ..., min_length=1, description="Invite code (with or without dashes)"
+    )
 
 
 class AcceptInviteCodeResponse(pydantic.BaseModel):

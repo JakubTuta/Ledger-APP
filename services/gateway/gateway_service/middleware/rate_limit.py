@@ -1,11 +1,10 @@
 import logging
 import typing
 
-from fastapi import HTTPException, Request, status
-from gateway_service import config
-from gateway_service.services import redis_client
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from fastapi import HTTPException, status
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 logger = logging.getLogger(__name__)
 
@@ -14,11 +13,20 @@ _SESSION_RATE_LIMIT_PER_HOUR = 10_000
 _NEGATIVE_KEY_CACHE_TTL = 30
 
 
-class RateLimitMiddleware(BaseHTTPMiddleware):
+class RateLimitMiddleware:
     EXEMPT_PATHS = {
         "/health",
         "/health/deep",
         "/metrics",
+    }
+
+    # OTLP routes reserve quota atomically per-item before forwarding to gRPC and
+    # report denials as an OTLP partial-success response (200), not a hard error -
+    # a hard 402 here would make OTel exporters treat it as retriable and retry-storm.
+    DAILY_QUOTA_EXEMPT_PATHS = {
+        "/v1/logs",
+        "/v1/traces",
+        "/v1/metrics",
     }
 
     READ_METHODS = {
@@ -27,25 +35,42 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         "OPTIONS",
     }
 
-    def __init__(self, app):
-        super().__init__(app)
+    def __init__(self, app: ASGIApp):
+        self.app = app
         self._total_requests = 0
         self._rate_limited_requests = 0
 
-    async def dispatch(self, request: Request, call_next) -> Response:
-        if self._is_exempt_path(request.url.path):
-            return await call_next(request)
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
 
-        self.redis = request.app.state.redis_client
+        scope["app"].state.rate_limit_middleware = self
+
+        if self._is_exempt_path(scope["path"]):
+            await self.app(scope, receive, send)
+            return
+
+        self.redis = scope["app"].state.redis_client
+        request = Request(scope, receive=receive)
 
         if not hasattr(request.state, "project_id"):
-            return await call_next(request)
+            await self.app(scope, receive, send)
+            return
 
         self._total_requests += 1
+        project_id = request.state.project_id
+        extra_headers: dict[str, str] = {}
 
+        # Only the rate-limit bookkeeping itself is inside this try — the
+        # downstream `self.app(...)` call is deliberately outside it and made
+        # exactly once below. Wrapping the downstream call in this try would
+        # mean any unrelated exception raised by a route (a bug, a bad mock
+        # in tests, anything) gets caught here and triggers a *second* call
+        # to self.app with the same `receive` channel, which has already been
+        # drained by the first call — the retry then hangs forever awaiting a
+        # body message that will never arrive.
         try:
-            project_id = request.state.project_id
-
             if project_id is None:
                 account_id = getattr(request.state, "account_id", None)
                 if account_id:
@@ -55,34 +80,48 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                         _SESSION_RATE_LIMIT_PER_HOUR,
                         key_prefix="session",
                     )
-                return await call_next(request)
+            else:
+                rate_limits = request.state.rate_limits
+                daily_quota = request.state.daily_quota
 
-            rate_limits = request.state.rate_limits
-            daily_quota = request.state.daily_quota
+                await self._check_rate_limits(
+                    project_id, rate_limits["per_minute"], rate_limits["per_hour"]
+                )
 
-            await self._check_rate_limits(
-                project_id, rate_limits["per_minute"], rate_limits["per_hour"]
-            )
+                if request.url.path not in self.DAILY_QUOTA_EXEMPT_PATHS:
+                    await self._check_daily_quota(project_id, daily_quota)
 
-            await self._check_daily_quota(project_id, daily_quota)
-
-            response = await call_next(request)
-
-            self._add_rate_limit_headers(response, project_id, rate_limits)
-
-            return response
+                extra_headers = {
+                    "X-RateLimit-Limit-Minute": str(rate_limits["per_minute"]),
+                    "X-RateLimit-Limit-Hour": str(rate_limits["per_hour"]),
+                }
 
         except HTTPException as exc:
-            from starlette.responses import JSONResponse
-
-            return JSONResponse(
+            response = JSONResponse(
                 status_code=exc.status_code,
                 content={"detail": exc.detail},
                 headers=getattr(exc, "headers", None),
             )
+            await response(scope, receive, send)
+            return
         except Exception as e:
+            # Fail open: a bug in rate-limit bookkeeping itself must not block
+            # traffic. Falls through to the single downstream call below.
             logger.error(f"Rate limit middleware error: {e}", exc_info=True)
-            return await call_next(request)
+
+        if not extra_headers:
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_headers(message: dict) -> None:
+            if message["type"] == "http.response.start":
+                headers = list(message.get("headers", []))
+                for key, value in extra_headers.items():
+                    headers.append((key.encode(), value.encode()))
+                message = {**message, "headers": headers}
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
 
     def _is_exempt_path(self, path: str) -> bool:
         return path in self.EXEMPT_PATHS
@@ -141,8 +180,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         if current_usage >= daily_quota:
             logger.warning(
-                f"Project {project_id} exceeded daily quota: "
-                f"{current_usage}/{daily_quota}"
+                f"Project {project_id} exceeded daily quota: {current_usage}/{daily_quota}"
             )
 
             raise HTTPException(
@@ -150,18 +188,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 detail=f"Daily quota exceeded: {current_usage}/{daily_quota}",
             )
 
-    def _add_rate_limit_headers(
-        self, response: Response, project_id: int, rate_limits: typing.Dict
-    ):
-        response.headers["X-RateLimit-Limit-Minute"] = str(rate_limits["per_minute"])
-        response.headers["X-RateLimit-Limit-Hour"] = str(rate_limits["per_hour"])
-
     def get_stats(self) -> typing.Dict:
         rate_limited_percentage = 0.0
         if self._total_requests > 0:
-            rate_limited_percentage = (
-                self._rate_limited_requests / self._total_requests
-            ) * 100
+            rate_limited_percentage = (self._rate_limited_requests / self._total_requests) * 100
 
         return {
             "total_requests": self._total_requests,
@@ -169,5 +199,3 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             "rate_limited_percentage": round(rate_limited_percentage, 2),
             "target_rate_limit_percentage": 1.0,
         }
-
-

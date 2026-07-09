@@ -23,7 +23,10 @@ VALID_PERIODS = {"today", "last7days", "last30days", "currentWeek", "currentMont
 async def get_health_summary(
     request: fastapi.Request,
     project_ids: typing.List[str] = fastapi.Query(..., description="One or more project IDs"),
-    period: str = fastapi.Query("today", description="Time range preset: today | last7days | last30days | currentWeek | currentMonth | currentYear"),
+    period: str = fastapi.Query(
+        "today",
+        description="Time range preset: today | last7days | last30days | currentWeek | currentMonth | currentYear",
+    ),
     account_id: int = fastapi.Depends(dependencies.get_current_account_id),
 ) -> schemas.HealthSummaryResponse:
     if period not in VALID_PERIODS:

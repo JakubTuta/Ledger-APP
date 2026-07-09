@@ -31,12 +31,9 @@ class TestRegisterEndpoint(BaseGatewayTest):
         """Test registering with duplicate email returns 409."""
         stub = self.get_mock_auth_stub()
 
-        async def mock_register_duplicate(request):
-            raise grpc.RpcError()
-
         original_register = stub.Register
 
-        async def register_with_error(request):
+        async def register_with_error(request, timeout=None):
             error = grpc.RpcError()
             error.code = lambda: grpc.StatusCode.ALREADY_EXISTS
             error.details = lambda: "Email already registered"
@@ -183,7 +180,7 @@ class TestLoginEndpoint(BaseGatewayTest):
         """Test login with invalid credentials."""
         stub = self.get_mock_auth_stub()
 
-        async def mock_login_invalid(request):
+        async def mock_login_invalid(request, timeout=None):
             error = grpc.RpcError()
             error.code = lambda: grpc.StatusCode.UNAUTHENTICATED
             error.details = lambda: "Invalid credentials"
@@ -223,8 +220,7 @@ class TestLogoutEndpoint(BaseGatewayTest):
 
     async def test_logout_success(self):
         """Test successful logout."""
-        token = "test_token_123"
-        await self.mock_redis.setex(f"session:{token}", 3600, '{"account_id": 1}')
+        token = self.make_session_token(account_id=1)
 
         response = await self.client.post(
             "/api/v1/accounts/logout",
@@ -232,9 +228,7 @@ class TestLogoutEndpoint(BaseGatewayTest):
         )
 
         assert response.status_code == 204
-        session_data = await self.mock_redis.get(f"session:{token}")
-        assert session_data is None
-        print("✅ Logout successful, session cleared")
+        assert not response.cookies.get("refresh_token")
 
     async def test_logout_without_token(self):
         """Test logout without authorization header."""
@@ -242,7 +236,6 @@ class TestLogoutEndpoint(BaseGatewayTest):
 
         assert response.status_code == 401
         assert "authorization" in response.json()["detail"].lower()
-        print("✅ Logout without token rejected")
 
 
 @pytest.mark.asyncio
@@ -251,36 +244,23 @@ class TestGetCurrentAccount(BaseGatewayTest):
 
     async def test_get_account_success(self):
         """Test getting current account."""
-        api_key = "test_api_key_123"
-        await self.mock_redis.set_cached_api_key(
-            api_key,
-            {
-                "project_id": 1,
-                "account_id": 1,
-                "rate_limit_per_minute": 1000,
-                "rate_limit_per_hour": 50000,
-                "daily_quota": 1000000,
-                "current_usage": 0,
-            },
-        )
+        token = self.make_session_token(account_id=1)
 
         response = await self.client.get(
             "/api/v1/accounts/me",
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers={"Authorization": f"Bearer {token}"},
         )
 
         assert response.status_code == 200
         data = response.json()
         assert data["account_id"] == 1
         assert data["email"] == "test@example.com"
-        print("✅ Current account info retrieved")
 
     async def test_get_account_without_auth(self):
         """Test getting account without authentication."""
         response = await self.client.get("/api/v1/accounts/me")
 
         assert response.status_code == 401
-        print("✅ Unauthenticated request rejected")
 
 
 @pytest.mark.asyncio
@@ -289,10 +269,7 @@ class TestUpdateAccountName(BaseGatewayTest):
 
     async def test_update_name_success(self):
         """Test successful name update."""
-        token = "test_token_123"
-        await self.mock_redis.setex(
-            f"session:{token}", 3600, '{"account_id": 1}'
-        )
+        token = self.make_session_token(account_id=1)
 
         response = await self.client.patch(
             "/api/v1/accounts/me/name",
@@ -304,7 +281,6 @@ class TestUpdateAccountName(BaseGatewayTest):
         data = response.json()
         assert data["name"] == "Updated Name"
         assert "message" in data
-        print("✅ Account name updated successfully")
 
     async def test_update_name_without_auth(self):
         """Test updating name without authentication."""
@@ -314,14 +290,10 @@ class TestUpdateAccountName(BaseGatewayTest):
         )
 
         assert response.status_code == 401
-        print("✅ Unauthenticated name update rejected")
 
     async def test_update_name_empty_fails(self):
         """Test updating name with empty string fails."""
-        token = "test_token_123"
-        await self.mock_redis.setex(
-            f"session:{token}", 3600, '{"account_id": 1}'
-        )
+        token = self.make_session_token(account_id=1)
 
         response = await self.client.patch(
             "/api/v1/accounts/me/name",
@@ -330,14 +302,10 @@ class TestUpdateAccountName(BaseGatewayTest):
         )
 
         assert response.status_code == 422
-        print("✅ Empty name rejected")
 
     async def test_update_name_too_long_fails(self):
         """Test updating name that's too long fails."""
-        token = "test_token_123"
-        await self.mock_redis.setex(
-            f"session:{token}", 3600, '{"account_id": 1}'
-        )
+        token = self.make_session_token(account_id=1)
 
         long_name = "a" * 256
         response = await self.client.patch(
@@ -347,18 +315,14 @@ class TestUpdateAccountName(BaseGatewayTest):
         )
 
         assert response.status_code == 422
-        print("✅ Name that's too long rejected")
 
     async def test_update_name_grpc_error(self):
         """Test handling gRPC errors."""
-        token = "test_token_123"
-        await self.mock_redis.setex(
-            f"session:{token}", 3600, '{"account_id": 1}'
-        )
+        token = self.make_session_token(account_id=1)
 
         stub = self.get_mock_auth_stub()
 
-        async def mock_update_error(request):
+        async def mock_update_error(request, timeout=None):
             error = grpc.RpcError()
             error.code = lambda: grpc.StatusCode.INVALID_ARGUMENT
             error.details = lambda: "Invalid name"
@@ -374,7 +338,6 @@ class TestUpdateAccountName(BaseGatewayTest):
 
         assert response.status_code == 400
         assert "invalid" in response.json()["detail"].lower()
-        print("✅ gRPC error handled correctly")
 
 
 @pytest.mark.asyncio
@@ -383,10 +346,7 @@ class TestChangePassword(BaseGatewayTest):
 
     async def test_change_password_success(self):
         """Test successful password change."""
-        token = "test_token_123"
-        await self.mock_redis.setex(
-            f"session:{token}", 3600, '{"account_id": 1}'
-        )
+        token = self.make_session_token(account_id=1)
 
         response = await self.client.post(
             "/api/v1/accounts/me/password",
@@ -400,7 +360,6 @@ class TestChangePassword(BaseGatewayTest):
         assert response.status_code == 200
         data = response.json()
         assert "message" in data
-        print("✅ Password changed successfully")
 
     async def test_change_password_without_auth(self):
         """Test changing password without authentication."""
@@ -413,14 +372,10 @@ class TestChangePassword(BaseGatewayTest):
         )
 
         assert response.status_code == 401
-        print("✅ Unauthenticated password change rejected")
 
     async def test_change_password_weak_new_password(self):
         """Test changing to a weak password fails."""
-        token = "test_token_123"
-        await self.mock_redis.setex(
-            f"session:{token}", 3600, '{"account_id": 1}'
-        )
+        token = self.make_session_token(account_id=1)
 
         response = await self.client.post(
             "/api/v1/accounts/me/password",
@@ -432,14 +387,10 @@ class TestChangePassword(BaseGatewayTest):
         )
 
         assert response.status_code == 422
-        print("✅ Weak password rejected")
 
     async def test_change_password_no_uppercase(self):
         """Test new password without uppercase fails."""
-        token = "test_token_123"
-        await self.mock_redis.setex(
-            f"session:{token}", 3600, '{"account_id": 1}'
-        )
+        token = self.make_session_token(account_id=1)
 
         response = await self.client.post(
             "/api/v1/accounts/me/password",
@@ -452,14 +403,10 @@ class TestChangePassword(BaseGatewayTest):
 
         assert response.status_code == 422
         assert "uppercase" in str(response.json()).lower()
-        print("✅ Password without uppercase rejected")
 
     async def test_change_password_no_lowercase(self):
         """Test new password without lowercase fails."""
-        token = "test_token_123"
-        await self.mock_redis.setex(
-            f"session:{token}", 3600, '{"account_id": 1}'
-        )
+        token = self.make_session_token(account_id=1)
 
         response = await self.client.post(
             "/api/v1/accounts/me/password",
@@ -472,14 +419,10 @@ class TestChangePassword(BaseGatewayTest):
 
         assert response.status_code == 422
         assert "lowercase" in str(response.json()).lower()
-        print("✅ Password without lowercase rejected")
 
     async def test_change_password_no_digit(self):
         """Test new password without digit fails."""
-        token = "test_token_123"
-        await self.mock_redis.setex(
-            f"session:{token}", 3600, '{"account_id": 1}'
-        )
+        token = self.make_session_token(account_id=1)
 
         response = await self.client.post(
             "/api/v1/accounts/me/password",
@@ -492,18 +435,14 @@ class TestChangePassword(BaseGatewayTest):
 
         assert response.status_code == 422
         assert "digit" in str(response.json()).lower()
-        print("✅ Password without digit rejected")
 
     async def test_change_password_wrong_old_password(self):
         """Test changing password with wrong old password."""
-        token = "test_token_123"
-        await self.mock_redis.setex(
-            f"session:{token}", 3600, '{"account_id": 1}'
-        )
+        token = self.make_session_token(account_id=1)
 
         stub = self.get_mock_auth_stub()
 
-        async def mock_wrong_old_password(request):
+        async def mock_wrong_old_password(request, timeout=None):
             error = grpc.RpcError()
             error.code = lambda: grpc.StatusCode.INVALID_ARGUMENT
             error.details = lambda: "Current password is incorrect"
@@ -522,4 +461,3 @@ class TestChangePassword(BaseGatewayTest):
 
         assert response.status_code == 400
         assert "incorrect" in response.json()["detail"].lower()
-        print("✅ Wrong old password rejected")

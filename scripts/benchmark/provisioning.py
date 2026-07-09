@@ -68,12 +68,30 @@ async def _warmup_api_key(
     One serial warmup request ensures the key is cached as STRING before load starts.
     """
     warmup_log = {
-        "logs": [
+        "resourceLogs": [
             {
-                "timestamp": "2026-01-01T00:00:00Z",
-                "level": "debug",
-                "log_type": "console",
-                "message": "benchmark warmup",
+                "resource": {
+                    "attributes": [
+                        {"key": "service.name", "value": {"stringValue": "benchmark"}},
+                    ]
+                },
+                "scopeLogs": [
+                    {
+                        "logRecords": [
+                            {
+                                "severityNumber": 5,
+                                "severityText": "DEBUG",
+                                "body": {"stringValue": "benchmark warmup"},
+                                "attributes": [
+                                    {
+                                        "key": "ledger.log_type",
+                                        "value": {"stringValue": "console"},
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                ],
             }
         ]
     }
@@ -83,7 +101,7 @@ async def _warmup_api_key(
     }
     try:
         await client.post(
-            f"{cfg.base_url}/api/v1/ingest/batch",
+            f"{cfg.base_url}/v1/logs",
             content=json.dumps(warmup_log).encode(),
             headers=headers,
             timeout=15.0,

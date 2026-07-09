@@ -81,9 +81,7 @@ async def _ensure_logs_partitions(session: sa.ext.asyncio.AsyncSession) -> None:
             range_end = datetime.date(year, month + 1, 1)
 
         exists_result = await session.execute(
-            sa.text(
-                "SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = :name"
-            ),
+            sa.text("SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = :name"),
             {"name": partition_name},
         )
         if exists_result.scalar():

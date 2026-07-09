@@ -2,7 +2,6 @@ import asyncio
 import dataclasses
 import random
 import time
-import typing
 
 import httpx
 
@@ -109,7 +108,7 @@ async def run_phase(
             t0 = time.monotonic()
             try:
                 resp = await client.post(
-                    f"{cfg.base_url}/api/v1/ingest/batch",
+                    f"{cfg.base_url}/v1/logs",
                     content=compressed,
                     headers=extra_headers,
                 )
@@ -123,10 +122,11 @@ async def run_phase(
 
             stats.requests += 1
 
-            if resp.status_code == 202:
+            if resp.status_code == 200:
                 data = resp.json()
-                stats.accepted += data.get("accepted", 0)
-                stats.rejected += data.get("rejected", 0)
+                rejected = int(data.get("partialSuccess", {}).get("rejectedLogRecords", 0))
+                stats.rejected += rejected
+                stats.accepted += batch_size - rejected
                 if len(stats.latencies) < _RESERVOIR_MAX:
                     stats.latencies.append(latency)
                 else:

@@ -1,7 +1,6 @@
 import asyncio
 import datetime
 import logging
-import typing
 
 import fastapi
 import grpc
@@ -15,7 +14,6 @@ logger = logging.getLogger(__name__)
 router = fastapi.APIRouter(tags=["Projects"])
 
 
-# ==================== ROUTE HANDLERS ====================
 # Note: Request/Response models moved to gateway_service/schemas/projects.py
 
 
@@ -164,9 +162,7 @@ async def create_project(
         },
         503: {
             "description": "Service timeout",
-            "content": {
-                "application/json": {"example": {"detail": "Service timeout"}}
-            },
+            "content": {"application/json": {"example": {"detail": "Service timeout"}}},
         },
     },
 )
@@ -242,21 +238,19 @@ async def list_projects(
         404: {
             "description": "Project not found",
             "content": {
-                "application/json": {
-                    "example": {"detail": "Project 'my-production-app' not found"}
-                }
+                "application/json": {"example": {"detail": "Project 'my-production-app' not found"}}
             },
         },
         503: {
             "description": "Service timeout",
-            "content": {
-                "application/json": {"example": {"detail": "Service timeout"}}
-            },
+            "content": {"application/json": {"example": {"detail": "Service timeout"}}},
         },
     },
 )
 async def get_project_by_slug(
-    project_slug: str = fastapi.Path(..., description="Project slug identifier", examples=["my-production-app"]),
+    project_slug: str = fastapi.Path(
+        ..., description="Project slug identifier", examples=["my-production-app"]
+    ),
     account_id: int = fastapi.Depends(dependencies.get_current_account_id),
     grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
 ):
@@ -343,15 +337,11 @@ async def get_project_by_slug(
         },
         404: {
             "description": "Project not found",
-            "content": {
-                "application/json": {"example": {"detail": "Project not found"}}
-            },
+            "content": {"application/json": {"example": {"detail": "Project not found"}}},
         },
         503: {
             "description": "Service timeout",
-            "content": {
-                "application/json": {"example": {"detail": "Service timeout"}}
-            },
+            "content": {"application/json": {"example": {"detail": "Service timeout"}}},
         },
     },
 )
@@ -373,9 +363,7 @@ async def get_project_quota(
         stub = grpc_pool.get_stub("auth", auth_pb2_grpc.AuthServiceStub)
 
         projects_request = auth_pb2.GetProjectsRequest(account_id=account_id)
-        projects_response = await asyncio.wait_for(
-            stub.GetProjects(projects_request), timeout=5.0
-        )
+        projects_response = await asyncio.wait_for(stub.GetProjects(projects_request), timeout=5.0)
 
         project_ids = [p.project_id for p in projects_response.projects]
         if project_id not in project_ids:
@@ -436,4 +424,77 @@ async def get_project_quota(
         raise fastapi.HTTPException(
             status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to get project quota",
+        )
+
+
+@router.patch(
+    "/projects/{project_id}",
+    response_model=schemas.ProjectResponse,
+    summary="Update project settings",
+    description="Update a project's retention period and/or daily quota. Project owner only.",
+    response_description="Updated project details",
+)
+async def update_project(
+    request: fastapi.Request,
+    body: schemas.UpdateProjectRequest,
+    project_id: int = fastapi.Path(..., description="Project ID", examples=[456]),
+    grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
+):
+    """
+    Update a project's `retention_days` and/or `daily_quota`.
+
+    Requires JWT authentication and project ownership.
+    """
+    account_id = await dependencies.require_project_owner(request, project_id)
+
+    try:
+        stub = grpc_pool.get_stub("auth", auth_pb2_grpc.AuthServiceStub)
+
+        proto_request = auth_pb2.UpdateProjectRequest(
+            project_id=project_id, requester_account_id=account_id
+        )
+        if body.retention_days is not None:
+            proto_request.retention_days = body.retention_days
+        if body.daily_quota is not None:
+            proto_request.daily_quota = body.daily_quota
+
+        response = await asyncio.wait_for(stub.UpdateProject(proto_request), timeout=5.0)
+
+        return schemas.ProjectResponse(
+            project_id=response.project_id,
+            name=response.name,
+            slug=response.slug,
+            environment=response.environment,
+            retention_days=response.retention_days,
+            daily_quota=response.daily_quota,
+        )
+
+    except asyncio.TimeoutError:
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Service timeout",
+        )
+
+    except grpc.RpcError as e:
+        logger.error(f"gRPC error updating project: {e.code()} - {e.details()}")
+
+        if e.code() == grpc.StatusCode.NOT_FOUND:
+            raise fastapi.HTTPException(
+                status_code=fastapi.status.HTTP_404_NOT_FOUND,
+                detail="Project not found",
+            )
+        if e.code() == grpc.StatusCode.PERMISSION_DENIED:
+            raise fastapi.HTTPException(
+                status_code=fastapi.status.HTTP_403_FORBIDDEN,
+                detail=e.details(),
+            )
+        if e.code() == grpc.StatusCode.INVALID_ARGUMENT:
+            raise fastapi.HTTPException(
+                status_code=fastapi.status.HTTP_400_BAD_REQUEST,
+                detail=e.details(),
+            )
+
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update project",
         )

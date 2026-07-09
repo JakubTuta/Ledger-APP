@@ -148,7 +148,14 @@ class Constraints(pydantic.BaseModel):
                         "error",
                         "critical",
                     ],
-                    "supported_log_types": ["console", "logger", "exception", "database", "endpoint", "custom"],
+                    "supported_log_types": [
+                        "console",
+                        "logger",
+                        "exception",
+                        "database",
+                        "endpoint",
+                        "custom",
+                    ],
                     "supported_importance_levels": ["low", "standard", "high"],
                 }
             ]
@@ -225,12 +232,8 @@ class SettingsResponse(pydantic.BaseModel):
     project_id: int = pydantic.Field(..., description="Project identifier")
     project_name: str = pydantic.Field(..., description="Project display name")
     project_slug: str = pydantic.Field(..., description="Project slug")
-    environment: str = pydantic.Field(
-        ..., description="Environment (production, staging, dev)"
-    )
-    rate_limits: RateLimits = pydantic.Field(
-        ..., description="Rate limiting configuration"
-    )
+    environment: str = pydantic.Field(..., description="Environment (production, staging, dev)")
+    rate_limits: RateLimits = pydantic.Field(..., description="Rate limiting configuration")
     quotas: Quotas = pydantic.Field(..., description="Daily quotas and usage")
     constraints: Constraints = pydantic.Field(
         ..., description="Validation constraints and field limits"

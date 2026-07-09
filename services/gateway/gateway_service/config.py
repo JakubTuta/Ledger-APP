@@ -14,13 +14,9 @@ class Settings(pydantic_settings.BaseSettings):
         extra="ignore",
     )
 
-    # ==================== Environment ====================
-
-    ENV: typing.Literal["development", "staging", "production", "test"] = (
-        pydantic.Field(
-            default="development",
-            description="Application environment",
-        )
+    ENV: typing.Literal["development", "staging", "production", "test"] = pydantic.Field(
+        default="development",
+        description="Application environment",
     )
 
     DEBUG: bool = pydantic.Field(
@@ -28,19 +24,12 @@ class Settings(pydantic_settings.BaseSettings):
         description="Enable debug mode",
     )
 
-    LOG_LEVEL: typing.Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = (
-        pydantic.Field(
-            default="INFO",
-            description="Logging level",
-        )
+    LOG_LEVEL: typing.Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = pydantic.Field(
+        default="INFO",
+        description="Logging level",
     )
 
-    # ==================== Server Configuration ====================
-
-    GATEWAY_HOST: str = pydantic.Field(
-        default="0.0.0.0",
-        description="Gateway HTTP host",
-    )
+    GATEWAY_HOST: typing.ClassVar[str] = "0.0.0.0"
 
     GATEWAY_HTTP_PORT: int = pydantic.Field(
         default=8000,
@@ -54,8 +43,6 @@ class Settings(pydantic_settings.BaseSettings):
         description="Number of worker processes",
     )
 
-    # ==================== Redis Configuration ====================
-
     REDIS_HOST: str = pydantic.Field(
         default="localhost",
         description="Redis host",
@@ -66,24 +53,14 @@ class Settings(pydantic_settings.BaseSettings):
         description="Redis port",
     )
 
-    REDIS_DB: int = pydantic.Field(
-        default=0,
-        ge=0,
-        le=15,
-        description="Redis database number",
-    )
+    REDIS_DB: typing.ClassVar[int] = 0
 
     REDIS_PASSWORD: str | None = pydantic.Field(
         default=None,
         description="Redis password",
     )
 
-    REDIS_MAX_CONNECTIONS: int = pydantic.Field(
-        default=50,
-        ge=10,
-        le=200,
-        description="Redis connection pool size",
-    )
+    REDIS_MAX_CONNECTIONS: typing.ClassVar[int] = 50
 
     @property
     def REDIS_URL(self) -> str:
@@ -91,17 +68,12 @@ class Settings(pydantic_settings.BaseSettings):
             return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
-    # ==================== gRPC Configuration ====================
-
     AUTH_SERVICE_HOST: str = pydantic.Field(
         default="localhost",
         description="Auth Service host",
     )
 
-    AUTH_SERVICE_PORT: int = pydantic.Field(
-        default=50051,
-        description="Auth Service gRPC port",
-    )
+    AUTH_SERVICE_PORT: typing.ClassVar[int] = 50051
 
     @property
     def AUTH_SERVICE_URL(self) -> str:
@@ -112,10 +84,7 @@ class Settings(pydantic_settings.BaseSettings):
         description="Ingestion Service host",
     )
 
-    INGESTION_GRPC_PORT: int = pydantic.Field(
-        default=50052,
-        description="Ingestion Service gRPC port",
-    )
+    INGESTION_GRPC_PORT: typing.ClassVar[int] = 50052
 
     @property
     def INGESTION_SERVICE_URL(self) -> str:
@@ -126,55 +95,22 @@ class Settings(pydantic_settings.BaseSettings):
         description="Query Service host",
     )
 
-    QUERY_SERVICE_PORT: int = pydantic.Field(
-        default=50053,
-        description="Query Service gRPC port",
-    )
+    QUERY_SERVICE_PORT: typing.ClassVar[int] = 50053
 
     @property
     def QUERY_SERVICE_URL(self) -> str:
         return f"{self.QUERY_SERVICE_HOST}:{self.QUERY_SERVICE_PORT}"
 
-    GRPC_POOL_SIZE: int = pydantic.Field(
-        default=2,
-        ge=1,
-        le=10,
-        description="gRPC channel pool size per service (1-2 is usually sufficient due to HTTP/2 multiplexing)",
-    )
-
-    GRPC_KEEPALIVE_TIME_MS: int = pydantic.Field(
-        default=300000,
-        description="gRPC keepalive ping interval (ms)",
-    )
-
-    GRPC_KEEPALIVE_TIMEOUT_MS: int = pydantic.Field(
-        default=20000,
-        description="gRPC keepalive timeout (ms)",
-    )
-
-    GRPC_HTTP2_MAX_PINGS_WITHOUT_DATA: int = pydantic.Field(
-        default=0,
-        description="Max pings without data (0 = unlimited)",
-    )
-
-    GRPC_HTTP2_MIN_TIME_BETWEEN_PINGS_MS: int = pydantic.Field(
-        default=300000,
-        description="Min time between pings when data is flowing (ms)",
-    )
-
-    GRPC_HTTP2_MIN_PING_INTERVAL_WITHOUT_DATA_MS: int = pydantic.Field(
-        default=300000,
-        description="Min ping interval when no data is flowing (ms)",
-    )
-
-    GRPC_TIMEOUT: float = pydantic.Field(
-        default=10.0,
-        ge=1.0,
-        le=30.0,
-        description="gRPC request timeout (seconds)",
-    )
-
-    # ==================== Security ====================
+    # gRPC channel pool size per service (1-2 is usually sufficient due to
+    # HTTP/2 multiplexing) + keepalive/HTTP2 tuning: constants, not expected
+    # to change per-deployment.
+    GRPC_POOL_SIZE: typing.ClassVar[int] = 2
+    GRPC_KEEPALIVE_TIME_MS: typing.ClassVar[int] = 300000
+    GRPC_KEEPALIVE_TIMEOUT_MS: typing.ClassVar[int] = 20000
+    GRPC_HTTP2_MAX_PINGS_WITHOUT_DATA: typing.ClassVar[int] = 0
+    GRPC_HTTP2_MIN_TIME_BETWEEN_PINGS_MS: typing.ClassVar[int] = 300000
+    GRPC_HTTP2_MIN_PING_INTERVAL_WITHOUT_DATA_MS: typing.ClassVar[int] = 300000
+    GRPC_TIMEOUT: typing.ClassVar[float] = 30.0
 
     JWT_SECRET: str = pydantic.Field(
         default="your-secret-key-change-this-in-production",
@@ -182,102 +118,68 @@ class Settings(pydantic_settings.BaseSettings):
         description="JWT signing secret (min 32 chars)",
     )
 
-    # ==================== Cache Configuration ====================
+    # Must match auth service's JWT_REFRESH_TOKEN_EXPIRE_DAYS constant; used
+    # for the refresh_token cookie max_age.
+    JWT_REFRESH_TOKEN_EXPIRE_DAYS: typing.ClassVar[int] = 7
 
-    API_KEY_CACHE_TTL: int = pydantic.Field(
-        default=300,
-        ge=60,
-        le=3600,
-        description="API key cache TTL (seconds) - 5 minutes",
+    FRONTEND_URL: str = pydantic.Field(
+        default="http://localhost:3000",
+        description="Base URL of the web frontend, used to build links in emails (e.g. email verification)",
     )
 
-    EMERGENCY_CACHE_TTL: int = pydantic.Field(
-        default=600,
-        ge=300,
-        le=1800,
-        description="Emergency cache TTL for circuit breaker (seconds) - 10 minutes",
+    EMAIL_ENABLED: bool = pydantic.Field(
+        default=False,
+        description="Enable outbound transactional email (verification emails)",
     )
 
-    CACHE_TTL_SECONDS: int = pydantic.Field(
-        default=300,
-        ge=60,
-        le=3600,
-        description="Default cache TTL (seconds)",
+    SMTP_HOST: str = pydantic.Field(
+        default="smtp.gmail.com",
+        description="SMTP server hostname",
     )
 
-    # ==================== Rate Limiting ====================
-
-    RATE_LIMIT_WINDOW_MINUTE: int = pydantic.Field(
-        default=60,
-        description="Rate limit minute window (seconds)",
+    SMTP_PORT: int = pydantic.Field(
+        default=465,
+        description="SMTP server port (465 = implicit TLS, 587 = STARTTLS)",
     )
 
-    RATE_LIMIT_WINDOW_HOUR: int = pydantic.Field(
-        default=3600,
-        description="Rate limit hour window (seconds)",
+    SMTP_USER: str = pydantic.Field(
+        default="",
+        description="SMTP username",
     )
 
-    # ==================== Circuit Breaker ====================
-
-    CIRCUIT_BREAKER_FAILURE_THRESHOLD: int = pydantic.Field(
-        default=5,
-        ge=3,
-        le=20,
-        description="Number of failures before opening circuit",
+    SMTP_PASSWORD: str = pydantic.Field(
+        default="",
+        description="SMTP password (app password, not account password)",
     )
 
-    CIRCUIT_BREAKER_RECOVERY_TIMEOUT: int = pydantic.Field(
-        default=30,
-        ge=10,
-        le=300,
-        description="Seconds to wait before trying recovery",
+    SMTP_FROM: str = pydantic.Field(
+        default="",
+        description="From address; falls back to SMTP_USER when empty",
     )
 
-    CIRCUIT_BREAKER_HALF_OPEN_MAX_CALLS: int = pydantic.Field(
-        default=3,
-        ge=1,
-        le=10,
-        description="Max concurrent calls in half-open state",
-    )
+    SMTP_USE_TLS: typing.ClassVar[bool] = True
 
-    # ==================== Timeouts ====================
+    API_KEY_CACHE_TTL: typing.ClassVar[int] = 300
+    EMERGENCY_CACHE_TTL: typing.ClassVar[int] = 600
+    CACHE_TTL_SECONDS: typing.ClassVar[int] = 300
 
-    REDIS_TIMEOUT: float = pydantic.Field(
-        default=1.0,
-        ge=0.5,
-        le=5.0,
-        description="Redis operation timeout (seconds)",
-    )
+    RATE_LIMIT_WINDOW_MINUTE: typing.ClassVar[int] = 60
+    RATE_LIMIT_WINDOW_HOUR: typing.ClassVar[int] = 3600
 
-    REQUEST_TIMEOUT: float = pydantic.Field(
-        default=30.0,
-        ge=5.0,
-        le=120.0,
-        description="HTTP request timeout (seconds)",
-    )
+    CIRCUIT_BREAKER_FAILURE_THRESHOLD: typing.ClassVar[int] = 5
+    CIRCUIT_BREAKER_RECOVERY_TIMEOUT: typing.ClassVar[int] = 30
+    CIRCUIT_BREAKER_HALF_OPEN_MAX_CALLS: typing.ClassVar[int] = 3
 
-    # ==================== Notifications ====================
+    REDIS_TIMEOUT: typing.ClassVar[float] = 1.0
+    REQUEST_TIMEOUT: typing.ClassVar[float] = 30.0
 
     NOTIFICATIONS_ENABLED: bool = pydantic.Field(
         default=True,
         description="Enable real-time error notifications via Server-Sent Events (SSE)",
     )
 
-    NOTIFICATIONS_MAX_CONNECTIONS_PER_USER: int = pydantic.Field(
-        default=5,
-        ge=1,
-        le=20,
-        description="Maximum concurrent SSE connections per user",
-    )
-
-    NOTIFICATIONS_HEARTBEAT_INTERVAL: int = pydantic.Field(
-        default=30,
-        ge=10,
-        le=120,
-        description="SSE heartbeat interval in seconds to keep connection alive",
-    )
-
-    # ==================== Validators ====================
+    NOTIFICATIONS_MAX_CONNECTIONS_PER_USER: typing.ClassVar[int] = 5
+    NOTIFICATIONS_HEARTBEAT_INTERVAL: typing.ClassVar[int] = 30
 
     @pydantic.field_validator("JWT_SECRET")
     @classmethod
@@ -296,21 +198,7 @@ class Settings(pydantic_settings.BaseSettings):
             raise ValueError("Production must have at least 2 workers")
         return v
 
-    @pydantic.field_validator("GRPC_POOL_SIZE")
-    @classmethod
-    def validate_pool_size(cls, v: int) -> int:
-        if v > 10:
-            raise ValueError("Pool size > 10 may cause connection overhead")
-        return v
-
-    # ==================== Properties ====================
-
-    DEFAULT_DAILY_QUOTA: int = pydantic.Field(
-        default=100_000,
-        ge=1_000,
-        le=100_000,
-        description="Default daily log quota",
-    )
+    DEFAULT_DAILY_QUOTA: typing.ClassVar[int] = 100_000
 
     @property
     def is_production(self) -> bool:

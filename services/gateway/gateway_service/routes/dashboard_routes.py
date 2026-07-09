@@ -45,7 +45,6 @@ def _panel_proto_to_response(panel) -> schemas.PanelResponse:
     )
 
 
-# ==================== ROUTE HANDLERS ====================
 # Note: Request/Response models moved to gateway_service/schemas/dashboard.py
 
 
@@ -71,9 +70,7 @@ async def get_dashboard_panels(
 
         grpc_request = auth_pb2.GetDashboardPanelsRequest(user_id=account_id)
 
-        response = await asyncio.wait_for(
-            stub.GetDashboardPanels(grpc_request), timeout=5.0
-        )
+        response = await asyncio.wait_for(stub.GetDashboardPanels(grpc_request), timeout=5.0)
 
         panels = [_panel_proto_to_response(panel) for panel in response.panels]
 
@@ -174,9 +171,7 @@ async def create_dashboard_panel(
 
         grpc_request = auth_pb2.CreateDashboardPanelRequest(**grpc_request_kwargs)
 
-        response = await asyncio.wait_for(
-            stub.CreateDashboardPanel(grpc_request), timeout=5.0
-        )
+        response = await asyncio.wait_for(stub.CreateDashboardPanel(grpc_request), timeout=5.0)
 
         if not response.panel.id:
             raise fastapi.HTTPException(
@@ -283,9 +278,7 @@ async def update_dashboard_panel(
 
         grpc_request = auth_pb2.UpdateDashboardPanelRequest(**grpc_request_kwargs)
 
-        response = await asyncio.wait_for(
-            stub.UpdateDashboardPanel(grpc_request), timeout=5.0
-        )
+        response = await asyncio.wait_for(stub.UpdateDashboardPanel(grpc_request), timeout=5.0)
 
         if not response.panel.id:
             raise fastapi.HTTPException(
@@ -358,9 +351,7 @@ async def delete_dashboard_panel(
             panel_id=panel_id,
         )
 
-        response = await asyncio.wait_for(
-            stub.DeleteDashboardPanel(grpc_request), timeout=5.0
-        )
+        response = await asyncio.wait_for(stub.DeleteDashboardPanel(grpc_request), timeout=5.0)
 
         if response.success:
             return schemas.DeletePanelResponse(
@@ -416,9 +407,7 @@ async def get_dashboard_tabs(
 
         grpc_request = auth_pb2.GetDashboardTabsRequest(user_id=account_id)
 
-        response = await asyncio.wait_for(
-            stub.GetDashboardTabs(grpc_request), timeout=5.0
-        )
+        response = await asyncio.wait_for(stub.GetDashboardTabs(grpc_request), timeout=5.0)
 
         tabs = [
             schemas.DashboardTabSchema(
@@ -489,9 +478,7 @@ async def save_dashboard_tabs(
             **({} if body.active_tab_id is None else {"active_tab_id": body.active_tab_id}),
         )
 
-        response = await asyncio.wait_for(
-            stub.SaveDashboardTabs(grpc_request), timeout=5.0
-        )
+        response = await asyncio.wait_for(stub.SaveDashboardTabs(grpc_request), timeout=5.0)
 
         return schemas.SaveDashboardTabsResponse(success=response.success)
 

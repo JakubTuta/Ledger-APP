@@ -1,6 +1,7 @@
 import datetime
 import time
 
+import msgpack
 import pytest
 import sqlalchemy
 from ingestion_service import models, schemas
@@ -8,6 +9,11 @@ from ingestion_service.services import queue_service
 from ingestion_service.worker import StorageWorker
 
 from .test_base import BaseIngestionTest
+
+
+class _FakeMessage:
+    def __init__(self, body: bytes):
+        self.body = body
 
 
 @pytest.mark.asyncio
@@ -32,6 +38,69 @@ class TestStorageWorker(BaseIngestionTest):
             ),
             ingested_at=datetime.datetime.now(datetime.timezone.utc),
         )
+
+    def test_decode_message_unwraps_envelope(self):
+        """_decode_message expands an envelope into its constituent log dicts."""
+        envelope = {
+            "v": 1,
+            "project_id": 7,
+            "logs": [{"message": "a"}, {"message": "b"}],
+        }
+        message = _FakeMessage(msgpack.packb(envelope, use_bin_type=True))
+
+        logs = StorageWorker._decode_message(message)
+
+        assert len(logs) == 2
+        assert logs[0]["project_id"] == 7
+        assert logs[1]["project_id"] == 7
+        assert logs[0]["message"] == "a"
+
+    def test_decode_message_rejects_malformed_envelope(self):
+        """A payload without a 'logs' key is malformed, not a legacy bare log -
+        it must raise so the caller nacks the message instead of silently
+        mis-ingesting the raw payload as if it were a log record."""
+        malformed_payload = {"project_id": 3, "message": "not an envelope"}
+        message = _FakeMessage(msgpack.packb(malformed_payload, use_bin_type=True))
+
+        with pytest.raises(ValueError):
+            StorageWorker._decode_message(message)
+
+    async def test_worker_dedupes_redelivered_log_by_log_id(self):
+        """Reprocessing the same log_id (e.g. after a lost ACK) inserts only one row."""
+        log = self._make_log(message="Redelivered log")
+        log.log_entry.log_id = "fixed-idempotency-key"
+        await queue_service.enqueue_log(log)
+
+        payload = await self.consume_one_payload()
+        assert payload is not None
+
+        worker = StorageWorker(worker_id=1)
+        await worker.process_logs_batch([payload])
+        await worker.process_logs_batch([payload])
+
+        async with self.test_db_manager.session_factory() as session:
+            result = await session.execute(sqlalchemy.select(models.Log))
+            logs = result.scalars().all()
+            assert len(logs) == 1
+            assert logs[0].log_id == "fixed-idempotency-key"
+
+    async def test_worker_assigns_fallback_log_id_when_absent(self):
+        """Logs without a client log_id get a deterministic server-computed fallback."""
+        log = self._make_log(message="No client log_id")
+        await queue_service.enqueue_log(log)
+
+        payload = await self.consume_one_payload()
+        assert payload is not None
+        assert not payload.get("log_id")
+
+        worker = StorageWorker(worker_id=1)
+        await worker.process_logs_batch([payload])
+
+        async with self.test_db_manager.session_factory() as session:
+            result = await session.execute(sqlalchemy.select(models.Log))
+            stored = result.scalar_one()
+            assert stored.log_id is not None
+            assert len(stored.log_id) == 64
 
     async def test_worker_processes_single_log(self):
         """Worker inserts a single log payload into the database."""
@@ -228,9 +297,7 @@ class TestStorageWorker(BaseIngestionTest):
         duration = time.time() - start
 
         async with self.test_db_manager.session_factory() as session:
-            result = await session.execute(
-                sqlalchemy.select(sqlalchemy.func.count(models.Log.id))
-            )
+            result = await session.execute(sqlalchemy.select(sqlalchemy.func.count(models.Log.id)))
             count = result.scalar()
             assert count == 100
             assert duration < 1.0
@@ -309,8 +376,6 @@ class TestStorageWorker(BaseIngestionTest):
         await worker.process_logs_batch(payloads)
 
         async with self.test_db_manager.session_factory() as session:
-            result = await session.execute(
-                sqlalchemy.select(sqlalchemy.func.count(models.Log.id))
-            )
+            result = await session.execute(sqlalchemy.select(sqlalchemy.func.count(models.Log.id)))
             count = result.scalar()
             assert count == 500

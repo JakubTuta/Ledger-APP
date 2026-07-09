@@ -13,10 +13,26 @@ service AuthService {
   rpc GetNotificationPreferences(GetNotificationPreferencesRequest) returns (GetNotificationPreferencesResponse);
   rpc UpdateNotificationPreferences(UpdateNotificationPreferencesRequest) returns (UpdateNotificationPreferencesResponse);
 
+  // Email verification
+  rpc VerifyEmail(VerifyEmailRequest) returns (VerifyEmailResponse);
+  rpc ResendVerificationEmail(ResendVerificationEmailRequest) returns (ResendVerificationEmailResponse);
+
+  // TOTP two-factor authentication
+  rpc Setup2FA(Setup2FARequest) returns (Setup2FAResponse);
+  rpc Verify2FASetup(Verify2FASetupRequest) returns (Verify2FASetupResponse);
+  rpc Disable2FA(Disable2FARequest) returns (Disable2FAResponse);
+  rpc VerifyTOTPLogin(VerifyTOTPLoginRequest) returns (VerifyTOTPLoginResponse);
+
+  // Session management (refresh token sessions)
+  rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
+  rpc RevokeSession(RevokeSessionRequest) returns (RevokeSessionResponse);
+  rpc RevokeAllSessions(RevokeAllSessionsRequest) returns (RevokeAllSessionsResponse);
+
   // Project operations
   rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse);
   rpc GetProjects(GetProjectsRequest) returns (GetProjectsResponse);
   rpc GetProjectById(GetProjectByIdRequest) returns (GetProjectByIdResponse);
+  rpc UpdateProject(UpdateProjectRequest) returns (UpdateProjectResponse);
 
   // Project sharing operations
   rpc GenerateInviteCode(GenerateInviteCodeRequest) returns (GenerateInviteCodeResponse);
@@ -69,10 +85,25 @@ service AuthService {
 
   // Alert event history
   rpc ListAlertEvents(ListAlertEventsRequest) returns (ListAlertEventsResponse);
+  rpc AckAlertEvent(AckAlertEventRequest) returns (AckAlertEventResponse);
+  rpc SnoozeAlertEvent(SnoozeAlertEventRequest) returns (SnoozeAlertEventResponse);
 
   // Notification preferences (alert-specific)
   rpc GetAlertNotificationPreferences(GetAlertNotificationPreferencesRequest) returns (GetAlertNotificationPreferencesResponse);
   rpc UpsertAlertNotificationPreference(UpsertAlertNotificationPreferenceRequest) returns (UpsertAlertNotificationPreferenceResponse);
+
+  // Monitor operations (uptime / heartbeat)
+  rpc CreateMonitor(CreateMonitorRequest) returns (CreateMonitorResponse);
+  rpc ListMonitors(ListMonitorsRequest) returns (ListMonitorsResponse);
+  rpc UpdateMonitor(UpdateMonitorRequest) returns (UpdateMonitorResponse);
+  rpc DeleteMonitor(DeleteMonitorRequest) returns (DeleteMonitorResponse);
+  rpc GetMonitorByToken(GetMonitorByTokenRequest) returns (GetMonitorByTokenResponse);
+  rpc RecordHeartbeatPing(RecordHeartbeatPingRequest) returns (RecordHeartbeatPingResponse);
+
+  // Maintenance window operations
+  rpc ListMaintenanceWindows(ListMaintenanceWindowsRequest) returns (ListMaintenanceWindowsResponse);
+  rpc CreateMaintenanceWindow(CreateMaintenanceWindowRequest) returns (CreateMaintenanceWindowResponse);
+  rpc DeleteMaintenanceWindow(DeleteMaintenanceWindowRequest) returns (DeleteMaintenanceWindowResponse);
 }
 
 // ==================== Account Messages ====================
@@ -88,6 +119,10 @@ message RegisterResponse {
   string email = 2;
   string plan = 3;
   string name = 4;
+  // Raw (unhashed) email verification token, generated at registration time.
+  // Only ever returned here so the caller (gateway) can email it; never
+  // persisted anywhere except its hash-equivalent column in the DB.
+  string email_verification_token = 5;
 }
 
 message LoginRequest {
@@ -102,6 +137,11 @@ message LoginResponse {
   string access_token = 4;
   string refresh_token = 5;
   int32 expires_in = 6;
+  // When true, the account has TOTP 2FA enabled: password was correct but
+  // access_token/refresh_token are intentionally empty. The caller must
+  // complete login via VerifyTOTPLogin using a totp_session_token it
+  // creates/tracks itself (gateway-side, in Redis).
+  bool requires_2fa = 7;
 }
 
 message RefreshTokenRequest {
@@ -127,6 +167,8 @@ message GetAccountResponse {
   string status = 4;
   string name = 5;
   string created_at = 6;
+  bool email_verified = 7;
+  bool totp_enabled = 8;
 }
 
 message UpdateAccountNameRequest {
@@ -178,6 +220,123 @@ message UpdateNotificationPreferencesResponse {
   NotificationPreferences preferences = 2;
 }
 
+// ==================== Email Verification Messages ====================
+
+message VerifyEmailRequest {
+  string token = 1;
+}
+
+message VerifyEmailResponse {
+  bool success = 1;
+  string error_message = 2;
+}
+
+message ResendVerificationEmailRequest {
+  int64 account_id = 1;
+}
+
+message ResendVerificationEmailResponse {
+  bool success = 1;
+  bool already_verified = 2;
+  string email = 3;
+  // Raw verification token; caller (gateway) emails it, never displays it.
+  string verification_token = 4;
+  string error_message = 5;
+}
+
+// ==================== TOTP 2FA Messages ====================
+
+message Setup2FARequest {
+  int64 account_id = 1;
+}
+
+message Setup2FAResponse {
+  string secret = 1;
+  string provisioning_uri = 2;
+}
+
+message Verify2FASetupRequest {
+  int64 account_id = 1;
+  string code = 2;
+}
+
+message Verify2FASetupResponse {
+  bool success = 1;
+  // Plaintext one-time backup codes — returned exactly once, on successful
+  // setup verification. Only their SHA-256 hashes are ever persisted.
+  repeated string backup_codes = 2;
+  string error_message = 3;
+}
+
+message Disable2FARequest {
+  int64 account_id = 1;
+  string password = 2;
+}
+
+message Disable2FAResponse {
+  bool success = 1;
+  string error_message = 2;
+}
+
+message VerifyTOTPLoginRequest {
+  int64 account_id = 1;
+  string code = 2;
+  string device_info = 3;
+}
+
+message VerifyTOTPLoginResponse {
+  bool success = 1;
+  string access_token = 2;
+  string refresh_token = 3;
+  int32 expires_in = 4;
+  int64 account_id = 5;
+  string email = 6;
+  string error_message = 7;
+}
+
+// ==================== Session Management Messages ====================
+
+message SessionInfo {
+  int64 id = 1;
+  optional string device_info = 2;
+  string created_at = 3;
+  optional string last_used_at = 4;
+  string expires_at = 5;
+  bool is_current = 6;
+}
+
+message ListSessionsRequest {
+  int64 account_id = 1;
+  // Raw refresh token of the session making this request, used only to
+  // determine which returned session is "current". Optional — if empty,
+  // is_current is always false.
+  optional string current_refresh_token = 2;
+}
+
+message ListSessionsResponse {
+  repeated SessionInfo sessions = 1;
+}
+
+message RevokeSessionRequest {
+  int64 account_id = 1;
+  int64 session_id = 2;
+}
+
+message RevokeSessionResponse {
+  bool success = 1;
+  string error_message = 2;
+}
+
+message RevokeAllSessionsRequest {
+  int64 account_id = 1;
+  optional string current_refresh_token = 2;
+  bool include_current = 3;
+}
+
+message RevokeAllSessionsResponse {
+  int32 revoked_count = 1;
+}
+
 // ==================== Project Messages ====================
 
 message CreateProjectRequest {
@@ -227,6 +386,22 @@ message GetProjectByIdResponse {
   int32 retention_days = 5;
   int64 daily_quota = 6;
   repeated string available_routes = 7;
+}
+
+message UpdateProjectRequest {
+  int64 project_id = 1;
+  int64 requester_account_id = 2;
+  optional int32 retention_days = 3;
+  optional int64 daily_quota = 4;
+}
+
+message UpdateProjectResponse {
+  int64 project_id = 1;
+  string name = 2;
+  string slug = 3;
+  string environment = 4;
+  int32 retention_days = 5;
+  int64 daily_quota = 6;
 }
 
 // ==================== Project Sharing Messages ====================
@@ -342,6 +517,9 @@ message ValidateApiKeyResponse {
 
 message RevokeApiKeyRequest {
   int64 key_id = 1;
+  // Requesting account, used to enforce that only the owning project's
+  // owner may revoke a key (see AuthService.revoke_api_key).
+  int64 requester_account_id = 2;
 }
 
 message RevokeApiKeyResponse {
@@ -589,6 +767,8 @@ message AlertRule {
   optional string last_fired_at = 13;
   string created_at = 15;
   string updated_at = 16;
+  optional int32 escalation_after_minutes = 17;
+  optional int64 escalate_connector_id = 18;
 }
 
 message ListAlertRulesRequest {
@@ -618,6 +798,8 @@ message CreateAlertRuleRequest {
   string unit = 7;
   int32 severity = 9;
   repeated int64 connector_ids = 10;
+  optional int32 escalation_after_minutes = 11;
+  optional int64 escalate_connector_id = 12;
 }
 
 message CreateAlertRuleResponse {
@@ -636,6 +818,9 @@ message UpdateAlertRuleRequest {
   optional string metric = 9;
   repeated int64 connector_ids = 10;
   optional bool update_connectors = 11;
+  optional int32 escalation_after_minutes = 12;
+  optional int64 escalate_connector_id = 13;
+  optional bool clear_escalate_connector_id = 14;
 }
 
 message UpdateAlertRuleResponse {
@@ -728,6 +913,9 @@ message AlertEvent {
   int32 severity = 10;
   string connectors_sent = 12;  // JSON array of {id,kind,name}
   string fired_at = 13;
+  optional int64 acked_by = 14;
+  optional string acked_at = 15;
+  optional string snoozed_until = 16;
 }
 
 message ListAlertEventsRequest {
@@ -739,6 +927,30 @@ message ListAlertEventsRequest {
 message ListAlertEventsResponse {
   repeated AlertEvent events = 1;
   bool has_more = 2;
+}
+
+message AckAlertEventRequest {
+  int64 event_id = 1;
+  int64 project_id = 2;
+  int64 account_id = 3;
+}
+
+message AckAlertEventResponse {
+  bool success = 1;
+  string error_message = 2;
+  AlertEvent event = 3;
+}
+
+message SnoozeAlertEventRequest {
+  int64 event_id = 1;
+  int64 project_id = 2;
+  int32 minutes = 3;
+}
+
+message SnoozeAlertEventResponse {
+  bool success = 1;
+  string error_message = 2;
+  AlertEvent event = 3;
 }
 
 // ==================== Alert Notification Preferences Messages ====================
@@ -772,4 +984,136 @@ message UpsertAlertNotificationPreferenceRequest {
 
 message UpsertAlertNotificationPreferenceResponse {
   AlertNotificationPreference preference = 1;
+}
+
+// ==================== Monitor Messages ====================
+
+message Monitor {
+  int64 id = 1;
+  int64 project_id = 2;
+  string kind = 3;               // 'http' | 'heartbeat'
+  string name = 4;
+  optional string target_url = 5;
+  optional string token = 6;     // heartbeat only
+  int32 interval_s = 7;
+  int32 timeout_s = 8;
+  int32 expected_status = 9;
+  int32 grace_s = 10;
+  bool enabled = 11;
+  string state = 12;             // 'unknown' | 'up' | 'down'
+  string created_at = 13;
+  string updated_at = 14;
+  // computed status fields (populated on List)
+  optional string last_checked_at = 15;
+  optional bool last_ok = 16;
+  optional int32 last_latency_ms = 17;
+  double uptime_pct_24h = 18;
+}
+
+message CreateMonitorRequest {
+  int64 project_id = 1;
+  string kind = 2;
+  string name = 3;
+  optional string target_url = 4;
+  int32 interval_s = 5;
+  int32 timeout_s = 6;
+  int32 expected_status = 7;
+  int32 grace_s = 8;
+}
+
+message CreateMonitorResponse {
+  Monitor monitor = 1;
+}
+
+message ListMonitorsRequest {
+  int64 project_id = 1;
+}
+
+message ListMonitorsResponse {
+  repeated Monitor monitors = 1;
+}
+
+message UpdateMonitorRequest {
+  int64 monitor_id = 1;
+  int64 project_id = 2;
+  optional string name = 3;
+  optional string target_url = 4;
+  optional int32 interval_s = 5;
+  optional int32 timeout_s = 6;
+  optional int32 expected_status = 7;
+  optional int32 grace_s = 8;
+  optional bool enabled = 9;
+}
+
+message UpdateMonitorResponse {
+  Monitor monitor = 1;
+}
+
+message DeleteMonitorRequest {
+  int64 monitor_id = 1;
+  int64 project_id = 2;
+}
+
+message DeleteMonitorResponse {
+  bool success = 1;
+}
+
+message GetMonitorByTokenRequest {
+  string token = 1;
+}
+
+message GetMonitorByTokenResponse {
+  bool found = 1;
+  Monitor monitor = 2;
+}
+
+message RecordHeartbeatPingRequest {
+  string token = 1;
+}
+
+message RecordHeartbeatPingResponse {
+  bool success = 1;
+  string error_message = 2;
+}
+
+// ==================== Maintenance Window Messages ====================
+
+message MaintenanceWindow {
+  int64 id = 1;
+  int64 project_id = 2;
+  string name = 3;
+  string starts_at = 4;
+  string ends_at = 5;
+  optional string recurrence = 6;  // 'none' | 'daily' | 'weekly'
+  string created_at = 7;
+  string updated_at = 8;
+}
+
+message ListMaintenanceWindowsRequest {
+  int64 project_id = 1;
+}
+
+message ListMaintenanceWindowsResponse {
+  repeated MaintenanceWindow windows = 1;
+}
+
+message CreateMaintenanceWindowRequest {
+  int64 project_id = 1;
+  string name = 2;
+  string starts_at = 3;
+  string ends_at = 4;
+  optional string recurrence = 5;
+}
+
+message CreateMaintenanceWindowResponse {
+  MaintenanceWindow window = 1;
+}
+
+message DeleteMaintenanceWindowRequest {
+  int64 window_id = 1;
+  int64 project_id = 2;
+}
+
+message DeleteMaintenanceWindowResponse {
+  bool success = 1;
 }

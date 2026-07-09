@@ -7,13 +7,14 @@ from sqlalchemy import (
     BigInteger,
     CheckConstraint,
     DateTime,
+    Float,
     Index,
     Integer,
     SmallInteger,
     Text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 
 class Log(database.Base):
@@ -35,9 +36,7 @@ class Log(database.Base):
 
     level: Mapped[str] = mapped_column(VARCHAR(20), nullable=False)
     log_type: Mapped[str] = mapped_column(VARCHAR(30), nullable=False)
-    importance: Mapped[str] = mapped_column(
-        VARCHAR(20), default="standard", nullable=False
-    )
+    importance: Mapped[str] = mapped_column(VARCHAR(20), default="standard", nullable=False)
 
     environment: Mapped[str | None] = mapped_column(VARCHAR(20), nullable=True)
     release: Mapped[str | None] = mapped_column(VARCHAR(100), nullable=True)
@@ -62,6 +61,8 @@ class Log(database.Base):
 
     error_fingerprint: Mapped[str | None] = mapped_column(CHAR(64), nullable=True)
 
+    log_id: Mapped[str | None] = mapped_column(VARCHAR(64), nullable=True)
+
     __table_args__ = (
         Index("idx_logs_project_timestamp", "project_id", "timestamp"),
         Index(
@@ -77,6 +78,14 @@ class Log(database.Base):
             "error_fingerprint",
             "timestamp",
             postgresql_where="error_fingerprint IS NOT NULL",
+        ),
+        Index(
+            "idx_logs_dedup",
+            "project_id",
+            "log_id",
+            "timestamp",
+            unique=True,
+            postgresql_where="log_id IS NOT NULL",
         ),
         CheckConstraint(
             "level IN ('debug', 'info', 'warning', 'error', 'critical')",
@@ -120,13 +129,16 @@ class ErrorGroup(database.Base):
     )
     occurrence_count: Mapped[int] = mapped_column(BigInteger, default=1, nullable=False)
 
-    status: Mapped[str] = mapped_column(
-        VARCHAR(20), default="unresolved", nullable=False
-    )
+    status: Mapped[str] = mapped_column(VARCHAR(20), default="unresolved", nullable=False)
     assigned_to: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
     sample_log_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     sample_stack_trace: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    resolved_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    resolved_in_release: Mapped[str | None] = mapped_column(VARCHAR(100), nullable=True)
 
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
@@ -162,3 +174,73 @@ class ErrorGroup(database.Base):
         )
 
 
+class Span(database.Base):
+    __tablename__ = "spans"
+
+    span_id: Mapped[str] = mapped_column(CHAR(16), primary_key=True, nullable=False)
+    trace_id: Mapped[str] = mapped_column(CHAR(32), nullable=False, index=True)
+    parent_span_id: Mapped[str | None] = mapped_column(CHAR(16), nullable=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+
+    service_name: Mapped[str] = mapped_column(Text, nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    kind: Mapped[int] = mapped_column(SmallInteger, default=0, nullable=False)
+
+    start_time: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        primary_key=True,
+        nullable=False,
+    )
+    duration_ns: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
+
+    status_code: Mapped[int] = mapped_column(SmallInteger, default=0, nullable=False)
+    status_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    attributes: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    events: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+
+    error_fingerprint: Mapped[str | None] = mapped_column(CHAR(64), nullable=True)
+
+    __table_args__ = (
+        Index("brin_spans_project_time", "project_id", "start_time"),
+        Index("idx_spans_op", "project_id", "service_name", "name", "start_time"),
+        {"postgresql_partition_by": "RANGE (start_time)"},
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<Span(span_id={self.span_id}, trace_id={self.trace_id}, "
+            f"project_id={self.project_id}, name={self.name})>"
+        )
+
+
+class MetricPoint(database.Base):
+    __tablename__ = "metric_points"
+
+    project_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, nullable=False)
+    name: Mapped[str] = mapped_column(Text, primary_key=True, nullable=False)
+    type: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+
+    tags_hash: Mapped[str] = mapped_column(CHAR(16), primary_key=True, nullable=False)
+    ts: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        primary_key=True,
+        nullable=False,
+    )
+
+    value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    count: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    sum: Mapped[float | None] = mapped_column(Float, nullable=True)
+    bucket_counts: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    explicit_bounds: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+
+    tags: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    service_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        Index("idx_metric_points_lookup", "project_id", "name", "ts"),
+        {"postgresql_partition_by": "RANGE (ts)"},
+    )
+
+    def __repr__(self) -> str:
+        return f"<MetricPoint(project_id={self.project_id}, name={self.name}, ts={self.ts})>"

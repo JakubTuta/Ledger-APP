@@ -2,7 +2,6 @@ import datetime
 import json
 
 import pytest
-import sqlalchemy
 
 import query_service.models as models
 import query_service.proto.query_pb2 as query_pb2
@@ -54,7 +53,6 @@ class TestLogQuery(test_base.BaseQueryTest):
         response = await self.stub.QueryLogs(request)
 
         assert len(response.logs) == 2
-        assert response.total == 2
         assert response.has_more is False
 
     @pytest.mark.asyncio
@@ -73,7 +71,6 @@ class TestLogQuery(test_base.BaseQueryTest):
         response = await self.stub.QueryLogs(request)
 
         assert len(response.logs) == 2
-        assert response.total == 2
         assert all(log.level == "error" for log in response.logs)
 
     @pytest.mark.asyncio
@@ -129,21 +126,18 @@ class TestLogQuery(test_base.BaseQueryTest):
         response = await self.stub.QueryLogs(request)
 
         assert len(response.logs) == 2
-        assert response.total == 5
         assert response.has_more is True
 
         request.offset = 2
         response = await self.stub.QueryLogs(request)
 
         assert len(response.logs) == 2
-        assert response.total == 5
         assert response.has_more is True
 
         request.offset = 4
         response = await self.stub.QueryLogs(request)
 
         assert len(response.logs) == 1
-        assert response.total == 5
         assert response.has_more is False
 
     @pytest.mark.asyncio
@@ -291,3 +285,66 @@ class TestLogQuery(test_base.BaseQueryTest):
         assert response.logs[0].message == "Third log"
         assert response.logs[1].message == "Second log"
         assert response.logs[2].message == "First log"
+
+    @pytest.mark.asyncio
+    async def test_query_logs_cursor_pagination_no_skips_or_dupes(self):
+        for i in range(5):
+            await self.create_test_log(project_id=1, message=f"Log {i}")
+
+        seen_ids: list[int] = []
+        cursor = ""
+        for _ in range(10):  # bounded loop guard, real termination is has_more
+            request = query_pb2.QueryLogsRequest(project_id=1, limit=2)
+            if cursor:
+                request.cursor = cursor
+            response = await self.stub.QueryLogs(request)
+            seen_ids.extend(log.id for log in response.logs)
+            if not response.has_more:
+                break
+            cursor = response.next_cursor
+
+        assert len(seen_ids) == 5
+        assert len(set(seen_ids)) == 5  # no duplicates across pages
+
+    @pytest.mark.asyncio
+    async def test_query_logs_cursor_pagination_stable_across_duplicate_timestamps(self):
+        # All logs share the exact same timestamp - the id tiebreaker in the
+        # ORDER BY / cursor comparison is what keeps pagination stable here;
+        # without it, plain "ORDER BY timestamp DESC" ties could reshuffle
+        # rows between pages.
+        shared_ts = datetime.datetime.now(datetime.timezone.utc)
+        for i in range(4):
+            await self.create_test_log(project_id=1, timestamp=shared_ts, message=f"Log {i}")
+
+        request = query_pb2.QueryLogsRequest(project_id=1, limit=2)
+        first_page = await self.stub.QueryLogs(request)
+        assert len(first_page.logs) == 2
+        assert first_page.has_more is True
+        assert first_page.next_cursor
+
+        request2 = query_pb2.QueryLogsRequest(project_id=1, limit=2, cursor=first_page.next_cursor)
+        second_page = await self.stub.QueryLogs(request2)
+        assert len(second_page.logs) == 2
+        assert second_page.has_more is False
+
+        first_ids = {log.id for log in first_page.logs}
+        second_ids = {log.id for log in second_page.logs}
+        assert first_ids.isdisjoint(second_ids)
+        assert first_ids | second_ids == {1, 2, 3, 4}
+
+    @pytest.mark.asyncio
+    async def test_query_logs_cursor_takes_precedence_over_offset(self):
+        for i in range(5):
+            await self.create_test_log(project_id=1, message=f"Log {i}")
+
+        first_page = await self.stub.QueryLogs(query_pb2.QueryLogsRequest(project_id=1, limit=2))
+
+        # offset=0 would normally restart from the top; cursor must win.
+        request = query_pb2.QueryLogsRequest(
+            project_id=1, limit=2, offset=0, cursor=first_page.next_cursor
+        )
+        response = await self.stub.QueryLogs(request)
+
+        first_ids = {log.id for log in first_page.logs}
+        second_ids = {log.id for log in response.logs}
+        assert first_ids.isdisjoint(second_ids)

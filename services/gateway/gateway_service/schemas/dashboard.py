@@ -49,7 +49,7 @@ class PanelRequest(pydantic.BaseModel):
     endpoint: str | None = pydantic.Field(
         None,
         description="Endpoint route (required for metrics type panels)",
-        examples=["/api/v1/ingest/single"],
+        examples=["/api/users/{id}"],
     )
     routes: list[str] | None = pydantic.Field(
         None,
@@ -67,12 +67,24 @@ class PanelRequest(pydantic.BaseModel):
         description="Optional grid layout position. Omit to use default responsive layout.",
     )
     trace_id: str | None = pydantic.Field(None, description="Pinned trace ID (trace panels)")
-    service_filter: str | None = pydantic.Field(None, description="Service name filter (trace_list panels)")
-    operation_filter: str | None = pydantic.Field(None, description="Operation name filter (trace_list panels)")
-    min_duration_ms: int | None = pydantic.Field(None, description="Minimum span duration filter in ms (trace_list panels)")
-    has_error: bool | None = pydantic.Field(None, description="Error-only filter (trace_list panels)")
-    statusClass: str | None = pydantic.Field(None, description="HTTP status class filter (logs panels): 2xx, 4xx, 5xx")
-    search: str | None = pydantic.Field(None, max_length=200, description="Path/method substring filter (logs panels)")
+    service_filter: str | None = pydantic.Field(
+        None, description="Service name filter (trace_list panels)"
+    )
+    operation_filter: str | None = pydantic.Field(
+        None, description="Operation name filter (trace_list panels)"
+    )
+    min_duration_ms: int | None = pydantic.Field(
+        None, description="Minimum span duration filter in ms (trace_list panels)"
+    )
+    has_error: bool | None = pydantic.Field(
+        None, description="Error-only filter (trace_list panels)"
+    )
+    statusClass: str | None = pydantic.Field(
+        None, description="HTTP status class filter (logs panels): 2xx, 4xx, 5xx"
+    )
+    search: str | None = pydantic.Field(
+        None, max_length=200, description="Path/method substring filter (logs panels)"
+    )
 
     @pydantic.model_validator(mode="after")
     def validate_time_range(self):
@@ -80,19 +92,13 @@ class PanelRequest(pydantic.BaseModel):
         has_dates = self.periodFrom is not None and self.periodTo is not None
 
         if not has_period and not has_dates:
-            raise ValueError(
-                "Either 'period' or both 'periodFrom' and 'periodTo' must be provided"
-            )
+            raise ValueError("Either 'period' or both 'periodFrom' and 'periodTo' must be provided")
 
         if has_period and has_dates:
-            raise ValueError(
-                "Cannot use both 'period' and 'periodFrom'/'periodTo' parameters"
-            )
+            raise ValueError("Cannot use both 'period' and 'periodFrom'/'periodTo' parameters")
 
         if (self.periodFrom is None) != (self.periodTo is None):
-            raise ValueError(
-                "Both 'periodFrom' and 'periodTo' must be provided together"
-            )
+            raise ValueError("Both 'periodFrom' and 'periodTo' must be provided together")
 
         return self
 
@@ -113,7 +119,7 @@ class PanelRequest(pydantic.BaseModel):
                     "project_id": "456",
                     "period": "last7days",
                     "type": "metrics",
-                    "endpoint": "/api/v1/ingest/single",
+                    "endpoint": "/api/users/{id}",
                 },
                 {
                     "name": "Custom Date Range Panel",
@@ -123,7 +129,7 @@ class PanelRequest(pydantic.BaseModel):
                     "periodTo": "2024-01-16T00:00:00Z",
                     "type": "logs",
                     "endpoint": None,
-                }
+                },
             ]
         }
     )
@@ -141,9 +147,15 @@ class PanelResponse(pydantic.BaseModel):
     periodTo: str | None = pydantic.Field(None, description="Time range end (ISO 8601)")
     type: str = pydantic.Field(..., description="Panel type")
     endpoint: str | None = pydantic.Field(None, description="Endpoint route (for metrics panels)")
-    routes: list[str] | None = pydantic.Field(None, description="List of route paths (for bottleneck panels)")
-    statistic: str | None = pydantic.Field(None, description="Statistic type (for bottleneck panels)")
-    layout: PanelLayout | None = pydantic.Field(None, description="Grid layout position (for resizable grid)")
+    routes: list[str] | None = pydantic.Field(
+        None, description="List of route paths (for bottleneck panels)"
+    )
+    statistic: str | None = pydantic.Field(
+        None, description="Statistic type (for bottleneck panels)"
+    )
+    layout: PanelLayout | None = pydantic.Field(
+        None, description="Grid layout position (for resizable grid)"
+    )
     trace_id: str | None = pydantic.Field(None)
     service_filter: str | None = pydantic.Field(None)
     operation_filter: str | None = pydantic.Field(None)
@@ -175,7 +187,7 @@ class PanelResponse(pydantic.BaseModel):
                     "periodFrom": None,
                     "periodTo": None,
                     "type": "metrics",
-                    "endpoint": "/api/v1/ingest/single",
+                    "endpoint": "/api/users/{id}",
                 },
                 {
                     "id": "panel_ghi789",
@@ -187,7 +199,7 @@ class PanelResponse(pydantic.BaseModel):
                     "periodTo": "2024-01-16T00:00:00Z",
                     "type": "logs",
                     "endpoint": None,
-                }
+                },
             ]
         }
     )
@@ -222,8 +234,8 @@ class PanelListResponse(pydantic.BaseModel):
                             "time_range_from": "2024-01-15T00:00:00Z",
                             "time_range_to": "2024-01-16T00:00:00Z",
                             "type": "metrics",
-                            "endpoint": "/api/v1/ingest/single",
-                        }
+                            "endpoint": "/api/users/{id}",
+                        },
                     ],
                     "total": 2,
                 }
@@ -242,12 +254,8 @@ class UpdatePanelRequest(pydantic.BaseModel):
         description="Panel display name",
         examples=["Error Rate - Last 24h"],
     )
-    index: int = pydantic.Field(
-        ..., ge=0, description="Panel position index", examples=[0]
-    )
-    project_id: str = pydantic.Field(
-        ..., min_length=1, description="Project ID", examples=["456"]
-    )
+    index: int = pydantic.Field(..., ge=0, description="Panel position index", examples=[0])
+    project_id: str = pydantic.Field(..., min_length=1, description="Project ID", examples=["456"])
     period: str | None = pydantic.Field(
         None,
         pattern=r"^(today|last7days|last30days|currentWeek|currentMonth|currentYear)$",
@@ -273,7 +281,7 @@ class UpdatePanelRequest(pydantic.BaseModel):
     endpoint: str | None = pydantic.Field(
         None,
         description="Endpoint route (required for metrics type panels)",
-        examples=["/api/v1/ingest/single"],
+        examples=["/api/users/{id}"],
     )
     routes: list[str] | None = pydantic.Field(
         None,
@@ -291,12 +299,24 @@ class UpdatePanelRequest(pydantic.BaseModel):
         description="Optional grid layout position. Omit or set null to use default responsive layout.",
     )
     trace_id: str | None = pydantic.Field(None, description="Pinned trace ID (trace panels)")
-    service_filter: str | None = pydantic.Field(None, description="Service name filter (trace_list panels)")
-    operation_filter: str | None = pydantic.Field(None, description="Operation name filter (trace_list panels)")
-    min_duration_ms: int | None = pydantic.Field(None, description="Minimum span duration filter in ms (trace_list panels)")
-    has_error: bool | None = pydantic.Field(None, description="Error-only filter (trace_list panels)")
-    statusClass: str | None = pydantic.Field(None, description="HTTP status class filter (logs panels): 2xx, 4xx, 5xx")
-    search: str | None = pydantic.Field(None, max_length=200, description="Path/method substring filter (logs panels)")
+    service_filter: str | None = pydantic.Field(
+        None, description="Service name filter (trace_list panels)"
+    )
+    operation_filter: str | None = pydantic.Field(
+        None, description="Operation name filter (trace_list panels)"
+    )
+    min_duration_ms: int | None = pydantic.Field(
+        None, description="Minimum span duration filter in ms (trace_list panels)"
+    )
+    has_error: bool | None = pydantic.Field(
+        None, description="Error-only filter (trace_list panels)"
+    )
+    statusClass: str | None = pydantic.Field(
+        None, description="HTTP status class filter (logs panels): 2xx, 4xx, 5xx"
+    )
+    search: str | None = pydantic.Field(
+        None, max_length=200, description="Path/method substring filter (logs panels)"
+    )
 
     @pydantic.model_validator(mode="after")
     def validate_time_range(self):
@@ -304,19 +324,13 @@ class UpdatePanelRequest(pydantic.BaseModel):
         has_dates = self.periodFrom is not None and self.periodTo is not None
 
         if not has_period and not has_dates:
-            raise ValueError(
-                "Either 'period' or both 'periodFrom' and 'periodTo' must be provided"
-            )
+            raise ValueError("Either 'period' or both 'periodFrom' and 'periodTo' must be provided")
 
         if has_period and has_dates:
-            raise ValueError(
-                "Cannot use both 'period' and 'periodFrom'/'periodTo' parameters"
-            )
+            raise ValueError("Cannot use both 'period' and 'periodFrom'/'periodTo' parameters")
 
         if (self.periodFrom is None) != (self.periodTo is None):
-            raise ValueError(
-                "Both 'periodFrom' and 'periodTo' must be provided together"
-            )
+            raise ValueError("Both 'periodFrom' and 'periodTo' must be provided together")
 
         if self.type == "metrics":
             if not self.endpoint:
@@ -341,7 +355,7 @@ class UpdatePanelRequest(pydantic.BaseModel):
                     "project_id": "456",
                     "period": "last30days",
                     "type": "metrics",
-                    "endpoint": "/api/v1/ingest/batch",
+                    "endpoint": "/api/orders",
                 },
                 {
                     "name": "Updated to Custom Dates",
@@ -351,7 +365,7 @@ class UpdatePanelRequest(pydantic.BaseModel):
                     "time_range_to": "2024-01-15T00:00:00Z",
                     "type": "logs",
                     "endpoint": None,
-                }
+                },
             ]
         }
     )

@@ -24,17 +24,11 @@ async def aggregate_hourly_metrics() -> None:
     )
 
     try:
-        await _aggregate_endpoint_metrics(
-            date_str, hour, previous_hour_start, previous_hour_end
-        )
+        await _aggregate_endpoint_metrics(date_str, hour, previous_hour_start, previous_hour_end)
 
-        await _aggregate_exception_metrics(
-            date_str, hour, previous_hour_start, previous_hour_end
-        )
+        await _aggregate_exception_metrics(date_str, hour, previous_hour_start, previous_hour_end)
 
-        await _aggregate_log_volume_metrics(
-            date_str, hour, previous_hour_start, previous_hour_end
-        )
+        await _aggregate_log_volume_metrics(date_str, hour, previous_hour_start, previous_hour_end)
 
         elapsed = time.perf_counter() - start
         logger.info(f"Hourly aggregation done in {elapsed:.2f}s for {date_str} hour {hour}")

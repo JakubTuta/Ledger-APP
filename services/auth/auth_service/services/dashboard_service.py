@@ -106,14 +106,10 @@ class DashboardService:
         has_dates = period_from is not None and period_to is not None
 
         if not has_period and not has_dates:
-            raise ValueError(
-                "Either 'period' or both 'periodFrom' and 'periodTo' must be provided"
-            )
+            raise ValueError("Either 'period' or both 'periodFrom' and 'periodTo' must be provided")
 
         if has_period and has_dates:
-            raise ValueError(
-                "Cannot use both 'period' and 'periodFrom'/'periodTo'"
-            )
+            raise ValueError("Cannot use both 'period' and 'periodFrom'/'periodTo'")
 
         panel_id = self._generate_panel_id()
 
@@ -209,14 +205,10 @@ class DashboardService:
         has_dates = period_from is not None and period_to is not None
 
         if not has_period and not has_dates:
-            raise ValueError(
-                "Either 'period' or both 'periodFrom' and 'periodTo' must be provided"
-            )
+            raise ValueError("Either 'period' or both 'periodFrom' and 'periodTo' must be provided")
 
         if has_period and has_dates:
-            raise ValueError(
-                "Cannot use both 'period' and 'periodFrom'/'periodTo'"
-            )
+            raise ValueError("Cannot use both 'period' and 'periodFrom'/'periodTo'")
 
         result = await session.execute(
             select(models.UserDashboard).where(models.UserDashboard.user_id == user_id)
@@ -354,8 +346,16 @@ class DashboardService:
 
     def _validate_panel_type(self, panel_type: str) -> bool:
         valid_types = {
-            "logs", "errors", "metrics", "error_list", "bottleneck", "error_heatmap",
-            "trace", "trace_list", "summary", "latency_overview",
+            "logs",
+            "errors",
+            "metrics",
+            "error_list",
+            "bottleneck",
+            "error_heatmap",
+            "trace",
+            "trace_list",
+            "summary",
+            "latency_overview",
         }
         return panel_type in valid_types
 

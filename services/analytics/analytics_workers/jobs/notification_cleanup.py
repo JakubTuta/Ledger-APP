@@ -13,9 +13,7 @@ async def cleanup_expired_notifications() -> None:
     try:
         async with database.get_auth_session() as session:
             result = await session.execute(
-                sa.text(
-                    "DELETE FROM notifications WHERE expires_at <= NOW()"
-                )
+                sa.text("DELETE FROM notifications WHERE expires_at <= NOW()")
             )
             await session.commit()
             deleted = result.rowcount

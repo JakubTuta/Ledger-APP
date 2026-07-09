@@ -14,11 +14,9 @@ class Settings(pydantic_settings.BaseSettings):
         extra="ignore",
     )
 
-    ENV: typing.Literal["development", "staging", "production", "test"] = (
-        pydantic.Field(
-            default="development",
-            description="Application environment",
-        )
+    ENV: typing.Literal["development", "staging", "production", "test"] = pydantic.Field(
+        default="development",
+        description="Application environment",
     )
 
     DEBUG: bool = pydantic.Field(
@@ -26,52 +24,19 @@ class Settings(pydantic_settings.BaseSettings):
         description="Enable debug mode",
     )
 
-    LOG_LEVEL: typing.Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = (
-        pydantic.Field(
-            default="INFO",
-            description="Logging level",
-        )
+    LOG_LEVEL: typing.Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = pydantic.Field(
+        default="INFO",
+        description="Logging level",
     )
 
-    INGESTION_HOST: str = pydantic.Field(
-        default="0.0.0.0",
-        description="Ingestion service gRPC host",
-    )
-
-    INGESTION_GRPC_PORT: int = pydantic.Field(
-        default=50052,
-        description="Ingestion service gRPC port",
-    )
-
-    GRPC_KEEPALIVE_TIME_MS: int = pydantic.Field(
-        default=300000,
-        description="gRPC keepalive ping interval (ms)",
-    )
-
-    GRPC_KEEPALIVE_TIMEOUT_MS: int = pydantic.Field(
-        default=20000,
-        description="gRPC keepalive timeout (ms)",
-    )
-
-    GRPC_KEEPALIVE_PERMIT_WITHOUT_CALLS: int = pydantic.Field(
-        default=1,
-        description="Allow keepalive pings when no active RPCs (1=yes)",
-    )
-
-    GRPC_MAX_CONNECTION_IDLE_MS: int = pydantic.Field(
-        default=3600000,
-        description="Max connection idle time before server closes it (ms)",
-    )
-
-    GRPC_MAX_CONNECTION_AGE_MS: int = pydantic.Field(
-        default=86400000,
-        description="Max connection age before server forces reconnect (ms)",
-    )
-
-    GRPC_HTTP2_MIN_RECV_PING_INTERVAL_WITHOUT_DATA_MS: int = pydantic.Field(
-        default=120000,
-        description="Min interval between client pings server will accept when no data flows (ms)",
-    )
+    INGESTION_HOST: typing.ClassVar[str] = "0.0.0.0"
+    INGESTION_GRPC_PORT: typing.ClassVar[int] = 50052
+    GRPC_KEEPALIVE_TIME_MS: typing.ClassVar[int] = 300000
+    GRPC_KEEPALIVE_TIMEOUT_MS: typing.ClassVar[int] = 20000
+    GRPC_KEEPALIVE_PERMIT_WITHOUT_CALLS: typing.ClassVar[int] = 1
+    GRPC_MAX_CONNECTION_IDLE_MS: typing.ClassVar[int] = 3600000
+    GRPC_MAX_CONNECTION_AGE_MS: typing.ClassVar[int] = 86400000
+    GRPC_HTTP2_MIN_RECV_PING_INTERVAL_WITHOUT_DATA_MS: typing.ClassVar[int] = 120000
 
     LOGS_DB_HOST: str = pydantic.Field(
         default="localhost",
@@ -98,19 +63,8 @@ class Settings(pydantic_settings.BaseSettings):
         description="Logs database password",
     )
 
-    DB_POOL_SIZE: int = pydantic.Field(
-        default=20,
-        ge=5,
-        le=100,
-        description="Database connection pool size",
-    )
-
-    DB_MAX_OVERFLOW: int = pydantic.Field(
-        default=10,
-        ge=0,
-        le=50,
-        description="Max overflow connections",
-    )
+    DB_POOL_SIZE: typing.ClassVar[int] = 20
+    DB_MAX_OVERFLOW: typing.ClassVar[int] = 10
 
     @property
     def LOGS_DATABASE_URL(self) -> str:
@@ -129,23 +83,12 @@ class Settings(pydantic_settings.BaseSettings):
         description="Redis port",
     )
 
-    REDIS_DB: int = pydantic.Field(
-        default=1,
-        ge=0,
-        le=15,
-        description="Redis database number (1 for ingestion)",
-    )
+    REDIS_DB: typing.ClassVar[int] = 0
+    REDIS_MAX_CONNECTIONS: typing.ClassVar[int] = 50
 
     REDIS_PASSWORD: str | None = pydantic.Field(
         default=None,
         description="Redis password",
-    )
-
-    REDIS_MAX_CONNECTIONS: int = pydantic.Field(
-        default=50,
-        ge=10,
-        le=200,
-        description="Redis connection pool size",
     )
 
     @property
@@ -154,118 +97,32 @@ class Settings(pydantic_settings.BaseSettings):
             return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
-    QUEUE_MAX_DEPTH: int = pydantic.Field(
-        default=100_000,
-        ge=10_000,
-        le=1_000_000,
-        description="Maximum queue depth per project before backpressure",
-    )
+    QUEUE_MAX_DEPTH: typing.ClassVar[int] = 100_000
+    QUEUE_WORKER_TIMEOUT: typing.ClassVar[int] = 30
+    QUEUE_BATCH_SIZE: typing.ClassVar[int] = 1000
+    WORKER_COUNT: typing.ClassVar[int] = 5
+    WORKER_SPANS_COUNT: typing.ClassVar[int] = 2
+    WORKER_METRICS_COUNT: typing.ClassVar[int] = 2
 
-    QUEUE_WORKER_TIMEOUT: int = pydantic.Field(
-        default=30,
-        ge=5,
-        le=300,
-        description="BRPOP timeout in seconds",
-    )
-
-    QUEUE_BATCH_SIZE: int = pydantic.Field(
-        default=1000,
-        ge=100,
-        le=10_000,
-        description="Number of logs to batch before bulk insert",
-    )
-
-    WORKER_COUNT: int = pydantic.Field(
-        default=5,
-        ge=1,
-        le=50,
-        description="Number of storage workers",
-    )
-
-    PARTITION_MONTHS_AHEAD: int = pydantic.Field(
-        default=6,
-        ge=1,
-        le=24,
-        description="Number of months ahead to create partitions",
-    )
+    PARTITION_MONTHS_AHEAD: typing.ClassVar[int] = 6
+    PARTITION_CREATE_CRON: typing.ClassVar[str] = "0 0 1 * *"
+    PARTITION_CHECK_CRON: typing.ClassVar[str] = "30 0 * * *"
+    PARTITION_MISFIRE_GRACE_TIME: typing.ClassVar[int] = 3600
 
     ENABLE_PARTITION_SCHEDULER: bool = pydantic.Field(
         default=True,
         description="Enable automatic partition creation scheduler",
     )
 
-    PARTITION_CREATE_CRON: str = pydantic.Field(
-        default="0 0 1 * *",
-        description="Monthly partition creation cron (1st of month at 00:00)",
-    )
+    MAX_LOG_MESSAGE_LENGTH: typing.ClassVar[int] = 10_000
+    MAX_ERROR_MESSAGE_LENGTH: typing.ClassVar[int] = 5_000
+    MAX_STACK_TRACE_LENGTH: typing.ClassVar[int] = 50_000
+    MAX_ATTRIBUTES_SIZE: typing.ClassVar[int] = 100_000
+    MAX_BATCH_LOGS: typing.ClassVar[int] = 1000
+    MAX_REQUEST_SIZE_MB: typing.ClassVar[int] = 5
+    TIMESTAMP_FUTURE_TOLERANCE_MINUTES: typing.ClassVar[int] = 5
 
-    PARTITION_CHECK_CRON: str = pydantic.Field(
-        default="30 0 * * *",
-        description="Daily partition check cron (every day at 00:30)",
-    )
-
-    PARTITION_MISFIRE_GRACE_TIME: int = pydantic.Field(
-        default=3600,
-        ge=60,
-        le=7200,
-        description="Partition job misfire grace time (seconds)",
-    )
-
-    MAX_LOG_MESSAGE_LENGTH: int = pydantic.Field(
-        default=10_000,
-        ge=1_000,
-        le=100_000,
-        description="Max log message length in characters (10KB)",
-    )
-
-    MAX_ERROR_MESSAGE_LENGTH: int = pydantic.Field(
-        default=5_000,
-        ge=1_000,
-        le=50_000,
-        description="Max error message length in characters (5KB)",
-    )
-
-    MAX_STACK_TRACE_LENGTH: int = pydantic.Field(
-        default=50_000,
-        ge=10_000,
-        le=500_000,
-        description="Max stack trace length in characters (50KB)",
-    )
-
-    MAX_ATTRIBUTES_SIZE: int = pydantic.Field(
-        default=100_000,
-        ge=10_000,
-        le=1_000_000,
-        description="Max attributes JSONB size in bytes (100KB)",
-    )
-
-    MAX_BATCH_LOGS: int = pydantic.Field(
-        default=1000,
-        ge=1,
-        le=10_000,
-        description="Maximum logs per batch request",
-    )
-
-    MAX_REQUEST_SIZE_MB: int = pydantic.Field(
-        default=5,
-        ge=1,
-        le=50,
-        description="Maximum request body size in MB",
-    )
-
-    TIMESTAMP_FUTURE_TOLERANCE_MINUTES: int = pydantic.Field(
-        default=5,
-        ge=1,
-        le=60,
-        description="Clock skew tolerance for future timestamps (minutes)",
-    )
-
-    REDIS_TIMEOUT: float = pydantic.Field(
-        default=1.0,
-        ge=0.5,
-        le=5.0,
-        description="Redis operation timeout (seconds)",
-    )
+    REDIS_TIMEOUT: typing.ClassVar[float] = 1.0
 
     RABBITMQ_HOST: str = pydantic.Field(
         default="localhost",
@@ -287,80 +144,35 @@ class Settings(pydantic_settings.BaseSettings):
         description="RabbitMQ password",
     )
 
-    RABBITMQ_VHOST: str = pydantic.Field(
-        default="/",
-        description="RabbitMQ virtual host",
-    )
-
-    RABBITMQ_EXCHANGE: str = pydantic.Field(
-        default="logs",
-        description="RabbitMQ topic exchange name for log messages",
-    )
-
-    RABBITMQ_QUEUE: str = pydantic.Field(
-        default="ingestion.logs",
-        description="RabbitMQ queue name for log ingestion",
-    )
-
-    RABBITMQ_DLX: str = pydantic.Field(
-        default="logs.dlx",
-        description="RabbitMQ dead-letter exchange name",
-    )
-
-    RABBITMQ_DLQ: str = pydantic.Field(
-        default="ingestion.logs.dlq",
-        description="RabbitMQ dead-letter queue name",
-    )
-
-    RABBITMQ_CHANNEL_POOL_SIZE: int = pydantic.Field(
-        default=10,
-        ge=1,
-        le=50,
-        description="Number of publish channels in the channel pool",
-    )
-
-    RABBITMQ_PREFETCH_COUNT: int = pydantic.Field(
-        default=1000,
-        ge=100,
-        le=10_000,
-        description="Consumer prefetch count per worker channel",
-    )
-
-    BATCH_FLUSH_INTERVAL: float = pydantic.Field(
-        default=1.0,
-        ge=0.1,
-        le=30.0,
-        description="Max seconds to wait before flushing a partial batch",
-    )
+    RABBITMQ_VHOST: typing.ClassVar[str] = "/"
+    RABBITMQ_EXCHANGE: typing.ClassVar[str] = "logs"
+    RABBITMQ_QUEUE: typing.ClassVar[str] = "ingestion.logs"
+    RABBITMQ_SPANS_QUEUE: typing.ClassVar[str] = "ingestion.spans"
+    RABBITMQ_METRICS_QUEUE: typing.ClassVar[str] = "ingestion.metrics"
+    RABBITMQ_CHANNEL_POOL_SIZE: typing.ClassVar[int] = 10
+    RABBITMQ_PREFETCH_COUNT: typing.ClassVar[int] = 1000
+    BATCH_FLUSH_INTERVAL: typing.ClassVar[float] = 1.0
+    RABBITMQ_ENVELOPE_MAX_LOGS: typing.ClassVar[int] = 200
+    RABBITMQ_ENVELOPE_MAX_SPANS: typing.ClassVar[int] = 200
+    RABBITMQ_ENVELOPE_MAX_METRICS: typing.ClassVar[int] = 200
 
     @property
     def RABBITMQ_URL(self) -> str:
         import urllib.parse
+
         password = urllib.parse.quote(self.RABBITMQ_PASSWORD, safe="")
         vhost = urllib.parse.quote(self.RABBITMQ_VHOST, safe="")
         return f"amqp://{self.RABBITMQ_USER}:{password}@{self.RABBITMQ_HOST}:{self.RABBITMQ_PORT}/{vhost}"
 
-    REQUEST_TIMEOUT: float = pydantic.Field(
-        default=30.0,
-        ge=5.0,
-        le=120.0,
-        description="HTTP request timeout (seconds)",
-    )
+    REQUEST_TIMEOUT: typing.ClassVar[float] = 30.0
 
     NOTIFICATIONS_ENABLED: bool = pydantic.Field(
         default=True,
         description="Enable real-time error notifications via Redis Pub/Sub",
     )
 
-    NOTIFICATIONS_PUBLISH_ERRORS: bool = pydantic.Field(
-        default=True,
-        description="Publish notifications for error-level logs",
-    )
-
-    NOTIFICATIONS_PUBLISH_CRITICAL: bool = pydantic.Field(
-        default=True,
-        description="Publish notifications for critical-level logs",
-    )
+    NOTIFICATIONS_PUBLISH_ERRORS: typing.ClassVar[bool] = True
+    NOTIFICATIONS_PUBLISH_CRITICAL: typing.ClassVar[bool] = True
 
     @property
     def is_production(self) -> bool:

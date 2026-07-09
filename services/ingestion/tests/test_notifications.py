@@ -1,10 +1,9 @@
 import asyncio
 import datetime
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
-from ingestion_service import schemas
 from ingestion_service.notifications import publisher as notif_publisher
 
 from .test_base import BaseIngestionTest
@@ -12,7 +11,6 @@ from .test_base import BaseIngestionTest
 
 @pytest.mark.asyncio
 class TestNotificationPublisher(BaseIngestionTest):
-
     async def test_should_notify_error_level(self):
         redis_mock = AsyncMock()
         pub = notif_publisher.NotificationPublisher(redis_mock, enabled=True)
@@ -63,7 +61,7 @@ class TestNotificationPublisher(BaseIngestionTest):
             error_type="DatabaseError",
             timestamp=datetime.datetime.now(datetime.timezone.utc),
             error_fingerprint="abc123",
-            attributes={}
+            attributes={},
         )
 
         await pub.publish_error_notification(123, notification)
@@ -89,7 +87,7 @@ class TestNotificationPublisher(BaseIngestionTest):
             log_type="exception",
             message="System failure",
             timestamp=datetime.datetime.now(datetime.timezone.utc),
-            attributes={}
+            attributes={},
         )
 
         await pub.publish_error_notification(456, notification)
@@ -109,7 +107,7 @@ class TestNotificationPublisher(BaseIngestionTest):
             log_type="exception",
             message="Test error",
             timestamp=datetime.datetime.now(datetime.timezone.utc),
-            attributes={}
+            attributes={},
         )
 
         await pub.publish_error_notification(123, notification)
@@ -128,7 +126,7 @@ class TestNotificationPublisher(BaseIngestionTest):
             log_type="exception",
             message="Test error",
             timestamp=datetime.datetime.now(datetime.timezone.utc),
-            attributes={}
+            attributes={},
         )
 
         await pub.publish_error_notification(123, notification)
@@ -146,7 +144,7 @@ class TestNotificationPublisher(BaseIngestionTest):
             log_type="exception",
             message=long_message,
             timestamp=datetime.datetime.now(datetime.timezone.utc),
-            attributes={}
+            attributes={},
         )
 
         await pub.publish_error_notification(123, notification)
@@ -171,7 +169,7 @@ class TestNotificationPublisher(BaseIngestionTest):
             error_fingerprint="fingerprint123",
             sdk_version="1.0.0",
             platform="python",
-            attributes={"user_id": 456, "trace_id": "xyz"}
+            attributes={"user_id": 456, "trace_id": "xyz"},
         )
 
         await pub.publish_error_notification(123, notification)
@@ -195,7 +193,7 @@ class TestNotificationPublisher(BaseIngestionTest):
             log_type="exception",
             message="Real Redis test",
             timestamp=datetime.datetime.now(datetime.timezone.utc),
-            attributes={}
+            attributes={},
         )
 
         await pub.publish_error_notification(999, notification)

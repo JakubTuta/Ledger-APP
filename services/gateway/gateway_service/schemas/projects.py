@@ -58,9 +58,7 @@ class ProjectResponse(pydantic.BaseModel):
     name: str = pydantic.Field(..., description="Project display name")
     slug: str = pydantic.Field(..., description="Project slug")
     environment: str = pydantic.Field(..., description="Deployment environment")
-    retention_days: int = pydantic.Field(
-        ..., description="Log retention period in days"
-    )
+    retention_days: int = pydantic.Field(..., description="Log retention period in days")
     daily_quota: int = pydantic.Field(..., description="Daily log ingestion quota")
     available_routes: list[str] = pydantic.Field(
         default_factory=list,
@@ -91,9 +89,7 @@ class ProjectResponse(pydantic.BaseModel):
 class ProjectListResponse(pydantic.BaseModel):
     """Response containing a list of projects."""
 
-    projects: typing.List[ProjectResponse] = pydantic.Field(
-        ..., description="List of projects"
-    )
+    projects: typing.List[ProjectResponse] = pydantic.Field(..., description="List of projects")
     total: int = pydantic.Field(..., description="Total number of projects")
 
     model_config = pydantic.ConfigDict(
@@ -125,21 +121,13 @@ class ProjectQuotaResponse(pydantic.BaseModel):
     project_name: str = pydantic.Field(..., description="Project display name")
     project_slug: str = pydantic.Field(..., description="Project slug")
     environment: str = pydantic.Field(..., description="Deployment environment")
-    daily_quota: int = pydantic.Field(
-        ..., description="Maximum logs allowed per day", ge=0
-    )
-    daily_usage: int = pydantic.Field(
-        ..., description="Number of logs ingested today", ge=0
-    )
-    quota_remaining: int = pydantic.Field(
-        ..., description="Remaining quota for today", ge=0
-    )
+    daily_quota: int = pydantic.Field(..., description="Maximum logs allowed per day", ge=0)
+    daily_usage: int = pydantic.Field(..., description="Number of logs ingested today", ge=0)
+    quota_remaining: int = pydantic.Field(..., description="Remaining quota for today", ge=0)
     quota_reset_at: str = pydantic.Field(
         ..., description="When the daily quota resets (midnight UTC, ISO 8601)"
     )
-    retention_days: int = pydantic.Field(
-        ..., description="Log retention period in days"
-    )
+    retention_days: int = pydantic.Field(..., description="Log retention period in days")
 
     model_config = pydantic.ConfigDict(
         json_schema_extra={
@@ -158,3 +146,16 @@ class ProjectQuotaResponse(pydantic.BaseModel):
             ]
         }
     )
+
+
+class UpdateProjectRequest(pydantic.BaseModel):
+    """Update a project's retention/quota settings. Project owner only."""
+
+    retention_days: typing.Optional[int] = pydantic.Field(
+        None, ge=1, le=365, description="Log retention period in days (1-365)"
+    )
+    daily_quota: typing.Optional[int] = pydantic.Field(
+        None, ge=1, description="Maximum logs allowed per day"
+    )
+
+    model_config = pydantic.ConfigDict(json_schema_extra={"examples": [{"retention_days": 90}]})

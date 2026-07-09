@@ -40,9 +40,7 @@ def _parse_period(
             raise ValueError("Dates cannot be in the future")
         return period_from, period_to
     else:
-        raise ValueError(
-            "Either period or both period_from and period_to must be provided"
-        )
+        raise ValueError("Either period or both period_from and period_to must be provided")
 
 
 async def get_bottleneck_list(
@@ -62,9 +60,8 @@ async def get_bottleneck_list(
 
     m = models.BottleneckMetric
 
-    weighted_avg = (
-        sa.func.sum(m.avg_duration_ms * m.log_count)
-        / sa.func.nullif(sa.func.sum(m.log_count), 0)
+    weighted_avg = sa.func.sum(m.avg_duration_ms * m.log_count) / sa.func.nullif(
+        sa.func.sum(m.log_count), 0
     )
 
     stat_expr_map = {
@@ -102,18 +99,16 @@ async def get_bottleneck_list(
             .subquery("agg")
         )
 
-        count_result = await session.execute(
-            sa.select(sa.func.count()).select_from(agg_subq)
-        )
+        count_result = await session.execute(sa.select(sa.func.count()).select_from(agg_subq))
         total = count_result.scalar() or 0
 
-        max_result = await session.execute(
-            sa.select(sa.func.max(agg_subq.c.stat_value))
-        )
+        max_result = await session.execute(sa.select(sa.func.max(agg_subq.c.stat_value)))
         max_value = float(max_result.scalar() or 0)
 
         order_col = agg_subq.c.stat_value
-        order_expr = order_col.asc().nulls_last() if sort == "asc" else order_col.desc().nulls_last()
+        order_expr = (
+            order_col.asc().nulls_last() if sort == "asc" else order_col.desc().nulls_last()
+        )
 
         rows_result = await session.execute(
             sa.select(agg_subq).order_by(order_expr).limit(limit).offset(offset)

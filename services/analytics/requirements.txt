@@ -6,8 +6,8 @@ pydantic==2.12.3
 pydantic-settings==2.11.0
 python-dotenv==1.1.1
 python-json-logger==4.0.0
-redis==6.4.0
-sqlalchemy==2.0.44
+redis[hiredis]==6.4.0
+sqlalchemy[asyncio]==2.0.44
 
 pytest==8.4.2
 pytest-asyncio==1.2.0

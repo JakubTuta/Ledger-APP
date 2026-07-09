@@ -16,6 +16,9 @@ service IngestionService {
 
     // Ingest a batch of distributed trace spans
     rpc IngestSpansBatch(IngestSpansBatchRequest) returns (IngestSpansBatchResponse);
+
+    // Ingest a batch of metric points
+    rpc IngestMetricPointsBatch(IngestMetricPointsBatchRequest) returns (IngestMetricPointsBatchResponse);
 }
 
 // ==================== Messages ====================
@@ -44,6 +47,9 @@ message LogEntry {
 
     // Custom attributes (JSON string)
     optional string attributes = 14;
+
+    // Client-generated idempotency key (uuid7), used to dedupe redelivered logs
+    optional string log_id = 15;
 }
 
 message IngestLogRequest {
@@ -120,6 +126,44 @@ message IngestSpansBatchRequest {
 }
 
 message IngestSpansBatchResponse {
+    bool success   = 1;
+    int32 accepted = 2;
+    int32 rejected = 3;
+    optional string error = 4;
+}
+
+// ==================== Metric Ingestion Messages ====================
+
+enum MetricType {
+    SUM       = 0;
+    GAUGE     = 1;
+    HISTOGRAM = 2;
+}
+
+message MetricPoint {
+    string name              = 1;
+    MetricType type          = 2;
+    string timestamp         = 3;   // ISO 8601 format
+
+    // sum / gauge
+    optional double value    = 4;
+
+    // histogram
+    optional int64 count            = 5;
+    optional double sum             = 6;
+    repeated double bucket_counts   = 7;
+    repeated double explicit_bounds = 8;
+
+    map<string, string> tags = 9;
+    string service_name      = 10;
+}
+
+message IngestMetricPointsBatchRequest {
+    int64 project_id           = 1;
+    repeated MetricPoint points = 2;
+}
+
+message IngestMetricPointsBatchResponse {
     bool success   = 1;
     int32 accepted = 2;
     int32 rejected = 3;

@@ -11,7 +11,7 @@ class TestCreateProject(BaseGatewayTest):
 
     async def test_create_project_success(self):
         """Test successful project creation."""
-        api_key = "test_api_key_123"
+        api_key = "ledger_test_api_key_123"
         await self.mock_redis.set_cached_api_key(
             api_key,
             {
@@ -46,7 +46,7 @@ class TestCreateProject(BaseGatewayTest):
 
     async def test_create_project_duplicate_slug(self):
         """Test creating project with duplicate slug fails."""
-        api_key = "test_api_key_123"
+        api_key = "ledger_test_api_key_123"
         await self.mock_redis.set_cached_api_key(
             api_key,
             {
@@ -61,7 +61,7 @@ class TestCreateProject(BaseGatewayTest):
 
         stub = self.get_mock_auth_stub()
 
-        async def mock_create_duplicate(request):
+        async def mock_create_duplicate(request, timeout=None):
             error = grpc.RpcError()
             error.code = lambda: grpc.StatusCode.ALREADY_EXISTS
             error.details = lambda: f"Project with slug '{request.slug}' already exists"
@@ -85,7 +85,7 @@ class TestCreateProject(BaseGatewayTest):
 
     async def test_create_project_invalid_slug_format(self):
         """Test slug validation."""
-        api_key = "test_api_key_123"
+        api_key = "ledger_test_api_key_123"
         await self.mock_redis.set_cached_api_key(
             api_key,
             {
@@ -121,7 +121,7 @@ class TestCreateProject(BaseGatewayTest):
 
     async def test_create_project_slug_lowercase_conversion(self):
         """Test slug is converted to lowercase."""
-        api_key = "test_api_key_123"
+        api_key = "ledger_test_api_key_123"
         await self.mock_redis.set_cached_api_key(
             api_key,
             {
@@ -150,7 +150,7 @@ class TestCreateProject(BaseGatewayTest):
 
     async def test_create_project_invalid_environment(self):
         """Test environment validation."""
-        api_key = "test_api_key_123"
+        api_key = "ledger_test_api_key_123"
         await self.mock_redis.set_cached_api_key(
             api_key,
             {
@@ -197,7 +197,7 @@ class TestListProjects(BaseGatewayTest):
 
     async def test_list_projects_success(self):
         """Test successful project listing."""
-        api_key = "test_api_key_123"
+        api_key = "ledger_test_api_key_123"
         await self.mock_redis.set_cached_api_key(
             api_key,
             {
@@ -247,7 +247,7 @@ class TestListProjects(BaseGatewayTest):
 
     async def test_list_projects_empty(self):
         """Test listing when no projects exist."""
-        api_key = "test_api_key_123"
+        api_key = "ledger_test_api_key_123"
         await self.mock_redis.set_cached_api_key(
             api_key,
             {
@@ -285,7 +285,7 @@ class TestGetProjectBySlug(BaseGatewayTest):
 
     async def test_get_project_by_slug_success(self):
         """Test getting project by slug."""
-        api_key = "test_api_key_123"
+        api_key = "ledger_test_api_key_123"
         await self.mock_redis.set_cached_api_key(
             api_key,
             {
@@ -325,7 +325,7 @@ class TestGetProjectBySlug(BaseGatewayTest):
 
     async def test_get_project_by_slug_not_found(self):
         """Test getting non-existent project."""
-        api_key = "test_api_key_123"
+        api_key = "ledger_test_api_key_123"
         await self.mock_redis.set_cached_api_key(
             api_key,
             {

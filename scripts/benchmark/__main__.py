@@ -23,20 +23,42 @@ def _parse_args() -> argparse.Namespace:
             "Zero args = best mode: auto-ramp, gzip, fresh key with limit bypass, DB verify, auto JSON output."
         )
     )
-    parser.add_argument("--base-url", default=None, help="Gateway base URL (default: http://localhost:8020)")
-    parser.add_argument("--concurrency", type=int, default=None, help="Worker count for single-run mode")
-    parser.add_argument("--batch-size", type=int, default=None, help="Logs per batch (1-1000, default 1000)")
+    parser.add_argument(
+        "--base-url", default=None, help="Gateway base URL (default: http://localhost:8020)"
+    )
+    parser.add_argument(
+        "--concurrency", type=int, default=None, help="Worker count for single-run mode"
+    )
+    parser.add_argument(
+        "--batch-size", type=int, default=None, help="Logs per batch (1-1000, default 1000)"
+    )
     parser.add_argument("--no-gzip", action="store_true", help="Disable gzip compression")
-    parser.add_argument("--duration", type=int, default=None, metavar="SECONDS", help="Single-run duration")
+    parser.add_argument(
+        "--duration", type=int, default=None, metavar="SECONDS", help="Single-run duration"
+    )
     parser.add_argument("--total-logs", type=int, default=None, help="Single-run log count")
-    parser.add_argument("--no-ramp", action="store_true", help="Skip auto-ramp, use --duration or --total-logs")
-    parser.add_argument("--ramp-max", type=int, default=None, help="Max concurrency to test (default 64)")
-    parser.add_argument("--ramp-stage-seconds", type=int, default=None, help="Seconds per ramp stage (default 30)")
-    parser.add_argument("--api-key", default=None, help="Reuse existing API key (skips provisioning)")
+    parser.add_argument(
+        "--no-ramp", action="store_true", help="Skip auto-ramp, use --duration or --total-logs"
+    )
+    parser.add_argument(
+        "--ramp-max", type=int, default=None, help="Max concurrency to test (default 64)"
+    )
+    parser.add_argument(
+        "--ramp-stage-seconds", type=int, default=None, help="Seconds per ramp stage (default 30)"
+    )
+    parser.add_argument(
+        "--api-key", default=None, help="Reuse existing API key (skips provisioning)"
+    )
     parser.add_argument("--project-id", type=int, default=None, help="Project ID (with --api-key)")
-    parser.add_argument("--respect-limits", action="store_true", help="Do not bypass rate/quota limits")
-    parser.add_argument("--no-db-verify", action="store_true", help="Skip Logs DB row count verification")
-    parser.add_argument("--json-output", default=None, metavar="FILE", help="Write results JSON to file")
+    parser.add_argument(
+        "--respect-limits", action="store_true", help="Do not bypass rate/quota limits"
+    )
+    parser.add_argument(
+        "--no-db-verify", action="store_true", help="Skip Logs DB row count verification"
+    )
+    parser.add_argument(
+        "--json-output", default=None, metavar="FILE", help="Write results JSON to file"
+    )
     parser.add_argument("--verbose", action="store_true", help="Extra output")
     return parser.parse_args()
 
@@ -95,9 +117,7 @@ async def orchestrate(cfg: benchmark_config.BenchmarkConfig) -> models.RunReport
     ) as setup_client:
         if api_key is None:
             print("[bench] Provisioning fresh account/project/api-key ...", flush=True)
-            api_key, project_id, provisioned_email = await provisioning.provision(
-                setup_client, cfg
-            )
+            api_key, project_id, provisioned_email = await provisioning.provision(setup_client, cfg)
             limits_bumped = not cfg.respect_limits
             print(
                 f"[bench] Project ID: {project_id} | limits: {'bypassed' if limits_bumped else 'default'}",
@@ -124,10 +144,7 @@ async def orchestrate(cfg: benchmark_config.BenchmarkConfig) -> models.RunReport
         headline_conc = best_stage.concurrency if best_stage else None
 
         if best_stage is not None:
-            verdict = (
-                f"SUSTAINABLE at {headline_rate:.0f} logs/s "
-                f"(concurrency={headline_conc})"
-            )
+            verdict = f"SUSTAINABLE at {headline_rate:.0f} logs/s (concurrency={headline_conc})"
         else:
             verdict = "OVERLOADED at lowest tested concurrency"
 
@@ -146,9 +163,7 @@ async def orchestrate(cfg: benchmark_config.BenchmarkConfig) -> models.RunReport
         )
 
     else:
-        template_pool = payload_module.build_template_pool(
-            max(2000, cfg.batch_size * 2)
-        )
+        template_pool = payload_module.build_template_pool(max(2000, cfg.batch_size * 2))
         print(
             f"[bench] Single run: c={cfg.concurrency} gzip={cfg.gzip} "
             f"duration={cfg.duration_seconds}s total_logs={cfg.total_logs}",
@@ -171,9 +186,7 @@ async def orchestrate(cfg: benchmark_config.BenchmarkConfig) -> models.RunReport
             limits=drain_client_limits,
         ) as monitor_client:
             print("[bench] Draining queue ...", flush=True)
-            drain = await drain_module.wait_for_drain(
-                monitor_client, cfg, api_key, timeout=120.0
-            )
+            drain = await drain_module.wait_for_drain(monitor_client, cfg, api_key, timeout=120.0)
 
             db_delta: int | None = None
             if not cfg.no_db_verify:

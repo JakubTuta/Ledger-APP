@@ -35,14 +35,16 @@ class GzipRequestMiddleware:
             decompressed = gzip.decompress(compressed)
         except Exception:
             response_body = b'{"detail":"Invalid gzip body"}'
-            await send({
-                "type": "http.response.start",
-                "status": 400,
-                "headers": [
-                    (b"content-type", b"application/json"),
-                    (b"content-length", str(len(response_body)).encode()),
-                ],
-            })
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 400,
+                    "headers": [
+                        (b"content-type", b"application/json"),
+                        (b"content-length", str(len(response_body)).encode()),
+                    ],
+                }
+            )
             await send({"type": "http.response.body", "body": response_body})
             return
 

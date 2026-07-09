@@ -45,7 +45,7 @@ class TestUpdateAccountName(BaseGrpcTest):
 
         assert update_response.success is True
         assert update_response.name == "Trimmed Name"
-        print(f"✅ Name correctly trimmed whitespace")
+        print("✅ Name correctly trimmed whitespace")
 
     async def test_update_name_empty_fails(self):
         """Test empty name update fails."""
@@ -64,7 +64,7 @@ class TestUpdateAccountName(BaseGrpcTest):
             assert False, "Should have raised error for empty name"
         except Exception as e:
             assert "empty" in str(e).lower()
-            print(f"✅ Correctly rejected empty name")
+            print("✅ Correctly rejected empty name")
 
     async def test_update_name_whitespace_only_fails(self):
         """Test whitespace-only name update fails."""
@@ -85,7 +85,7 @@ class TestUpdateAccountName(BaseGrpcTest):
             assert False, "Should have raised error for whitespace-only name"
         except Exception as e:
             assert "empty" in str(e).lower()
-            print(f"✅ Correctly rejected whitespace-only name")
+            print("✅ Correctly rejected whitespace-only name")
 
     async def test_update_name_too_long_fails(self):
         """Test name that's too long fails."""
@@ -105,20 +105,18 @@ class TestUpdateAccountName(BaseGrpcTest):
             assert False, "Should have raised error for name too long"
         except Exception as e:
             assert "too long" in str(e).lower()
-            print(f"✅ Correctly rejected name that's too long")
+            print("✅ Correctly rejected name that's too long")
 
     async def test_update_name_nonexistent_account_fails(self):
         """Test updating name for non-existent account fails."""
-        update_request = auth_pb2.UpdateAccountNameRequest(
-            account_id=99999, name="Test Name"
-        )
+        update_request = auth_pb2.UpdateAccountNameRequest(account_id=99999, name="Test Name")
 
         try:
             await self.stub.UpdateAccountName(update_request)
             assert False, "Should have raised error for non-existent account"
         except Exception as e:
             assert "not found" in str(e).lower()
-            print(f"✅ Correctly rejected non-existent account")
+            print("✅ Correctly rejected non-existent account")
 
 
 @pytest.mark.asyncio
@@ -142,21 +140,17 @@ class TestChangePassword(BaseGrpcTest):
 
         assert change_response.success is True
 
-        login_old = auth_pb2.LoginRequest(
-            email="pwchange@example.com", password="OldPass123"
-        )
+        login_old = auth_pb2.LoginRequest(email="pwchange@example.com", password="OldPass123")
         try:
             await self.stub.Login(login_old)
             assert False, "Old password should not work"
         except Exception:
             pass
 
-        login_new = auth_pb2.LoginRequest(
-            email="pwchange@example.com", password="NewPass456"
-        )
+        login_new = auth_pb2.LoginRequest(email="pwchange@example.com", password="NewPass456")
         login_response = await self.stub.Login(login_new)
         assert login_response.account_id == register_response.account_id
-        print(f"✅ Password changed successfully")
+        print("✅ Password changed successfully")
 
     async def test_change_password_wrong_old_password_fails(self):
         """Test password change with wrong old password fails."""
@@ -177,14 +171,12 @@ class TestChangePassword(BaseGrpcTest):
             assert False, "Should have raised error for wrong old password"
         except Exception as e:
             assert "incorrect" in str(e).lower()
-            print(f"✅ Correctly rejected wrong old password")
+            print("✅ Correctly rejected wrong old password")
 
     async def test_change_password_too_short_fails(self):
         """Test password change with too short password fails."""
         register_response = await self.stub.Register(
-            auth_pb2.RegisterRequest(
-                email="short@example.com", password="Password123", plan="free"
-            )
+            auth_pb2.RegisterRequest(email="short@example.com", password="Password123", plan="free")
         )
 
         change_request = auth_pb2.ChangePasswordRequest(
@@ -198,14 +190,12 @@ class TestChangePassword(BaseGrpcTest):
             assert False, "Should have raised error for password too short"
         except Exception as e:
             assert "complexity" in str(e).lower() or "requirements" in str(e).lower()
-            print(f"✅ Correctly rejected password that's too short")
+            print("✅ Correctly rejected password that's too short")
 
     async def test_change_password_too_long_fails(self):
         """Test password change with too long password fails."""
         register_response = await self.stub.Register(
-            auth_pb2.RegisterRequest(
-                email="long@example.com", password="Password123", plan="free"
-            )
+            auth_pb2.RegisterRequest(email="long@example.com", password="Password123", plan="free")
         )
 
         long_password = "P" + "a" * 64 + "ssword123"
@@ -220,7 +210,7 @@ class TestChangePassword(BaseGrpcTest):
             assert False, "Should have raised error for password too long"
         except Exception as e:
             assert "complexity" in str(e).lower() or "requirements" in str(e).lower()
-            print(f"✅ Correctly rejected password that's too long")
+            print("✅ Correctly rejected password that's too long")
 
     async def test_change_password_nonexistent_account_fails(self):
         """Test changing password for non-existent account fails."""
@@ -235,4 +225,4 @@ class TestChangePassword(BaseGrpcTest):
             assert False, "Should have raised error for non-existent account"
         except Exception as e:
             assert "not found" in str(e).lower()
-            print(f"✅ Correctly rejected non-existent account")
+            print("✅ Correctly rejected non-existent account")

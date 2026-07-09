@@ -14,11 +14,9 @@ class Settings(pydantic_settings.BaseSettings):
         extra="ignore",
     )
 
-    ENV: typing.Literal["development", "staging", "production", "test"] = (
-        pydantic.Field(
-            default="development",
-            description="Application environment",
-        )
+    ENV: typing.Literal["development", "staging", "production", "test"] = pydantic.Field(
+        default="development",
+        description="Application environment",
     )
 
     DEBUG: bool = pydantic.Field(
@@ -51,19 +49,8 @@ class Settings(pydantic_settings.BaseSettings):
         description="Logs database password (override in .env for production)",
     )
 
-    DB_POOL_SIZE: int = pydantic.Field(
-        default=30,
-        ge=5,
-        le=100,
-        description="Database connection pool size (read-heavy workload)",
-    )
-
-    DB_MAX_OVERFLOW: int = pydantic.Field(
-        default=20,
-        ge=0,
-        le=50,
-        description="Max overflow connections",
-    )
+    DB_POOL_SIZE: typing.ClassVar[int] = 30
+    DB_MAX_OVERFLOW: typing.ClassVar[int] = 20
 
     @property
     def LOGS_DATABASE_URL(self) -> str:
@@ -82,23 +69,12 @@ class Settings(pydantic_settings.BaseSettings):
         description="Redis port",
     )
 
-    REDIS_DB: int = pydantic.Field(
-        default=0,
-        ge=0,
-        le=15,
-        description="Redis database number",
-    )
+    REDIS_DB: typing.ClassVar[int] = 0
+    REDIS_MAX_CONNECTIONS: typing.ClassVar[int] = 50
 
     REDIS_PASSWORD: str | None = pydantic.Field(
         default=None,
         description="Redis password (optional)",
-    )
-
-    REDIS_MAX_CONNECTIONS: int = pydantic.Field(
-        default=50,
-        ge=10,
-        le=100,
-        description="Redis connection pool size",
     )
 
     @property
@@ -107,108 +83,23 @@ class Settings(pydantic_settings.BaseSettings):
             return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
-    MAX_QUERY_LIMIT: int = pydantic.Field(
-        default=1000,
-        ge=1,
-        le=10000,
-        description="Maximum logs per query",
-    )
+    MAX_QUERY_LIMIT: typing.ClassVar[int] = 1000
+    DEFAULT_QUERY_LIMIT: typing.ClassVar[int] = 100
+    MAX_SEARCH_RESULTS: typing.ClassVar[int] = 10000
+    QUERY_HOST: typing.ClassVar[str] = "0.0.0.0"
+    QUERY_GRPC_PORT: typing.ClassVar[int] = 50053
+    GRPC_MAX_WORKERS: typing.ClassVar[int] = 10
+    GRPC_KEEPALIVE_TIME_MS: typing.ClassVar[int] = 300000
+    GRPC_KEEPALIVE_TIMEOUT_MS: typing.ClassVar[int] = 20000
+    GRPC_KEEPALIVE_PERMIT_WITHOUT_CALLS: typing.ClassVar[int] = 1
+    GRPC_MAX_CONNECTION_IDLE_MS: typing.ClassVar[int] = 3600000
+    GRPC_MAX_CONNECTION_AGE_MS: typing.ClassVar[int] = 86400000
+    GRPC_HTTP2_MIN_RECV_PING_INTERVAL_WITHOUT_DATA_MS: typing.ClassVar[int] = 120000
 
-    DEFAULT_QUERY_LIMIT: int = pydantic.Field(
-        default=100,
-        ge=1,
-        le=1000,
-        description="Default logs per query",
+    LOG_LEVEL: typing.Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = pydantic.Field(
+        default="INFO",
+        description="Logging level",
     )
-
-    MAX_SEARCH_RESULTS: int = pydantic.Field(
-        default=10000,
-        ge=100,
-        le=100000,
-        description="Maximum search results",
-    )
-
-    QUERY_HOST: str = pydantic.Field(
-        default="0.0.0.0",
-        description="gRPC server host",
-    )
-
-    QUERY_GRPC_PORT: int = pydantic.Field(
-        default=50053,
-        ge=1024,
-        le=65535,
-        description="gRPC server port",
-    )
-
-    GRPC_MAX_WORKERS: int = pydantic.Field(
-        default=10,
-        ge=1,
-        le=100,
-        description="gRPC server max workers",
-    )
-
-    GRPC_KEEPALIVE_TIME_MS: int = pydantic.Field(
-        default=300000,
-        description="gRPC keepalive ping interval (ms)",
-    )
-
-    GRPC_KEEPALIVE_TIMEOUT_MS: int = pydantic.Field(
-        default=20000,
-        description="gRPC keepalive timeout (ms)",
-    )
-
-    GRPC_KEEPALIVE_PERMIT_WITHOUT_CALLS: int = pydantic.Field(
-        default=1,
-        description="Allow keepalive pings when no active RPCs (1=yes)",
-    )
-
-    GRPC_MAX_CONNECTION_IDLE_MS: int = pydantic.Field(
-        default=3600000,
-        description="Max connection idle time before server closes it (ms)",
-    )
-
-    GRPC_MAX_CONNECTION_AGE_MS: int = pydantic.Field(
-        default=86400000,
-        description="Max connection age before server forces reconnect (ms)",
-    )
-
-    GRPC_HTTP2_MIN_RECV_PING_INTERVAL_WITHOUT_DATA_MS: int = pydantic.Field(
-        default=120000,
-        description="Min interval between client pings server will accept when no data flows (ms)",
-    )
-
-    LOG_LEVEL: typing.Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = (
-        pydantic.Field(
-            default="INFO",
-            description="Logging level",
-        )
-    )
-
-    def get_log_config(self) -> dict:
-        return {
-            "version": 1,
-            "disable_existing_loggers": False,
-            "formatters": {
-                "default": {
-                    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-                },
-                "json": {
-                    "()": "pythonjsonlogger.jsonlogger.JsonFormatter",
-                    "format": "%(asctime)s %(name)s %(levelname)s %(message)s",
-                },
-            },
-            "handlers": {
-                "console": {
-                    "class": "logging.StreamHandler",
-                    "formatter": "default" if self.ENV == "development" else "json",
-                    "stream": "ext://sys.stdout",
-                },
-            },
-            "root": {
-                "level": self.LOG_LEVEL,
-                "handlers": ["console"],
-            },
-        }
 
 
 @functools.lru_cache

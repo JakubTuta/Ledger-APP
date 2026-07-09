@@ -23,9 +23,7 @@ async def aggregate_log_metrics() -> None:
 
     try:
         async with database.get_logs_session() as session:
-            last_bucket = await rollup_state.get_last_bucket(
-                session, _JOB_NAME, _DEFAULT_LOOKBACK
-            )
+            last_bucket = await rollup_state.get_last_bucket(session, _JOB_NAME, _DEFAULT_LOOKBACK)
 
             query = sa.text(
                 """

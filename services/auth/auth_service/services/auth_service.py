@@ -8,6 +8,7 @@ import auth_service.config as config
 import auth_service.models as models
 import auth_service.utils.jwt_utils as jwt_utils
 import bcrypt
+import pyotp
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 from sqlalchemy import select
@@ -32,8 +33,6 @@ class AuthService:
     def __init__(self, redis: Redis):
         self.redis = redis
 
-    # ==================== Accounts ====================
-
     async def register(
         self,
         session: AsyncSession,
@@ -47,9 +46,7 @@ class AuthService:
         if not self._validate_password(password):
             raise ValueError("Password does not meet complexity requirements")
 
-        result = await session.execute(
-            select(models.Account).where(models.Account.email == email)
-        )
+        result = await session.execute(select(models.Account).where(models.Account.email == email))
         if result.scalar_one_or_none():
             raise ValueError("Email already registered")
 
@@ -57,12 +54,17 @@ class AuthService:
             password.encode(), bcrypt.gensalt(rounds=config.settings.BCRYPT_ROUNDS)
         ).decode()
 
+        verification_token = secrets.token_hex(32)
+
         account = models.Account(
             email=email,
             password_hash=password_hash,
             name=name,
             plan=plan,
             status="active",
+            email_verified=False,
+            email_verification_token=verification_token,
+            email_verification_sent_at=datetime.now(timezone.utc),
         )
         session.add(account)
         await session.commit()
@@ -246,7 +248,245 @@ class AuthService:
             if "types" in settings and not isinstance(settings["types"], list):
                 raise ValueError(f"'types' field for project {project_id} must be a list")
 
-    # ==================== Projects ====================
+    _EMAIL_VERIFICATION_TTL_HOURS = 24
+
+    async def verify_email(
+        self,
+        session: AsyncSession,
+        token: str,
+    ) -> None:
+        """Verify an account's email using its verification token."""
+        if not token:
+            raise ValueError("Invalid or expired verification token")
+
+        result = await session.execute(
+            select(models.Account).where(models.Account.email_verification_token == token)
+        )
+        account = result.scalar_one_or_none()
+
+        if not account:
+            raise ValueError("Invalid or expired verification token")
+
+        if account.email_verified:
+            # Already verified (token wasn't cleared yet, or double-submit) —
+            # treat as success rather than an error.
+            account.email_verification_token = None
+            await session.commit()
+            return
+
+        sent_at = account.email_verification_sent_at
+        if sent_at is None or datetime.now(timezone.utc) - sent_at > timedelta(
+            hours=self._EMAIL_VERIFICATION_TTL_HOURS
+        ):
+            raise ValueError("Invalid or expired verification token")
+
+        account.email_verified = True
+        account.email_verification_token = None
+        account.email_verification_sent_at = None
+        await session.commit()
+
+    async def resend_verification_email(
+        self,
+        session: AsyncSession,
+        account_id: int,
+    ) -> tuple[bool, str, str | None]:
+        """
+        Regenerate and return a fresh verification token for the account.
+
+        Returns:
+            (already_verified, email, verification_token) — verification_token
+            is None when already_verified is True.
+        """
+        account = await self.get_account_by_id(session, account_id)
+        if not account:
+            raise ValueError("Account not found")
+
+        if account.email_verified:
+            return True, account.email, None
+
+        verification_token = secrets.token_hex(32)
+        account.email_verification_token = verification_token
+        account.email_verification_sent_at = datetime.now(timezone.utc)
+        await session.commit()
+
+        return False, account.email, verification_token
+
+    def _hash_backup_code(self, code: str) -> str:
+        return hashlib.sha256(code.encode()).hexdigest()
+
+    def _generate_backup_codes(self, count: int = 10) -> list[str]:
+        return [f"{secrets.token_hex(4)}-{secrets.token_hex(4)}" for _ in range(count)]
+
+    async def setup_2fa(
+        self,
+        session: AsyncSession,
+        account_id: int,
+    ) -> tuple[str, str]:
+        """
+        Generate a pending TOTP secret for the account (not yet enabled).
+
+        Returns:
+            (secret, provisioning_uri)
+        """
+        account = await self.get_account_by_id(session, account_id)
+        if not account:
+            raise ValueError("Account not found")
+
+        secret = pyotp.random_base32()
+        account.totp_secret = secret
+        await session.commit()
+
+        provisioning_uri = pyotp.totp.TOTP(secret).provisioning_uri(
+            name=account.email, issuer_name="Ledger"
+        )
+        return secret, provisioning_uri
+
+    async def verify_2fa_setup(
+        self,
+        session: AsyncSession,
+        account_id: int,
+        code: str,
+    ) -> list[str]:
+        """Verify the pending TOTP secret and enable 2FA. Returns plaintext backup codes."""
+        account = await self.get_account_by_id(session, account_id)
+        if not account:
+            raise ValueError("Account not found")
+
+        if not account.totp_secret:
+            raise ValueError("No pending 2FA setup — call setup first")
+
+        if not pyotp.TOTP(account.totp_secret).verify(code.strip(), valid_window=1):
+            raise ValueError("Invalid verification code")
+
+        backup_codes = self._generate_backup_codes()
+        account.totp_enabled = True
+        account.totp_backup_codes = [self._hash_backup_code(c) for c in backup_codes]
+        await session.commit()
+
+        return backup_codes
+
+    async def disable_2fa(
+        self,
+        session: AsyncSession,
+        account_id: int,
+        password: str,
+    ) -> None:
+        """Disable 2FA for the account. Requires current password re-entry."""
+        account = await self.get_account_by_id(session, account_id)
+        if not account:
+            raise ValueError("Account not found")
+
+        if not bcrypt.checkpw(password.encode(), account.password_hash.encode()):
+            raise ValueError("Current password is incorrect")
+
+        if not account.totp_enabled:
+            raise ValueError("2FA is not enabled for this account")
+
+        account.totp_enabled = False
+        account.totp_secret = None
+        account.totp_backup_codes = None
+        await session.commit()
+
+    async def verify_totp_code_or_backup(
+        self,
+        session: AsyncSession,
+        account_id: int,
+        code: str,
+    ) -> models.Account:
+        """
+        Verify a TOTP code (or a backup code, consuming it) for an account
+        that has 2FA enabled. Used at the tail end of the 2FA login flow.
+        """
+        account = await self.get_account_by_id(session, account_id)
+        if not account or not account.totp_enabled or not account.totp_secret:
+            raise ValueError("2FA is not enabled for this account")
+
+        code = code.strip()
+
+        if pyotp.TOTP(account.totp_secret).verify(code, valid_window=1):
+            return account
+
+        code_hash = self._hash_backup_code(code)
+        backup_codes = account.totp_backup_codes or []
+        if code_hash in backup_codes:
+            remaining = [c for c in backup_codes if c != code_hash]
+            account.totp_backup_codes = remaining
+            await session.commit()
+            return account
+
+        raise ValueError("Invalid 2FA code")
+
+    async def list_sessions(
+        self,
+        session: AsyncSession,
+        account_id: int,
+        current_raw_token: str | None = None,
+    ) -> list[models.RefreshToken]:
+        """List active (non-revoked, non-expired) sessions for an account."""
+        result = await session.execute(
+            select(models.RefreshToken)
+            .where(
+                models.RefreshToken.account_id == account_id,
+                models.RefreshToken.revoked == False,  # noqa: E712
+                models.RefreshToken.expires_at > datetime.now(timezone.utc),
+            )
+            .order_by(models.RefreshToken.last_used_at.desc().nulls_last())
+        )
+        return list(result.scalars().all())
+
+    async def revoke_session(
+        self,
+        session: AsyncSession,
+        account_id: int,
+        session_id: int,
+    ) -> None:
+        """Revoke a single session, scoped to the requesting account."""
+        result = await session.execute(
+            select(models.RefreshToken).where(
+                models.RefreshToken.id == session_id,
+                models.RefreshToken.account_id == account_id,
+            )
+        )
+        token_record = result.scalar_one_or_none()
+        if not token_record:
+            raise ValueError("Session not found")
+
+        token_record.revoked = True
+        await session.commit()
+
+    async def revoke_all_sessions(
+        self,
+        session: AsyncSession,
+        account_id: int,
+        current_raw_token: str | None = None,
+        include_current: bool = False,
+    ) -> int:
+        """Revoke all sessions for an account, optionally excluding the current one."""
+        current_hash = (
+            jwt_utils.hash_refresh_token(current_raw_token) if current_raw_token else None
+        )
+
+        result = await session.execute(
+            select(models.RefreshToken).where(
+                models.RefreshToken.account_id == account_id,
+                models.RefreshToken.revoked == False,  # noqa: E712
+            )
+        )
+        tokens = result.scalars().all()
+
+        count = 0
+        for token in tokens:
+            if (
+                not include_current
+                and current_hash is not None
+                and token.token_hash == current_hash
+            ):
+                continue
+            token.revoked = True
+            count += 1
+
+        await session.commit()
+        return count
 
     async def create_project(
         self,
@@ -258,9 +498,7 @@ class AuthService:
     ) -> models.Project:
         """Create new project and add creator as owner member."""
 
-        result = await session.execute(
-            select(models.Project).where(models.Project.slug == slug)
-        )
+        result = await session.execute(select(models.Project).where(models.Project.slug == slug))
         if result.scalar_one_or_none():
             raise ValueError(f"Slug '{slug}' already exists")
 
@@ -336,8 +574,6 @@ class AuthService:
         )
         return result.scalar_one_or_none()
 
-    # ==================== API Keys ====================
-
     async def create_api_key(
         self,
         session: AsyncSession,
@@ -359,9 +595,7 @@ class AuthService:
                 )
             )
             if result.scalar_one_or_none():
-                raise ValueError(
-                    f"API key with name '{name}' already exists for this project"
-                )
+                raise ValueError(f"API key with name '{name}' already exists for this project")
 
         random_part = secrets.token_urlsafe(32)
         full_key = f"ledger_{random_part}"
@@ -458,16 +692,27 @@ class AuthService:
         self,
         session: AsyncSession,
         key_id: int,
+        requester_account_id: int | None = None,
     ) -> None:
-        """Revoke API key and purge its cache entry."""
+        """
+        Revoke API key and purge its cache entry.
 
-        result = await session.execute(
-            select(models.ApiKey).where(models.ApiKey.id == key_id)
-        )
+        If requester_account_id is provided, the requester must be the
+        *owner* of the key's project — members with 'member' role cannot
+        revoke API keys (they can grant/revoke ingest access for everyone
+        on the project).
+        """
+
+        result = await session.execute(select(models.ApiKey).where(models.ApiKey.id == key_id))
         api_key = result.scalar_one_or_none()
 
         if not api_key:
             raise ValueError("API key not found")
+
+        if requester_account_id is not None:
+            role = await self.get_project_role(session, api_key.project_id, requester_account_id)
+            if role != "owner":
+                raise PermissionError("Only project owners can revoke API keys")
 
         key_hash = api_key.key_hash
         api_key.status = "revoked"
@@ -490,8 +735,6 @@ class AuthService:
         api_keys = result.scalars().all()
 
         return list(api_keys)
-
-    # ==================== Project Sharing ====================
 
     def _generate_invite_code(self) -> tuple[str, str]:
         """Generate invite code and its SHA-256 hash. Returns (raw_code, code_hash)."""
@@ -616,6 +859,39 @@ class AuthService:
             for member, account in rows
         ]
 
+    async def update_project(
+        self,
+        session: AsyncSession,
+        project_id: int,
+        requester_account_id: int,
+        retention_days: int | None = None,
+        daily_quota: int | None = None,
+    ) -> models.Project:
+        """Update a project's retention/quota settings. Requester must be owner."""
+        requester_role = await self.get_project_role(session, project_id, requester_account_id)
+        if requester_role != "owner":
+            raise PermissionError("Only project owners can update project settings")
+
+        result = await session.execute(
+            select(models.Project).where(models.Project.id == project_id)
+        )
+        project = result.scalar_one_or_none()
+        if not project:
+            raise ValueError("Project not found")
+
+        if retention_days is not None:
+            if not (1 <= retention_days <= 365):
+                raise ValueError("retention_days must be between 1 and 365")
+            project.retention_days = retention_days
+
+        if daily_quota is not None:
+            if daily_quota < 1:
+                raise ValueError("daily_quota must be a positive integer")
+            project.daily_quota = daily_quota
+
+        await session.flush()
+        return project
+
     async def remove_project_member(
         self,
         session: AsyncSession,
@@ -629,7 +905,9 @@ class AuthService:
             raise PermissionError("Only project owners can remove members")
 
         if account_id == requester_account_id:
-            raise ValueError("Owners cannot remove themselves — use leave_project or transfer ownership")
+            raise ValueError(
+                "Owners cannot remove themselves — use leave_project or transfer ownership"
+            )
 
         result = await session.execute(
             select(models.ProjectMember).where(
@@ -666,7 +944,9 @@ class AuthService:
             )
             owners = result.scalars().all()
             if len(owners) <= 1:
-                raise ValueError("Cannot leave — you are the sole owner. Delete the project or transfer ownership first.")
+                raise ValueError(
+                    "Cannot leave — you are the sole owner. Delete the project or transfer ownership first."
+                )
 
         result = await session.execute(
             select(models.ProjectMember).where(
@@ -679,8 +959,6 @@ class AuthService:
         await session.commit()
 
         await self.redis.delete(f"member:{project_id}:{account_id}")
-
-    # ==================== Refresh Tokens ====================
 
     async def create_refresh_token(
         self,

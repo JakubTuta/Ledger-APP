@@ -1,6 +1,5 @@
 import asyncio
 
-import pytest
 import pytest_asyncio
 
 import tests.db_setup as db_setup

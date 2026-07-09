@@ -183,6 +183,10 @@ CREATE TABLE IF NOT EXISTS alert_rules (
     state         VARCHAR(10) NOT NULL DEFAULT 'ok',
     last_fired_at TIMESTAMPTZ,
     fired_value   DOUBLE PRECISION,
+    for_minutes      SMALLINT NOT NULL DEFAULT 0,
+    cooldown_minutes SMALLINT NOT NULL DEFAULT 0,
+    last_notified_at TIMESTAMPTZ,
+    pending_since    TIMESTAMPTZ,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -204,7 +208,7 @@ END $$;
 
 DO $$ BEGIN
     ALTER TABLE alert_rules ADD CONSTRAINT check_alert_state
-        CHECK (state IN ('ok', 'firing'));
+        CHECK (state IN ('ok', 'pending', 'firing'));
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 

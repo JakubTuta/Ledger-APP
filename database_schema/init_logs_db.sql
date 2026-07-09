@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS logs (
     error_fingerprint CHAR(64),
     trace_id CHAR(32),
     span_id CHAR(16),
+    log_id VARCHAR(64),
     PRIMARY KEY (id, timestamp)
 ) PARTITION BY RANGE (timestamp);
 
@@ -88,6 +89,9 @@ CREATE INDEX IF NOT EXISTS idx_logs_error_list_covering ON logs (project_id, tim
 WHERE level IN ('error', 'critical');
 
 CREATE INDEX IF NOT EXISTS idx_log_trace ON logs (trace_id) WHERE trace_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_logs_dedup ON logs (project_id, log_id, timestamp)
+WHERE log_id IS NOT NULL;
 
 -- ============================================
 -- PARTITIONS (Monthly - Auto-created)

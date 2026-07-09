@@ -29,15 +29,12 @@ class TestProjectEndpoints(BaseGrpcTest):
         assert response.slug == "my-project"
         assert response.environment == "production"
         assert response.retention_days == 30
-        assert response.daily_quota == 1_000_000
-        print(f"✅ Created project ID: {response.project_id}")
+        assert response.daily_quota == 100_000
 
     async def test_create_project_duplicate_slug(self):
         """Test creating project with duplicate slug fails."""
         account = await self.stub.Register(
-            auth_pb2.RegisterRequest(
-                email="user@example.com", password="password123", plan="free"
-            )
+            auth_pb2.RegisterRequest(email="user@example.com", password="password123", plan="free")
         )
 
         await self.stub.CreateProject(
@@ -61,7 +58,7 @@ class TestProjectEndpoints(BaseGrpcTest):
             assert False, "Should have raised error"
         except Exception as e:
             assert "already exists" in str(e).lower()
-            print(f"✅ Correctly rejected duplicate slug")
+            print("✅ Correctly rejected duplicate slug")
 
     async def test_get_projects(self):
         """Test retrieving projects for an account."""
@@ -96,9 +93,7 @@ class TestProjectValidation(BaseGrpcTest):
     async def test_create_project_empty_name(self):
         """Test creating project with empty name."""
         account = await self.stub.Register(
-            auth_pb2.RegisterRequest(
-                email="empty@example.com", password="password123", plan="free"
-            )
+            auth_pb2.RegisterRequest(email="empty@example.com", password="password123", plan="free")
         )
 
         request = auth_pb2.CreateProjectRequest(
@@ -117,9 +112,7 @@ class TestProjectValidation(BaseGrpcTest):
     async def test_create_project_special_characters_in_slug(self):
         """Test slug validation with special characters."""
         account = await self.stub.Register(
-            auth_pb2.RegisterRequest(
-                email="slug@example.com", password="password123", plan="free"
-            )
+            auth_pb2.RegisterRequest(email="slug@example.com", password="password123", plan="free")
         )
 
         invalid_slugs = [
@@ -169,9 +162,7 @@ class TestProjectValidation(BaseGrpcTest):
     async def test_create_project_invalid_environment(self):
         """Test creating project with invalid environment."""
         account = await self.stub.Register(
-            auth_pb2.RegisterRequest(
-                email="env@example.com", password="password123", plan="free"
-            )
+            auth_pb2.RegisterRequest(email="env@example.com", password="password123", plan="free")
         )
 
         invalid_environments = ["testing", "local", "invalid", "PRODUCTION"]
@@ -275,24 +266,18 @@ class TestProjectBusinessLogic(BaseGrpcTest):
 
         try:
             response = await self.stub.CreateProject(request)
-            print(
-                "⚠️  Project created for non-existent account - consider adding FK validation"
-            )
+            print("⚠️  Project created for non-existent account - consider adding FK validation")
         except Exception as e:
             print(f"✅ Project creation for non-existent account rejected: {e}")
 
     async def test_projects_isolated_between_accounts(self):
         """Test that projects are isolated between accounts."""
         account1 = await self.stub.Register(
-            auth_pb2.RegisterRequest(
-                email="user1@example.com", password="password123", plan="free"
-            )
+            auth_pb2.RegisterRequest(email="user1@example.com", password="password123", plan="free")
         )
 
         account2 = await self.stub.Register(
-            auth_pb2.RegisterRequest(
-                email="user2@example.com", password="password123", plan="free"
-            )
+            auth_pb2.RegisterRequest(email="user2@example.com", password="password123", plan="free")
         )
 
         await self.stub.CreateProject(
@@ -335,9 +320,7 @@ class TestProjectSlugValidation(BaseGrpcTest):
     async def test_slug_lowercase_only(self):
         """Test that slugs should be lowercase."""
         account = await self.stub.Register(
-            auth_pb2.RegisterRequest(
-                email="slug@example.com", password="password123", plan="free"
-            )
+            auth_pb2.RegisterRequest(email="slug@example.com", password="password123", plan="free")
         )
 
         request = auth_pb2.CreateProjectRequest(
@@ -437,9 +420,7 @@ class TestProjectConcurrency(BaseGrpcTest):
         import asyncio
 
         account = await self.stub.Register(
-            auth_pb2.RegisterRequest(
-                email="race@example.com", password="password123", plan="free"
-            )
+            auth_pb2.RegisterRequest(email="race@example.com", password="password123", plan="free")
         )
 
         async def create_project():
@@ -459,7 +440,7 @@ class TestProjectConcurrency(BaseGrpcTest):
 
         assert len(successes) == 1, "Only one should succeed"
         assert len(failures) == 2, "Two should fail"
-        print(f"✅ Slug race condition handled: 1 success, 2 failures")
+        print("✅ Slug race condition handled: 1 success, 2 failures")
 
     async def test_concurrent_get_projects(self):
         """Test getting projects concurrently."""

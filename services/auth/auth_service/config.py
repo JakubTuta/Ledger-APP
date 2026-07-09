@@ -23,13 +23,9 @@ class Settings(pydantic_settings.BaseSettings):
         extra="ignore",
     )
 
-    # ==================== Environment ====================
-
-    ENV: typing.Literal["development", "staging", "production", "test"] = (
-        pydantic.Field(
-            default="development",
-            description="Application environment",
-        )
+    ENV: typing.Literal["development", "staging", "production", "test"] = pydantic.Field(
+        default="development",
+        description="Application environment",
     )
 
     DEBUG: bool = pydantic.Field(
@@ -37,44 +33,16 @@ class Settings(pydantic_settings.BaseSettings):
         description="Enable debug mode",
     )
 
-    # ==================== Service Configuration ====================
+    # gRPC server port + keepalive/HTTP2 tuning: not expected to change
+    # per-deployment, so these are constants rather than env-overridable.
 
-    AUTH_GRPC_PORT: int = pydantic.Field(
-        default=50051,
-        description="gRPC server port",
-    )
-
-    GRPC_KEEPALIVE_TIME_MS: int = pydantic.Field(
-        default=300000,
-        description="gRPC keepalive ping interval (ms)",
-    )
-
-    GRPC_KEEPALIVE_TIMEOUT_MS: int = pydantic.Field(
-        default=20000,
-        description="gRPC keepalive timeout (ms)",
-    )
-
-    GRPC_KEEPALIVE_PERMIT_WITHOUT_CALLS: int = pydantic.Field(
-        default=1,
-        description="Allow keepalive pings when no active RPCs (1=yes)",
-    )
-
-    GRPC_MAX_CONNECTION_IDLE_MS: int = pydantic.Field(
-        default=3600000,
-        description="Max connection idle time before server closes it (ms)",
-    )
-
-    GRPC_MAX_CONNECTION_AGE_MS: int = pydantic.Field(
-        default=86400000,
-        description="Max connection age before server forces reconnect (ms)",
-    )
-
-    GRPC_HTTP2_MIN_RECV_PING_INTERVAL_WITHOUT_DATA_MS: int = pydantic.Field(
-        default=120000,
-        description="Min interval between client pings server will accept when no data flows (ms)",
-    )
-
-    # ==================== Database Configuration ====================
+    AUTH_GRPC_PORT: typing.ClassVar[int] = 50051
+    GRPC_KEEPALIVE_TIME_MS: typing.ClassVar[int] = 300000
+    GRPC_KEEPALIVE_TIMEOUT_MS: typing.ClassVar[int] = 20000
+    GRPC_KEEPALIVE_PERMIT_WITHOUT_CALLS: typing.ClassVar[int] = 1
+    GRPC_MAX_CONNECTION_IDLE_MS: typing.ClassVar[int] = 3600000
+    GRPC_MAX_CONNECTION_AGE_MS: typing.ClassVar[int] = 86400000
+    GRPC_HTTP2_MIN_RECV_PING_INTERVAL_WITHOUT_DATA_MS: typing.ClassVar[int] = 120000
 
     AUTH_DB_HOST: str = pydantic.Field(
         default="localhost",
@@ -101,19 +69,8 @@ class Settings(pydantic_settings.BaseSettings):
         description="Auth database password",
     )
 
-    DB_POOL_SIZE: int = pydantic.Field(
-        default=20,
-        ge=5,
-        le=100,
-        description="Database connection pool size",
-    )
-
-    DB_MAX_OVERFLOW: int = pydantic.Field(
-        default=10,
-        ge=0,
-        le=50,
-        description="Max overflow connections",
-    )
+    DB_POOL_SIZE: typing.ClassVar[int] = 20
+    DB_MAX_OVERFLOW: typing.ClassVar[int] = 10
 
     @property
     def AUTH_DATABASE_URL(self) -> str:
@@ -122,8 +79,6 @@ class Settings(pydantic_settings.BaseSettings):
             f"postgresql+asyncpg://{self.AUTH_DB_USER}:{self.AUTH_DB_PASSWORD}"
             f"@{self.AUTH_DB_HOST}:{self.AUTH_DB_PORT}/{self.AUTH_DB_NAME}"
         )
-
-    # ==================== Redis Configuration ====================
 
     REDIS_HOST: str = pydantic.Field(
         default="localhost",
@@ -135,12 +90,7 @@ class Settings(pydantic_settings.BaseSettings):
         description="Redis port",
     )
 
-    REDIS_DB: int = pydantic.Field(
-        default=0,
-        ge=0,
-        le=15,
-        description="Redis database number",
-    )
+    REDIS_DB: typing.ClassVar[int] = 0
 
     REDIS_PASSWORD: str | None = pydantic.Field(
         default=None,
@@ -154,84 +104,27 @@ class Settings(pydantic_settings.BaseSettings):
             return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
-    # ==================== Security ====================
-
     JWT_SECRET: str = pydantic.Field(
         default="your-secret-key-change-this-in-production",
         min_length=32,
         description="JWT signing secret (min 32 chars)",
     )
 
-    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = pydantic.Field(
-        default=15,
-        ge=5,
-        le=1440,
-        description="Access token expiration (minutes)",
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: typing.ClassVar[int] = 15
+    JWT_REFRESH_TOKEN_EXPIRE_DAYS: typing.ClassVar[int] = 7
+    BCRYPT_ROUNDS: typing.ClassVar[int] = 12
+
+    DEFAULT_RATE_LIMIT_PER_MINUTE: typing.ClassVar[int] = 1000
+    DEFAULT_RATE_LIMIT_PER_HOUR: typing.ClassVar[int] = 20_000
+    DEFAULT_DAILY_QUOTA: typing.ClassVar[int] = 100_000
+
+    CACHE_TTL_SECONDS: typing.ClassVar[int] = 300
+    DASHBOARD_CACHE_TTL: typing.ClassVar[int] = 300
+
+    LOG_LEVEL: typing.Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = pydantic.Field(
+        default="INFO",
+        description="Logging level",
     )
-
-    JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = pydantic.Field(
-        default=7,
-        ge=1,
-        le=30,
-        description="Refresh token expiration (days)",
-    )
-
-    BCRYPT_ROUNDS: int = pydantic.Field(
-        default=12,
-        ge=10,
-        le=14,
-        description="Bcrypt cost factor (higher = slower + more secure)",
-    )
-
-    # ==================== Rate Limiting ====================
-
-    DEFAULT_RATE_LIMIT_PER_MINUTE: int = pydantic.Field(
-        default=1000,
-        ge=10,
-        le=100_000,
-        description="Default rate limit per minute",
-    )
-
-    DEFAULT_RATE_LIMIT_PER_HOUR: int = pydantic.Field(
-        default=50_000,
-        ge=100,
-        le=10_000_000,
-        description="Default rate limit per hour",
-    )
-
-    DEFAULT_DAILY_QUOTA: int = pydantic.Field(
-        default=100_000,
-        ge=1_000,
-        le=100_000,
-        description="Default daily log quota",
-    )
-
-    # ==================== Caching ====================
-
-    CACHE_TTL_SECONDS: int = pydantic.Field(
-        default=300,
-        ge=60,
-        le=3600,
-        description="Cache TTL for API keys (seconds)",
-    )
-
-    DASHBOARD_CACHE_TTL: int = pydantic.Field(
-        default=300,
-        ge=60,
-        le=3600,
-        description="Cache TTL for dashboard panels (seconds)",
-    )
-
-    # ==================== Monitoring ====================
-
-    LOG_LEVEL: typing.Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = (
-        pydantic.Field(
-            default="INFO",
-            description="Logging level",
-        )
-    )
-
-    # ==================== Validators ====================
 
     @pydantic.field_validator("JWT_SECRET")
     @classmethod
@@ -243,35 +136,6 @@ class Settings(pydantic_settings.BaseSettings):
             if len(v) < 32:
                 raise ValueError("JWT_SECRET must be at least 32 characters")
         return v
-
-    # ==================== Environment-Specific Overrides ====================
-
-    def get_log_config(self) -> dict:
-        """Get logging configuration based on environment."""
-        return {
-            "version": 1,
-            "disable_existing_loggers": False,
-            "formatters": {
-                "default": {
-                    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-                },
-                "json": {
-                    "()": "pythonjsonlogger.jsonlogger.JsonFormatter",
-                    "format": "%(asctime)s %(name)s %(levelname)s %(message)s",
-                },
-            },
-            "handlers": {
-                "console": {
-                    "class": "logging.StreamHandler",
-                    "formatter": "default" if self.ENV == "development" else "json",
-                    "stream": "ext://sys.stdout",
-                },
-            },
-            "root": {
-                "level": self.LOG_LEVEL,
-                "handlers": ["console"],
-            },
-        }
 
 
 @functools.lru_cache

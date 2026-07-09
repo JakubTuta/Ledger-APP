@@ -51,18 +51,18 @@ def setup_jobs() -> None:
     top_errors_cron = _parse_cron_expression(settings.ANALYTICS_TOP_ERRORS_CRON)
     usage_stats_cron = _parse_cron_expression(settings.ANALYTICS_USAGE_STATS_CRON)
     hourly_metrics_cron = _parse_cron_expression(settings.ANALYTICS_HOURLY_METRICS_CRON)
-    available_routes_cron = _parse_cron_expression(
-        settings.ANALYTICS_AVAILABLE_ROUTES_CRON
-    )
-    bottleneck_metrics_cron = _parse_cron_expression(
-        settings.ANALYTICS_BOTTLENECK_METRICS_CRON
-    )
+    available_routes_cron = _parse_cron_expression(settings.ANALYTICS_AVAILABLE_ROUTES_CRON)
+    bottleneck_metrics_cron = _parse_cron_expression(settings.ANALYTICS_BOTTLENECK_METRICS_CRON)
     lv1h_rollup_cron = _parse_cron_expression(settings.ANALYTICS_LOG_VOLUME_1H_ROLLUP_CRON)
     lv1d_rollup_cron = _parse_cron_expression(settings.ANALYTICS_LOG_VOLUME_1D_ROLLUP_CRON)
     partition_cron = _parse_cron_expression(settings.ANALYTICS_PARTITION_MANAGER_CRON)
     span_latency_cron = _parse_cron_expression(settings.ANALYTICS_SPAN_LATENCY_1H_CRON)
+    metric_points_1h_cron = _parse_cron_expression(settings.ANALYTICS_METRIC_POINTS_1H_ROLLUP_CRON)
     alert_cron = _parse_cron_expression(settings.ANALYTICS_ALERT_EVALUATOR_CRON)
     notif_cleanup_cron = _parse_cron_expression(settings.ANALYTICS_NOTIFICATION_CLEANUP_CRON)
+    retention_cron = _parse_cron_expression(settings.ANALYTICS_RETENTION_CRON)
+    monitor_check_cron = _parse_cron_expression(settings.ANALYTICS_MONITOR_CHECK_CRON)
+    error_regression_cron = _parse_cron_expression(settings.ANALYTICS_ERROR_REGRESSION_CRON)
 
     scheduler.add_job(
         jobs.aggregate_log_metrics,
@@ -145,6 +145,14 @@ def setup_jobs() -> None:
     )
 
     scheduler.add_job(
+        jobs.rollup_metric_points_1h,
+        trigger=cron_trigger.CronTrigger(**metric_points_1h_cron),
+        id="rollup_metric_points_1h",
+        name="Rollup Metric Points 1h",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
         jobs.evaluate_alert_rules,
         trigger=cron_trigger.CronTrigger(**alert_cron),
         id="evaluate_alert_rules",
@@ -160,6 +168,30 @@ def setup_jobs() -> None:
         replace_existing=True,
     )
 
+    scheduler.add_job(
+        jobs.enforce_retention,
+        trigger=cron_trigger.CronTrigger(**retention_cron),
+        id="enforce_retention",
+        name="Enforce Data Retention",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        jobs.check_monitors,
+        trigger=cron_trigger.CronTrigger(**monitor_check_cron),
+        id="check_monitors",
+        name="Check Uptime/Heartbeat Monitors",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        jobs.detect_error_regressions,
+        trigger=cron_trigger.CronTrigger(**error_regression_cron),
+        id="error_regression",
+        name="Detect Error Group Regressions",
+        replace_existing=True,
+    )
+
     logger.info("Scheduled jobs with cron expressions:")
     logger.info(f"  - Aggregate Log Metrics: {settings.ANALYTICS_LOG_METRICS_CRON}")
     logger.info(f"  - Compute Top Errors: {settings.ANALYTICS_TOP_ERRORS_CRON}")
@@ -171,8 +203,14 @@ def setup_jobs() -> None:
     logger.info(f"  - Rollup Log Volume 1d: {settings.ANALYTICS_LOG_VOLUME_1D_ROLLUP_CRON}")
     logger.info(f"  - Manage Partitions: {settings.ANALYTICS_PARTITION_MANAGER_CRON}")
     logger.info(f"  - Rollup Span Latency 1h: {settings.ANALYTICS_SPAN_LATENCY_1H_CRON}")
+    logger.info(f"  - Rollup Metric Points 1h: {settings.ANALYTICS_METRIC_POINTS_1H_ROLLUP_CRON}")
     logger.info(f"  - Evaluate Alert Rules: {settings.ANALYTICS_ALERT_EVALUATOR_CRON}")
-    logger.info(f"  - Cleanup Expired Notifications: {settings.ANALYTICS_NOTIFICATION_CLEANUP_CRON}")
+    logger.info(
+        f"  - Cleanup Expired Notifications: {settings.ANALYTICS_NOTIFICATION_CLEANUP_CRON}"
+    )
+    logger.info(f"  - Enforce Data Retention: {settings.ANALYTICS_RETENTION_CRON}")
+    logger.info(f"  - Check Monitors: {settings.ANALYTICS_MONITOR_CHECK_CRON}")
+    logger.info(f"  - Error Regression Detection: {settings.ANALYTICS_ERROR_REGRESSION_CRON}")
 
 
 def _parse_cron_expression(cron_expr: str) -> dict:

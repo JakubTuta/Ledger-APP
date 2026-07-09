@@ -25,10 +25,10 @@ class TestRateLimitMiddleware(BaseGatewayTest):
         for i in range(5):
             response = await self.client.get(
                 "/api/v1/projects",
-                headers={"Authorization": f"Bearer {api_key}"},
+                headers={"X-API-Key": api_key},
             )
             assert response.status_code == 200
-            print(f"✅ Request {i+1}/5 allowed")
+            print(f"✅ Request {i + 1}/5 allowed")
 
     async def test_rate_limit_per_minute_exceeded(self):
         """Test rate limit per minute enforcement."""
@@ -48,13 +48,13 @@ class TestRateLimitMiddleware(BaseGatewayTest):
         for i in range(3):
             response = await self.client.get(
                 "/api/v1/projects",
-                headers={"Authorization": f"Bearer {api_key}"},
+                headers={"X-API-Key": api_key},
             )
             assert response.status_code == 200
 
         response = await self.client.get(
             "/api/v1/projects",
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers={"X-API-Key": api_key},
         )
 
         assert response.status_code == 429
@@ -80,13 +80,13 @@ class TestRateLimitMiddleware(BaseGatewayTest):
         for i in range(5):
             response = await self.client.get(
                 "/api/v1/projects",
-                headers={"Authorization": f"Bearer {api_key}"},
+                headers={"X-API-Key": api_key},
             )
             assert response.status_code == 200
 
         response = await self.client.get(
             "/api/v1/projects",
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers={"X-API-Key": api_key},
         )
 
         assert response.status_code == 429
@@ -110,7 +110,7 @@ class TestRateLimitMiddleware(BaseGatewayTest):
 
         response = await self.client.get(
             "/api/v1/projects",
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers={"X-API-Key": api_key},
         )
 
         assert response.status_code == 200
@@ -150,19 +150,19 @@ class TestRateLimitMiddleware(BaseGatewayTest):
         for i in range(3):
             response = await self.client.get(
                 "/api/v1/projects",
-                headers={"Authorization": f"Bearer {api_key_1}"},
+                headers={"X-API-Key": api_key_1},
             )
             assert response.status_code == 200
 
         response = await self.client.get(
             "/api/v1/projects",
-            headers={"Authorization": f"Bearer {api_key_1}"},
+            headers={"X-API-Key": api_key_1},
         )
         assert response.status_code == 429
 
         response = await self.client.get(
             "/api/v1/projects",
-            headers={"Authorization": f"Bearer {api_key_2}"},
+            headers={"X-API-Key": api_key_2},
         )
         assert response.status_code == 200
         print("✅ Different projects have independent rate limits")
@@ -182,11 +182,11 @@ class TestRateLimitMiddleware(BaseGatewayTest):
             },
         )
 
-        self.mock_redis.data[f"daily_usage:1"] = 10
+        self.mock_redis.data["daily_usage:1"] = 10
 
         response = await self.client.get(
             "/api/v1/projects",
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers={"X-API-Key": api_key},
         )
 
         assert response.status_code == 402
@@ -227,7 +227,17 @@ class TestRateLimitMetrics(BaseGatewayTest):
     """Test rate limiting metrics and monitoring."""
 
     async def test_rate_limit_stats_tracking(self):
-        """Test rate limiting statistics are tracked."""
+        """Test rate limiting statistics are tracked.
+
+        Reads gateway_service.main.app.state.rate_limit_middleware directly
+        (rather than via an HTTP call to /accounts/stats) and compares before/
+        after deltas: the middleware instance is constructed once at app
+        startup and its counters persist across the whole test session, so a
+        request to fetch stats would itself shift the counts, and an absolute
+        assertion would be order-dependent on whatever ran earlier.
+        """
+        import gateway_service.main as main
+
         api_key = "test_api_key_123"
         await self.mock_redis.set_cached_api_key(
             api_key,
@@ -241,10 +251,23 @@ class TestRateLimitMetrics(BaseGatewayTest):
             },
         )
 
-        for i in range(4):
-            await self.client.get(
-                "/api/v1/projects",
-                headers={"Authorization": f"Bearer {api_key}"},
-            )
+        # Ensure the middleware has handled at least one request (and so has
+        # set app.state.rate_limit_middleware) before capturing the baseline,
+        # in case this test runs in isolation as the very first request.
+        if not hasattr(main.app.state, "rate_limit_middleware"):
+            await self.client.get("/health")
+        stats_before = main.app.state.rate_limit_middleware.get_stats()
 
-        print("✅ Rate limit stats can be tracked")
+        statuses = []
+        for i in range(4):
+            response = await self.client.get(
+                "/api/v1/projects",
+                headers={"X-API-Key": api_key},
+            )
+            statuses.append(response.status_code)
+
+        assert statuses == [200, 200, 200, 429]
+
+        stats_after = main.app.state.rate_limit_middleware.get_stats()
+        assert stats_after["total_requests"] - stats_before["total_requests"] == 4
+        assert stats_after["rate_limited_requests"] - stats_before["rate_limited_requests"] == 1

@@ -13,11 +13,9 @@ class LogEntry(pydantic.BaseModel):
         description="Log timestamp (ISO 8601 format)",
     )
 
-    level: typing.Literal["debug", "info", "warning", "error", "critical"] = (
-        pydantic.Field(
-            ...,
-            description="Log severity level",
-        )
+    level: typing.Literal["debug", "info", "warning", "error", "critical"] = pydantic.Field(
+        ...,
+        description="Log severity level",
     )
 
     log_type: typing.Literal[
@@ -91,12 +89,16 @@ class LogEntry(pydantic.BaseModel):
         description="Runtime version",
     )
 
+    log_id: str | None = pydantic.Field(
+        None,
+        max_length=64,
+        description="Client-generated idempotency key, deduplicates redelivered logs",
+    )
+
     @pydantic.field_validator("timestamp")
     @classmethod
     def validate_timestamp(cls, v: datetime.datetime) -> datetime.datetime:
-        max_future = datetime.datetime.now(
-            datetime.timezone.utc
-        ) + datetime.timedelta(
+        max_future = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
             minutes=config.settings.TIMESTAMP_FUTURE_TOLERANCE_MINUTES
         )
         if v > max_future:
@@ -127,9 +129,7 @@ class LogEntry(pydantic.BaseModel):
             if not self.error_type:
                 raise ValueError("error_type is required when log_type is 'exception'")
             if not self.error_message:
-                raise ValueError(
-                    "error_message is required when log_type is 'exception'"
-                )
+                raise ValueError("error_message is required when log_type is 'exception'")
         return self
 
     @pydantic.model_validator(mode="after")
@@ -216,9 +216,7 @@ class BatchLogRequest(pydantic.BaseModel):
 class IngestResponse(pydantic.BaseModel):
     accepted: int = pydantic.Field(..., description="Number of logs accepted")
     rejected: int = pydantic.Field(default=0, description="Number of logs rejected")
-    errors: list[str] | None = pydantic.Field(
-        None, description="Error messages if any rejections"
-    )
+    errors: list[str] | None = pydantic.Field(None, description="Error messages if any rejections")
 
     model_config = pydantic.ConfigDict(
         json_schema_extra={

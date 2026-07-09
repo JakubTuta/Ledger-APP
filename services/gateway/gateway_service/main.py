@@ -11,11 +11,13 @@ from gateway_service.routes import (
     api_key_routes,
     auth_routes,
     dashboard_routes,
+    error_groups_routes,
     health_routes,
-    ingest_spans_routes,
     ingestion_routes,
+    monitor_routes,
     notification_inbox_routes,
     notifications,
+    otlp_routes,
     project_routes,
     query_routes,
     settings_routes,
@@ -25,7 +27,8 @@ from gateway_service.routes import (
 from gateway_service.services import grpc_pool, redis_client
 
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=getattr(logging, config.settings.LOG_LEVEL),
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
@@ -89,10 +92,11 @@ app = fastapi.FastAPI(
     description="""
 ## Ledger - Distributed Log Analytics Platform
 
-Production-ready API for ingesting, storing, and querying millions of logs per second.
+Production-ready, OpenTelemetry-native API for ingesting, storing, and querying logs and traces.
 
 ### Features
 
+* **OTLP-native ingestion** - Accepts standard OpenTelemetry traces and logs (OTLP/HTTP, protobuf or JSON) at `/v1/traces` and `/v1/logs` from any language's OTel SDK
 * **High-throughput ingestion** - Process 10K+ requests per second
 * **Multi-tenant architecture** - Project-based isolation with API key authentication
 * **Rate limiting** - Automatic rate limiting per API key (per-minute and per-hour)
@@ -108,6 +112,7 @@ All endpoints (except registration and login) require authentication via:
 - **API Key** - For log ingestion and project-specific operations
 
 Use the `X-API-Key` header for API key authentication, or `Authorization: Bearer <token>` for JWT authentication.
+OTLP exporters authenticate with `Authorization: Bearer ledger_<api-key>` or `OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer ledger_<api-key>`.
     """,
     lifespan=lifespan,
     contact={
@@ -166,8 +171,12 @@ def custom_openapi():
             "description": "API key creation and revocation for project access",
         },
         {
+            "name": "OTLP",
+            "description": "OpenTelemetry Protocol (OTLP/HTTP) ingestion for traces and logs, compatible with any language's OTel SDK",
+        },
+        {
             "name": "Ingestion",
-            "description": "High-throughput log ingestion endpoints (single and batch)",
+            "description": "Ingestion queue monitoring endpoints",
         },
         {
             "name": "Query",
@@ -208,6 +217,10 @@ def custom_openapi():
         {
             "name": "Notification Inbox",
             "description": "In-app notification inbox endpoints",
+        },
+        {
+            "name": "Monitors",
+            "description": "Uptime (HTTP) and heartbeat (dead-man's-switch) monitor management, plus the public heartbeat ping endpoint",
         },
     ]
 
@@ -331,14 +344,16 @@ include_router(api_key_routes.router, prefix="/api/v1")
 include_router(dashboard_routes.router, prefix="/api/v1")
 include_router(health_routes.router, prefix="/api/v1")
 include_router(ingestion_routes.router, prefix="/api/v1")
-include_router(ingest_spans_routes.router, prefix="/api/v1")
+include_router(otlp_routes.router)
 include_router(query_routes.router, prefix="/api/v1")
+include_router(error_groups_routes.router, prefix="/api/v1")
 include_router(tracing_routes.router, prefix="/api/v1")
 include_router(notifications.router, prefix="/api/v1")
 include_router(notification_inbox_routes.router, prefix="/api/v1")
 include_router(alert_routes.router, prefix="/api/v1")
 include_router(settings_routes.router, prefix="/api/v1")
 include_router(sharing_routes.router, prefix="/api/v1")
+include_router(monitor_routes.router, prefix="/api/v1")
 
 
 if __name__ == "__main__":

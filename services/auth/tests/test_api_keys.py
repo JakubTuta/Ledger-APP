@@ -25,9 +25,7 @@ class TestApiKeyEndpoints(BaseGrpcTest):
             )
         )
 
-        request = auth_pb2.CreateApiKeyRequest(
-            project_id=project.project_id, name="Production Key"
-        )
+        request = auth_pb2.CreateApiKeyRequest(project_id=project.project_id, name="Production Key")
         response = await self.stub.CreateApiKey(request)
 
         assert response.key_id > 0
@@ -70,15 +68,13 @@ class TestApiKeyEndpoints(BaseGrpcTest):
 
     async def test_validate_invalid_api_key(self):
         """Test validating an invalid API key."""
-        request = auth_pb2.ValidateApiKeyRequest(
-            api_key="ledger_invalid_key_does_not_exist"
-        )
+        request = auth_pb2.ValidateApiKeyRequest(api_key="ledger_invalid_key_does_not_exist")
         response = await self.stub.ValidateApiKey(request)
 
         assert response.valid is False
         assert "invalid" in response.error_message.lower()
 
-        print(f"✅ Correctly rejected invalid API key")
+        print("✅ Correctly rejected invalid API key")
 
     async def test_revoke_api_key(self):
         """Test revoking an API key."""
@@ -98,9 +94,7 @@ class TestApiKeyEndpoints(BaseGrpcTest):
         )
 
         api_key = await self.stub.CreateApiKey(
-            auth_pb2.CreateApiKeyRequest(
-                project_id=project.project_id, name="To Be Revoked"
-            )
+            auth_pb2.CreateApiKeyRequest(project_id=project.project_id, name="To Be Revoked")
         )
 
         validate_response = await self.stub.ValidateApiKey(
@@ -118,4 +112,4 @@ class TestApiKeyEndpoints(BaseGrpcTest):
         )
         assert validate_response.valid is False
 
-        print(f"✅ API key successfully revoked")
+        print("✅ API key successfully revoked")

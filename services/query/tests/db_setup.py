@@ -1,9 +1,7 @@
 import asyncio
-import os
 
 import asyncpg
 import query_service.config as config
-import query_service.database as database
 import query_service.models as models
 import sqlalchemy
 import sqlalchemy.ext.asyncio as sa_async
@@ -43,13 +41,68 @@ class TestDatabase:
 
     async def create_tables(self):
         async with self.engine.begin() as conn:
+
             def create_all_and_partitions(conn_sync):
                 models.Base.metadata.create_all(conn_sync)
+
+                # metric_points / metric_points_1h have no ORM model in
+                # query_service (it only ever reads them via raw SQL - see
+                # services/metric_points.py), so they're not covered by
+                # Base.metadata.create_all above. Mirrors ingestion's
+                # migration 014 schema exactly.
+                conn_sync.execute(
+                    sqlalchemy.text("""
+                        CREATE TABLE IF NOT EXISTS metric_points (
+                            project_id      BIGINT NOT NULL,
+                            name            TEXT NOT NULL,
+                            type            SMALLINT NOT NULL,
+                            ts              TIMESTAMPTZ NOT NULL,
+                            value           DOUBLE PRECISION,
+                            count           BIGINT,
+                            sum             DOUBLE PRECISION,
+                            bucket_counts   JSONB,
+                            explicit_bounds JSONB,
+                            tags            JSONB NOT NULL DEFAULT '{}'::jsonb,
+                            tags_hash       CHAR(16) NOT NULL,
+                            service_name    TEXT,
+                            PRIMARY KEY (project_id, name, tags_hash, ts)
+                        ) PARTITION BY RANGE (ts)
+                    """)
+                )
+                conn_sync.execute(
+                    sqlalchemy.text("""
+                        CREATE TABLE IF NOT EXISTS metric_points_1h (
+                            project_id   BIGINT NOT NULL,
+                            name         TEXT NOT NULL,
+                            type         SMALLINT NOT NULL,
+                            tags_hash    CHAR(16) NOT NULL,
+                            tags         JSONB NOT NULL DEFAULT '{}'::jsonb,
+                            bucket       TIMESTAMPTZ NOT NULL,
+                            count        BIGINT NOT NULL DEFAULT 0,
+                            sum_v        DOUBLE PRECISION NOT NULL DEFAULT 0,
+                            min_v        DOUBLE PRECISION,
+                            max_v        DOUBLE PRECISION,
+                            avg_v        DOUBLE PRECISION,
+                            PRIMARY KEY (project_id, name, tags_hash, bucket)
+                        )
+                    """)
+                )
 
                 try:
                     conn_sync.execute(
                         sqlalchemy.text("""
                             CREATE TABLE IF NOT EXISTS logs_test_partition PARTITION OF logs
+                            FOR VALUES FROM ('2020-01-01') TO ('2030-12-31');
+                        """)
+                    )
+                except Exception as e:
+                    print(f"Note: Partitions may already exist: {e}")
+
+                try:
+                    conn_sync.execute(
+                        sqlalchemy.text("""
+                            CREATE TABLE IF NOT EXISTS metric_points_test_partition
+                            PARTITION OF metric_points
                             FOR VALUES FROM ('2020-01-01') TO ('2030-12-31');
                         """)
                     )
@@ -62,7 +115,13 @@ class TestDatabase:
 
     async def drop_tables(self):
         async with self.engine.begin() as conn:
-            await conn.run_sync(models.Base.metadata.drop_all)
+
+            def drop_all(conn_sync):
+                conn_sync.execute(sqlalchemy.text("DROP TABLE IF EXISTS metric_points_1h"))
+                conn_sync.execute(sqlalchemy.text("DROP TABLE IF EXISTS metric_points CASCADE"))
+                models.Base.metadata.drop_all(conn_sync)
+
+            await conn.run_sync(drop_all)
         print("Query service test tables dropped")
 
     async def clear_tables(self):
@@ -70,9 +129,12 @@ class TestDatabase:
             return
         async with self.engine.begin() as conn:
             table_names = [t.name for t in reversed(models.Base.metadata.sorted_tables)]
+            table_names += ["metric_points_1h", "metric_points"]
             if table_names:
                 await conn.execute(
-                    sqlalchemy.text(f"TRUNCATE TABLE {', '.join(table_names)} RESTART IDENTITY CASCADE")
+                    sqlalchemy.text(
+                        f"TRUNCATE TABLE {', '.join(table_names)} RESTART IDENTITY CASCADE"
+                    )
                 )
 
     async def close(self):
@@ -134,6 +196,7 @@ async def clear_test_database():
 
 
 if __name__ == "__main__":
+
     async def test():
         print("Creating tables...")
         await setup_test_database()

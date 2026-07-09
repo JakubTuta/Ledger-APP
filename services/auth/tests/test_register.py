@@ -61,9 +61,7 @@ class TestRegisterValidation(BaseGrpcTest):
 
     async def test_register_empty_email(self):
         """Test registration with empty email."""
-        request = auth_pb2.RegisterRequest(
-            email="", password="password123", plan="free"
-        )
+        request = auth_pb2.RegisterRequest(email="", password="password123", plan="free")
 
         try:
             await self.stub.Register(request)
@@ -82,9 +80,7 @@ class TestRegisterValidation(BaseGrpcTest):
         ]
 
         for email in invalid_emails:
-            request = auth_pb2.RegisterRequest(
-                email=email, password="password123", plan="free"
-            )
+            request = auth_pb2.RegisterRequest(email=email, password="password123", plan="free")
 
             try:
                 response = await self.stub.Register(request)
@@ -94,9 +90,7 @@ class TestRegisterValidation(BaseGrpcTest):
 
     async def test_register_empty_password(self):
         """Test registration with empty password."""
-        request = auth_pb2.RegisterRequest(
-            email="empty-pass@example.com", password="", plan="free"
-        )
+        request = auth_pb2.RegisterRequest(email="empty-pass@example.com", password="", plan="free")
 
         try:
             response = await self.stub.Register(request)
@@ -186,9 +180,7 @@ class TestRegisterEmailEdgeCases(BaseGrpcTest):
         """Test registration with very long email."""
         long_email = "a" * 240 + "@example.com"
 
-        request = auth_pb2.RegisterRequest(
-            email=long_email, password="password123", plan="free"
-        )
+        request = auth_pb2.RegisterRequest(email=long_email, password="password123", plan="free")
 
         try:
             response = await self.stub.Register(request)
@@ -238,7 +230,7 @@ class TestRegisterConcurrency(BaseGrpcTest):
 
         assert len(successes) == 1, "Only one registration should succeed"
         assert len(failures) == 2, "Two should fail"
-        print(f"✅ Race condition handled: 1 success, 2 failures")
+        print("✅ Race condition handled: 1 success, 2 failures")
 
 
 @pytest.mark.asyncio

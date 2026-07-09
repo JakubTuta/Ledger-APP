@@ -95,7 +95,7 @@ class BaseIngestionTest:
         async with self.rabbitmq_connection.channel() as channel:
             for queue_name in [
                 config.settings.RABBITMQ_QUEUE,
-                config.settings.RABBITMQ_DLQ,
+                config.settings.RABBITMQ_SPANS_QUEUE,
             ]:
                 try:
                     queue = await channel.declare_queue(queue_name, passive=True)
@@ -112,6 +112,17 @@ class BaseIngestionTest:
             except Exception:
                 return 0
 
+    @staticmethod
+    def _unwrap_envelope(envelope: dict) -> list[dict]:
+        if isinstance(envelope, dict) and "logs" in envelope:
+            project_id = envelope.get("project_id")
+            logs = envelope["logs"]
+            if project_id is not None:
+                for log in logs:
+                    log.setdefault("project_id", project_id)
+            return logs
+        return [envelope]
+
     async def consume_one_payload(self) -> dict | None:
         async with self.rabbitmq_connection.channel() as channel:
             queue = await channel.declare_queue(
@@ -121,18 +132,97 @@ class BaseIngestionTest:
             message = await queue.get(no_ack=True, fail=False)
             if message is None:
                 return None
-            return msgpack.unpackb(message.body, raw=False)
+            logs = self._unwrap_envelope(msgpack.unpackb(message.body, raw=False))
+            return logs[0] if logs else None
 
     async def consume_all_payloads(self, count: int) -> list[dict]:
-        payloads = []
+        payloads: list[dict] = []
         async with self.rabbitmq_connection.channel() as channel:
             queue = await channel.declare_queue(
                 config.settings.RABBITMQ_QUEUE,
                 passive=True,
             )
-            for _ in range(count):
+            while len(payloads) < count:
                 message = await queue.get(no_ack=True, fail=False)
                 if message is None:
                     break
-                payloads.append(msgpack.unpackb(message.body, raw=False))
+                payloads.extend(self._unwrap_envelope(msgpack.unpackb(message.body, raw=False)))
+        return payloads
+
+    @staticmethod
+    def _unwrap_spans_envelope(envelope: dict) -> list[dict]:
+        if isinstance(envelope, dict) and "spans" in envelope:
+            project_id = envelope.get("project_id")
+            spans = envelope["spans"]
+            if project_id is not None:
+                for span in spans:
+                    span.setdefault("project_id", project_id)
+            return spans
+        return [envelope]
+
+    async def consume_one_span_payload(self) -> dict | None:
+        async with self.rabbitmq_connection.channel() as channel:
+            queue = await channel.declare_queue(
+                config.settings.RABBITMQ_SPANS_QUEUE,
+                passive=True,
+            )
+            message = await queue.get(no_ack=True, fail=False)
+            if message is None:
+                return None
+            spans = self._unwrap_spans_envelope(msgpack.unpackb(message.body, raw=False))
+            return spans[0] if spans else None
+
+    async def consume_all_span_payloads(self, count: int) -> list[dict]:
+        payloads: list[dict] = []
+        async with self.rabbitmq_connection.channel() as channel:
+            queue = await channel.declare_queue(
+                config.settings.RABBITMQ_SPANS_QUEUE,
+                passive=True,
+            )
+            while len(payloads) < count:
+                message = await queue.get(no_ack=True, fail=False)
+                if message is None:
+                    break
+                payloads.extend(
+                    self._unwrap_spans_envelope(msgpack.unpackb(message.body, raw=False))
+                )
+        return payloads
+
+    @staticmethod
+    def _unwrap_metrics_envelope(envelope: dict) -> list[dict]:
+        if isinstance(envelope, dict) and "points" in envelope:
+            project_id = envelope.get("project_id")
+            points = envelope["points"]
+            if project_id is not None:
+                for point in points:
+                    point.setdefault("project_id", project_id)
+            return points
+        return [envelope]
+
+    async def consume_one_metric_payload(self) -> dict | None:
+        async with self.rabbitmq_connection.channel() as channel:
+            queue = await channel.declare_queue(
+                config.settings.RABBITMQ_METRICS_QUEUE,
+                passive=True,
+            )
+            message = await queue.get(no_ack=True, fail=False)
+            if message is None:
+                return None
+            points = self._unwrap_metrics_envelope(msgpack.unpackb(message.body, raw=False))
+            return points[0] if points else None
+
+    async def consume_all_metric_payloads(self, count: int) -> list[dict]:
+        payloads: list[dict] = []
+        async with self.rabbitmq_connection.channel() as channel:
+            queue = await channel.declare_queue(
+                config.settings.RABBITMQ_METRICS_QUEUE,
+                passive=True,
+            )
+            while len(payloads) < count:
+                message = await queue.get(no_ack=True, fail=False)
+                if message is None:
+                    break
+                payloads.extend(
+                    self._unwrap_metrics_envelope(msgpack.unpackb(message.body, raw=False))
+                )
         return payloads

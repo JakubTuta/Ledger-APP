@@ -31,14 +31,10 @@ async def aggregate_bottleneck_metrics() -> None:
 
         route_metrics = await _get_all_route_metrics(previous_hour_start, previous_hour_end)
 
-        await _batch_upsert_bottleneck_metrics(
-            project_routes, route_metrics, date_str, hour
-        )
+        await _batch_upsert_bottleneck_metrics(project_routes, route_metrics, date_str, hour)
 
         elapsed = time.perf_counter() - start
-        logger.info(
-            f"Bottleneck metrics done in {elapsed:.2f}s for {len(project_routes)} projects"
-        )
+        logger.info(f"Bottleneck metrics done in {elapsed:.2f}s for {len(project_routes)} projects")
 
     except Exception as e:
         logger.error(f"Bottleneck metrics aggregation failed: {e}", exc_info=True)
@@ -94,9 +90,7 @@ async def _get_all_route_metrics(
         """
         )
 
-        result = await session.execute(
-            query, {"start_time": start_time, "end_time": end_time}
-        )
+        result = await session.execute(query, {"start_time": start_time, "end_time": end_time})
         rows = result.fetchall()
 
         metrics: dict[int, dict[str, dict]] = {}

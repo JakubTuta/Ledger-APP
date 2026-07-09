@@ -56,6 +56,11 @@ class IngestionServiceStub(object):
                 request_serializer=ingestion__pb2.IngestSpansBatchRequest.SerializeToString,
                 response_deserializer=ingestion__pb2.IngestSpansBatchResponse.FromString,
                 _registered_method=True)
+        self.IngestMetricPointsBatch = channel.unary_unary(
+                '/ingestion.IngestionService/IngestMetricPointsBatch',
+                request_serializer=ingestion__pb2.IngestMetricPointsBatchRequest.SerializeToString,
+                response_deserializer=ingestion__pb2.IngestMetricPointsBatchResponse.FromString,
+                _registered_method=True)
 
 
 class IngestionServiceServicer(object):
@@ -91,6 +96,13 @@ class IngestionServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def IngestMetricPointsBatch(self, request, context):
+        """Ingest a batch of metric points
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_IngestionServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -113,6 +125,11 @@ def add_IngestionServiceServicer_to_server(servicer, server):
                     servicer.IngestSpansBatch,
                     request_deserializer=ingestion__pb2.IngestSpansBatchRequest.FromString,
                     response_serializer=ingestion__pb2.IngestSpansBatchResponse.SerializeToString,
+            ),
+            'IngestMetricPointsBatch': grpc.unary_unary_rpc_method_handler(
+                    servicer.IngestMetricPointsBatch,
+                    request_deserializer=ingestion__pb2.IngestMetricPointsBatchRequest.FromString,
+                    response_serializer=ingestion__pb2.IngestMetricPointsBatchResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -225,6 +242,33 @@ class IngestionService(object):
             '/ingestion.IngestionService/IngestSpansBatch',
             ingestion__pb2.IngestSpansBatchRequest.SerializeToString,
             ingestion__pb2.IngestSpansBatchResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def IngestMetricPointsBatch(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/ingestion.IngestionService/IngestMetricPointsBatch',
+            ingestion__pb2.IngestMetricPointsBatchRequest.SerializeToString,
+            ingestion__pb2.IngestMetricPointsBatchResponse.FromString,
             options,
             channel_credentials,
             insecure,

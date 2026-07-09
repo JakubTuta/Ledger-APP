@@ -58,10 +58,7 @@ async def test_aggregate_log_metrics_writes_volume_and_error_caches():
             mock_get_session.return_value = mock_session
             await log_metrics_job.aggregate_log_metrics()
 
-    cache = {
-        call[0][0]: json.loads(call[0][2])
-        for call in mock_redis.setex.call_args_list
-    }
+    cache = {call[0][0]: json.loads(call[0][2]) for call in mock_redis.setex.call_args_list}
 
     volume = cache["metrics:log_volume:1:1hour"]
     assert len(volume) == 1
@@ -101,7 +98,8 @@ async def test_error_rate_total_includes_unknown_levels():
             await log_metrics_job.aggregate_log_metrics()
 
     error_rate_call = next(
-        c for c in mock_session.execute.call_args_list
+        c
+        for c in mock_session.execute.call_args_list
         if "INSERT INTO error_rate_5m" in str(c[0][0])
     )
     params = error_rate_call[0][1][0]
@@ -110,7 +108,8 @@ async def test_error_rate_total_includes_unknown_levels():
     assert params["ratio"] == pytest.approx(10 / 150)
 
     volume_call = next(
-        c for c in mock_session.execute.call_args_list
+        c
+        for c in mock_session.execute.call_args_list
         if "INSERT INTO log_volume_5m" in str(c[0][0])
     )
     volume_params = volume_call[0][1]

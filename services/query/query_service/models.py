@@ -29,54 +29,28 @@ class Log(Base):
     )
 
     level: orm.Mapped[str] = orm.mapped_column(sqlalchemy.VARCHAR(20), nullable=False)
-    log_type: orm.Mapped[str] = orm.mapped_column(
-        sqlalchemy.VARCHAR(30), nullable=False
-    )
+    log_type: orm.Mapped[str] = orm.mapped_column(sqlalchemy.VARCHAR(30), nullable=False)
     importance: orm.Mapped[str] = orm.mapped_column(
         sqlalchemy.VARCHAR(20), default="standard", nullable=False
     )
 
-    environment: orm.Mapped[str | None] = orm.mapped_column(
-        sqlalchemy.VARCHAR(20), nullable=True
-    )
-    release: orm.Mapped[str | None] = orm.mapped_column(
-        sqlalchemy.VARCHAR(100), nullable=True
-    )
+    environment: orm.Mapped[str | None] = orm.mapped_column(sqlalchemy.VARCHAR(20), nullable=True)
+    release: orm.Mapped[str | None] = orm.mapped_column(sqlalchemy.VARCHAR(100), nullable=True)
 
     message: orm.Mapped[str | None] = orm.mapped_column(sqlalchemy.Text, nullable=True)
-    error_type: orm.Mapped[str | None] = orm.mapped_column(
-        sqlalchemy.VARCHAR(255), nullable=True
-    )
-    error_message: orm.Mapped[str | None] = orm.mapped_column(
-        sqlalchemy.Text, nullable=True
-    )
-    stack_trace: orm.Mapped[str | None] = orm.mapped_column(
-        sqlalchemy.Text, nullable=True
-    )
+    error_type: orm.Mapped[str | None] = orm.mapped_column(sqlalchemy.VARCHAR(255), nullable=True)
+    error_message: orm.Mapped[str | None] = orm.mapped_column(sqlalchemy.Text, nullable=True)
+    stack_trace: orm.Mapped[str | None] = orm.mapped_column(sqlalchemy.Text, nullable=True)
 
-    attributes: orm.Mapped[dict | None] = orm.mapped_column(
-        postgresql.JSONB, nullable=True
-    )
+    attributes: orm.Mapped[dict | None] = orm.mapped_column(postgresql.JSONB, nullable=True)
 
-    method: orm.Mapped[str | None] = orm.mapped_column(
-        sqlalchemy.VARCHAR(8), nullable=True
-    )
-    path: orm.Mapped[str | None] = orm.mapped_column(
-        sqlalchemy.VARCHAR(2048), nullable=True
-    )
-    status_code: orm.Mapped[int | None] = orm.mapped_column(
-        sqlalchemy.SmallInteger, nullable=True
-    )
-    duration_ms: orm.Mapped[int | None] = orm.mapped_column(
-        sqlalchemy.Integer, nullable=True
-    )
+    method: orm.Mapped[str | None] = orm.mapped_column(sqlalchemy.VARCHAR(8), nullable=True)
+    path: orm.Mapped[str | None] = orm.mapped_column(sqlalchemy.VARCHAR(2048), nullable=True)
+    status_code: orm.Mapped[int | None] = orm.mapped_column(sqlalchemy.SmallInteger, nullable=True)
+    duration_ms: orm.Mapped[int | None] = orm.mapped_column(sqlalchemy.Integer, nullable=True)
 
-    sdk_version: orm.Mapped[str | None] = orm.mapped_column(
-        sqlalchemy.VARCHAR(20), nullable=True
-    )
-    platform: orm.Mapped[str | None] = orm.mapped_column(
-        sqlalchemy.VARCHAR(50), nullable=True
-    )
+    sdk_version: orm.Mapped[str | None] = orm.mapped_column(sqlalchemy.VARCHAR(20), nullable=True)
+    platform: orm.Mapped[str | None] = orm.mapped_column(sqlalchemy.VARCHAR(50), nullable=True)
     platform_version: orm.Mapped[str | None] = orm.mapped_column(
         sqlalchemy.VARCHAR(50), nullable=True
     )
@@ -150,15 +124,9 @@ class ErrorGroup(Base):
         sqlalchemy.BigInteger, nullable=False, index=True
     )
 
-    fingerprint: orm.Mapped[str] = orm.mapped_column(
-        sqlalchemy.CHAR(64), nullable=False
-    )
-    error_type: orm.Mapped[str] = orm.mapped_column(
-        sqlalchemy.VARCHAR(255), nullable=False
-    )
-    error_message: orm.Mapped[str | None] = orm.mapped_column(
-        sqlalchemy.Text, nullable=True
-    )
+    fingerprint: orm.Mapped[str] = orm.mapped_column(sqlalchemy.CHAR(64), nullable=False)
+    error_type: orm.Mapped[str] = orm.mapped_column(sqlalchemy.VARCHAR(255), nullable=False)
+    error_message: orm.Mapped[str | None] = orm.mapped_column(sqlalchemy.Text, nullable=True)
 
     first_seen: orm.Mapped[datetime.datetime] = orm.mapped_column(
         sqlalchemy.DateTime(timezone=True),
@@ -175,15 +143,16 @@ class ErrorGroup(Base):
     status: orm.Mapped[str] = orm.mapped_column(
         sqlalchemy.VARCHAR(20), default="unresolved", nullable=False
     )
-    assigned_to: orm.Mapped[int | None] = orm.mapped_column(
-        sqlalchemy.BigInteger, nullable=True
-    )
+    assigned_to: orm.Mapped[int | None] = orm.mapped_column(sqlalchemy.BigInteger, nullable=True)
 
-    sample_log_id: orm.Mapped[int | None] = orm.mapped_column(
-        sqlalchemy.BigInteger, nullable=True
+    sample_log_id: orm.Mapped[int | None] = orm.mapped_column(sqlalchemy.BigInteger, nullable=True)
+    sample_stack_trace: orm.Mapped[str | None] = orm.mapped_column(sqlalchemy.Text, nullable=True)
+
+    resolved_at: orm.Mapped[datetime.datetime | None] = orm.mapped_column(
+        sqlalchemy.DateTime(timezone=True), nullable=True
     )
-    sample_stack_trace: orm.Mapped[str | None] = orm.mapped_column(
-        sqlalchemy.Text, nullable=True
+    resolved_in_release: orm.Mapped[str | None] = orm.mapped_column(
+        sqlalchemy.VARCHAR(100), nullable=True
     )
 
     created_at: orm.Mapped[datetime.datetime] = orm.mapped_column(
@@ -230,13 +199,9 @@ class AggregatedMetric(Base):
         sqlalchemy.BigInteger, nullable=False, index=True
     )
 
-    date: orm.Mapped[str] = orm.mapped_column(
-        sqlalchemy.VARCHAR(8), nullable=False
-    )
+    date: orm.Mapped[str] = orm.mapped_column(sqlalchemy.VARCHAR(8), nullable=False)
     hour: orm.Mapped[int] = orm.mapped_column(sqlalchemy.SmallInteger, nullable=False)
-    metric_type: orm.Mapped[str] = orm.mapped_column(
-        sqlalchemy.VARCHAR(20), nullable=False
-    )
+    metric_type: orm.Mapped[str] = orm.mapped_column(sqlalchemy.VARCHAR(20), nullable=False)
 
     endpoint_method: orm.Mapped[str | None] = orm.mapped_column(
         sqlalchemy.VARCHAR(10), nullable=True
@@ -245,39 +210,19 @@ class AggregatedMetric(Base):
         sqlalchemy.VARCHAR(500), nullable=True
     )
 
-    log_level: orm.Mapped[str | None] = orm.mapped_column(
-        sqlalchemy.VARCHAR(20), nullable=True
-    )
-    log_type: orm.Mapped[str | None] = orm.mapped_column(
-        sqlalchemy.VARCHAR(30), nullable=True
-    )
+    log_level: orm.Mapped[str | None] = orm.mapped_column(sqlalchemy.VARCHAR(20), nullable=True)
+    log_type: orm.Mapped[str | None] = orm.mapped_column(sqlalchemy.VARCHAR(30), nullable=True)
 
-    log_count: orm.Mapped[int] = orm.mapped_column(
-        sqlalchemy.Integer, nullable=False, default=0
-    )
-    error_count: orm.Mapped[int] = orm.mapped_column(
-        sqlalchemy.Integer, nullable=False, default=0
-    )
+    log_count: orm.Mapped[int] = orm.mapped_column(sqlalchemy.Integer, nullable=False, default=0)
+    error_count: orm.Mapped[int] = orm.mapped_column(sqlalchemy.Integer, nullable=False, default=0)
 
-    avg_duration_ms: orm.Mapped[float | None] = orm.mapped_column(
-        sqlalchemy.Float, nullable=True
-    )
-    min_duration_ms: orm.Mapped[int | None] = orm.mapped_column(
-        sqlalchemy.Integer, nullable=True
-    )
-    max_duration_ms: orm.Mapped[int | None] = orm.mapped_column(
-        sqlalchemy.Integer, nullable=True
-    )
-    p95_duration_ms: orm.Mapped[int | None] = orm.mapped_column(
-        sqlalchemy.Integer, nullable=True
-    )
-    p99_duration_ms: orm.Mapped[int | None] = orm.mapped_column(
-        sqlalchemy.Integer, nullable=True
-    )
+    avg_duration_ms: orm.Mapped[float | None] = orm.mapped_column(sqlalchemy.Float, nullable=True)
+    min_duration_ms: orm.Mapped[int | None] = orm.mapped_column(sqlalchemy.Integer, nullable=True)
+    max_duration_ms: orm.Mapped[int | None] = orm.mapped_column(sqlalchemy.Integer, nullable=True)
+    p95_duration_ms: orm.Mapped[int | None] = orm.mapped_column(sqlalchemy.Integer, nullable=True)
+    p99_duration_ms: orm.Mapped[int | None] = orm.mapped_column(sqlalchemy.Integer, nullable=True)
 
-    extra_metadata: orm.Mapped[dict | None] = orm.mapped_column(
-        postgresql.JSONB, nullable=True
-    )
+    extra_metadata: orm.Mapped[dict | None] = orm.mapped_column(postgresql.JSONB, nullable=True)
 
     created_at: orm.Mapped[datetime.datetime] = orm.mapped_column(
         sqlalchemy.DateTime(timezone=True),
@@ -309,9 +254,7 @@ class AggregatedMetric(Base):
             "metric_type IN ('exception', 'endpoint', 'log_volume')",
             name="check_metric_type",
         ),
-        sqlalchemy.CheckConstraint(
-            "hour >= 0 AND hour <= 23", name="check_hour_range"
-        ),
+        sqlalchemy.CheckConstraint("hour >= 0 AND hour <= 23", name="check_hour_range"),
         sqlalchemy.CheckConstraint(
             "log_level IS NULL OR log_level IN ('debug', 'info', 'warning', 'error', 'critical')",
             name="check_log_level",
@@ -339,18 +282,12 @@ class BottleneckMetric(Base):
         sqlalchemy.BigInteger, nullable=False, index=True
     )
 
-    date: orm.Mapped[str] = orm.mapped_column(
-        sqlalchemy.VARCHAR(8), nullable=False
-    )
+    date: orm.Mapped[str] = orm.mapped_column(sqlalchemy.VARCHAR(8), nullable=False)
     hour: orm.Mapped[int] = orm.mapped_column(sqlalchemy.SmallInteger, nullable=False)
 
-    route: orm.Mapped[str] = orm.mapped_column(
-        sqlalchemy.VARCHAR(500), nullable=False
-    )
+    route: orm.Mapped[str] = orm.mapped_column(sqlalchemy.VARCHAR(500), nullable=False)
 
-    log_count: orm.Mapped[int] = orm.mapped_column(
-        sqlalchemy.Integer, nullable=False, default=0
-    )
+    log_count: orm.Mapped[int] = orm.mapped_column(sqlalchemy.Integer, nullable=False, default=0)
 
     min_duration_ms: orm.Mapped[int | None] = orm.mapped_column(
         sqlalchemy.Integer, nullable=True, default=0
@@ -390,9 +327,7 @@ class BottleneckMetric(Base):
             "date",
             "route",
         ),
-        sqlalchemy.CheckConstraint(
-            "hour >= 0 AND hour <= 23", name="check_bottleneck_hour_range"
-        ),
+        sqlalchemy.CheckConstraint("hour >= 0 AND hour <= 23", name="check_bottleneck_hour_range"),
     )
 
     def __repr__(self) -> str:

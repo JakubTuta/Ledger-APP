@@ -37,7 +37,12 @@ class TestSingleLogIngestion(BaseIngestionTest):
             "log_type": "custom",
             "importance": "standard",
             "message": "User action completed",
-            "attributes": {"user_id": 12345, "action": "purchase", "amount": 99.99, "currency": "USD"},
+            "attributes": {
+                "user_id": 12345,
+                "action": "purchase",
+                "amount": 99.99,
+                "currency": "USD",
+            },
         }
 
         proto_log = create_proto_log(log_dict)
@@ -247,7 +252,11 @@ ConnectionError: Unable to connect to database server""",
             "attributes": {
                 "event": {
                     "type": "purchase",
-                    "user": {"id": 123, "tier": "premium", "location": {"country": "US", "city": "New York"}},
+                    "user": {
+                        "id": 123,
+                        "tier": "premium",
+                        "location": {"country": "US", "city": "New York"},
+                    },
                     "items": [
                         {"id": "item1", "price": 29.99, "quantity": 2},
                         {"id": "item2", "price": 49.99, "quantity": 1},
@@ -378,4 +387,3 @@ KeyError: 'user_id'""",
 
         assert all(r.success is True for r in results)
         print("✅ 50 concurrent single ingestions successful")
-

@@ -4,7 +4,7 @@
 
 ### Your logs deserve better than expensive cloud services
 
-**Free, fast, and powerful log analytics for backend developers**
+**Free, fast, OpenTelemetry-native log and trace analytics for backend developers**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
@@ -18,24 +18,30 @@
 
 ## What is Ledger
 
-Ledger is a self-hosted log analytics platform. Capture, store, and search your logs in milliseconds — with a real-time web dashboard included.
+Ledger is a self-hosted, OpenTelemetry-native log and trace analytics platform. It ingests
+standard OTLP/HTTP from any language's OTel SDK — not just Python — and stores/searches logs and
+traces in milliseconds, with a real-time web dashboard included.
 
 ```python
 from ledger import LedgerClient
 
-ledger = LedgerClient(api_key="your_key", base_url="http://localhost:8000")
+ledger = LedgerClient(api_key="your_key", base_url="http://localhost:8020")
 ledger.log_info("User signed up", attributes={"user_id": "123"})
 ```
 
 ## Why Ledger
 
 - **100% Free** — Self-hosted, no limits, no credit card required
-- **Automatic error grouping** — Like Sentry, but without per-error pricing
-- **Real-time streaming** — Watch logs appear live as your app runs
+- **OpenTelemetry-native** — accepts standard OTLP/HTTP traces, logs, *and metrics* from any language's OTel SDK
+- **Fast full-text search** — trigram-indexed Explore page with facets and live tail
+- **Error tracking workflow** — group, assign, resolve/ignore/mute, with automatic regression detection
+- **Uptime & heartbeat monitors** — HTTP checks and dead-man's-switch pings for cron jobs
+- **Alert rules** — threshold-based alerts with escalation and maintenance windows, delivered via in-app, email, webhook, Slack, Discord, PagerDuty, or Opsgenie
 - **Distributed tracing** — End-to-end visibility across services
-- **Alert rules** — Threshold-based alerts via in-app, email, or webhook
-- **One-line setup** — `pip install ledger-sdk` and a few lines of code
+- **Two-factor auth & scoped sessions** — TOTP 2FA, httpOnly refresh cookies, per-device session management
+- **One-line setup** — `pip install ledger-sdk` and a few lines of code (Python), or standard OTel env vars (any other language)
 - **Production ready** — Multi-tenant, rate-limited, horizontally scalable
+- **Fast** — tested sustaining 10,000+ logs/s on a single node with near-zero queue lag
 
 ## Get Started
 
@@ -49,7 +55,12 @@ Docker installed.
 git clone https://github.com/JakubTuta/Ledger-APP.git
 cd Ledger-APP
 cp .env.example .env
+```
 
+Open `.env` and set `JWT_SECRET` (and the SMTP/`FRONTEND_URL` settings if you want outbound email).
+Everything else has a working default.
+
+```bash
 # Windows
 ./scripts/Make.ps1 up
 
@@ -67,7 +78,7 @@ Verify everything is running:
 make -C scripts health
 ```
 
-API is live at `http://localhost:8000`.
+API is live at `http://localhost:8020`.
 
 ### Send Your First Log
 
@@ -82,7 +93,7 @@ from ledger import LedgerClient
 
 ledger = LedgerClient(
     api_key="your_api_key",  # Get this from the dashboard
-    base_url="http://localhost:8000"
+    base_url="http://localhost:8020"
 )
 
 ledger.log_info("User logged in", attributes={"user_id": "123"})
@@ -94,43 +105,64 @@ except Exception as e:
     ledger.log_exception(e, message="Payment processing failed")
 ```
 
-**Option 2: REST API**
+**Option 2: Any OpenTelemetry SDK**
+
+Not using Python? Ledger accepts standard OTLP/HTTP, so any language's stock OTel SDK works —
+no Ledger-specific package required:
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:8020"
+export OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer YOUR_API_KEY"
+```
+
+Then use your language's normal OTel SDK setup — traces go to `POST /v1/traces`, logs go to
+`POST /v1/logs`, metrics go to `POST /v1/metrics` (all three accept `application/x-protobuf` or
+`application/json`, gzip optional).
+
+**Option 3: Account/project setup via REST API**
 
 ```bash
 # Register
-curl -X POST http://localhost:8000/api/v1/accounts/register \
+curl -X POST http://localhost:8020/api/v1/accounts/register \
   -H "Content-Type: application/json" \
   -d '{"email": "you@example.com", "password": "YourPass123", "name": "Your Name"}'
 
 # Login and save the access_token
-curl -X POST http://localhost:8000/api/v1/accounts/login \
+curl -X POST http://localhost:8020/api/v1/accounts/login \
   -H "Content-Type: application/json" \
   -d '{"email": "you@example.com", "password": "YourPass123"}'
 
 # Create a project
-curl -X POST http://localhost:8000/api/v1/projects \
+curl -X POST http://localhost:8020/api/v1/projects \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"name": "My App", "slug": "my-app", "environment": "production"}'
 
 # Create an API key (shown only once)
-curl -X POST http://localhost:8000/api/v1/projects/1/api-keys \
+curl -X POST http://localhost:8020/api/v1/projects/1/api-keys \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"name": "Production Key"}'
 ```
 
-Send a log:
+Send a log via raw OTLP/JSON:
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/ingest/single \
+curl -X POST http://localhost:8020/v1/logs \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "timestamp": "2025-11-14T10:00:00Z",
-    "level": "info",
-    "message": "Hello from Ledger!",
-    "attributes": {"user_id": "123"}
+    "resourceLogs": [{
+      "resource": {"attributes": [{"key": "service.name", "value": {"stringValue": "my-app"}}]},
+      "scopeLogs": [{
+        "logRecords": [{
+          "severityNumber": 9,
+          "body": {"stringValue": "Hello from Ledger!"},
+          "attributes": [{"key": "user_id", "value": {"stringValue": "123"}}]
+        }]
+      }]
+    }]
   }'
 ```
 
@@ -166,21 +198,11 @@ GET /api/v1/metrics/error-rate?project_id=1
 GET /api/v1/metrics/top-errors?project_id=1
 ```
 
-## Configuration
-
-Edit your `.env` file:
-
-```bash
-GATEWAY_PORT=8000
-DEFAULT_RATE_LIMIT_PER_MINUTE=1000
-DEFAULT_RATE_LIMIT_PER_HOUR=50000
-DEFAULT_DAILY_QUOTA=1000000
-```
-
 ## Ecosystem
 
-- **[Python SDK](https://github.com/JakubTuta/Ledger-SDK)** — Official client library ([PyPI](https://pypi.org/project/ledger-sdk/))
-- **[Web Dashboard](https://github.com/JakubTuta/Ledger-WEB)** — Real-time log viewer
+- **[Python SDK](https://github.com/JakubTuta/Ledger-SDK)** — Official client library ([PyPI](https://pypi.org/project/ledger-sdk/)), OpenTelemetry-native with enhanced Python features
+- **Any OpenTelemetry SDK** — Ledger's gateway accepts standard OTLP/HTTP; no Ledger-specific package needed for other languages
+- **[Web Dashboard](https://github.com/JakubTuta/Ledger-WEB)** — Real-time log and trace viewer
 - **[Live Demo](https://ledger.jtuta.cloud)** — Try it without installing
 - **[API Reference](https://bump.sh/tuta-corp/doc/ledger-api/)** — Complete REST API docs
 

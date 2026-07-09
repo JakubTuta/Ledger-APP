@@ -1,7 +1,6 @@
 import asyncio
 import datetime
 import logging
-from typing import Optional
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -142,14 +141,34 @@ async def ensure_logs_partitions(
     return await ensure_partitions_range(session, "logs", today, months_ahead)
 
 
+async def ensure_spans_partitions(
+    session: AsyncSession,
+    months_ahead: int = 3,
+) -> int:
+    today = datetime.date.today()
+    return await ensure_partitions_range(session, "spans", today, months_ahead)
+
+
+async def ensure_metric_points_partitions(
+    session: AsyncSession,
+    months_ahead: int = 3,
+) -> int:
+    today = datetime.date.today()
+    return await ensure_partitions_range(session, "metric_points", today, months_ahead)
+
+
 async def ensure_all_partitions(
     session: AsyncSession,
     months_ahead: int = 3,
 ) -> dict[str, int]:
     logs_created = await ensure_logs_partitions(session, months_ahead)
+    spans_created = await ensure_spans_partitions(session, months_ahead)
+    metric_points_created = await ensure_metric_points_partitions(session, months_ahead)
 
     return {
         "logs": logs_created,
+        "spans": spans_created,
+        "metric_points": metric_points_created,
     }
 
 

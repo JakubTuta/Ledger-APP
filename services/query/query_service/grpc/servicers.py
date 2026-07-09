@@ -8,10 +8,68 @@ import query_service.proto.query_pb2_grpc as query_pb2_grpc
 import query_service.schemas as schemas
 import query_service.services.aggregated_metrics as aggregated_metrics_service
 import query_service.services.bottleneck_metrics as bottleneck_metrics_service
+import query_service.services.error_groups as error_groups_service
 import query_service.services.health_summary as health_summary_service
 import query_service.services.log_query as log_query
+import query_service.services.metric_points as metric_points_service
 import query_service.services.metrics as metrics_service
 import query_service.services.tracing as tracing_service
+
+
+def _error_group_to_proto(group: schemas.ErrorGroupResponse) -> "query_pb2.ErrorGroupData":
+    kwargs = dict(
+        id=group.id,
+        project_id=group.project_id,
+        fingerprint=group.fingerprint,
+        error_type=group.error_type,
+        error_message=group.error_message or "",
+        first_seen=group.first_seen.isoformat(),
+        last_seen=group.last_seen.isoformat(),
+        occurrence_count=group.occurrence_count,
+        status=group.status,
+    )
+    if group.assigned_to is not None:
+        kwargs["assigned_to"] = group.assigned_to
+    if group.sample_log_id is not None:
+        kwargs["sample_log_id"] = group.sample_log_id
+    if group.resolved_at is not None:
+        kwargs["resolved_at"] = group.resolved_at.isoformat()
+    if group.resolved_in_release is not None:
+        kwargs["resolved_in_release"] = group.resolved_in_release
+    return query_pb2.ErrorGroupData(**kwargs)
+
+
+def _log_to_proto(log: schemas.LogResponse) -> "query_pb2.LogEntry":
+    entry = query_pb2.LogEntry(
+        id=log.id,
+        project_id=log.project_id,
+        timestamp=log.timestamp.isoformat(),
+        ingested_at=log.ingested_at.isoformat(),
+        level=log.level,
+        log_type=log.log_type,
+        importance=log.importance,
+        environment=log.environment or "",
+        release=log.release or "",
+        message=log.message or "",
+        error_type=log.error_type or "",
+        error_message=log.error_message or "",
+        stack_trace=log.stack_trace or "",
+        attributes=json.dumps(log.attributes) if log.attributes else "",
+        sdk_version=log.sdk_version or "",
+        platform=log.platform or "",
+        platform_version=log.platform_version or "",
+        processing_time_ms=log.processing_time_ms or 0,
+        error_fingerprint=log.error_fingerprint or "",
+    )
+    if log.method is not None:
+        entry.method = log.method
+    if log.path is not None:
+        entry.path = log.path
+    if log.status_code is not None:
+        entry.status_code = log.status_code
+    if log.duration_ms is not None:
+        entry.duration_ms = log.duration_ms
+    return entry
 
 
 class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
@@ -26,9 +84,7 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
                     else None
                 ),
                 end_time=(
-                    datetime.datetime.fromisoformat(request.end_time)
-                    if request.end_time
-                    else None
+                    datetime.datetime.fromisoformat(request.end_time) if request.end_time else None
                 ),
                 level=request.level if request.level else None,
                 log_type=request.log_type if request.log_type else None,
@@ -43,6 +99,7 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
             pagination = schemas.Pagination(
                 limit=request.limit if request.limit > 0 else 100,
                 offset=request.offset if request.offset >= 0 else 0,
+                cursor=request.cursor if request.cursor else None,
             )
 
             result = await log_query.query_logs(
@@ -82,12 +139,56 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
                     entry.duration_ms = log.duration_ms
                 log_entries.append(entry)
 
-            return query_pb2.QueryLogsResponse(
+            response = query_pb2.QueryLogsResponse(
                 logs=log_entries, total=result.total or 0, has_more=result.has_more
             )
+            if result.next_cursor:
+                response.next_cursor = result.next_cursor
+            return response
 
         except Exception as e:
             await context.abort(grpc.StatusCode.INTERNAL, f"Query failed: {str(e)}")
+
+    async def GetLogFacets(
+        self,
+        request: query_pb2.GetLogFacetsRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> query_pb2.GetLogFacetsResponse:
+        try:
+            filters = schemas.LogFilters(
+                start_time=(
+                    datetime.datetime.fromisoformat(request.start_time)
+                    if request.start_time
+                    else None
+                ),
+                end_time=(
+                    datetime.datetime.fromisoformat(request.end_time) if request.end_time else None
+                ),
+                level=request.level if request.level else None,
+                log_type=request.log_type if request.log_type else None,
+                environment=request.environment if request.environment else None,
+                error_fingerprint=(
+                    request.error_fingerprint if request.error_fingerprint else None
+                ),
+                status_class=list(request.status_class) if request.status_class else None,
+                search=request.search if request.search else None,
+            )
+
+            result = await log_query.get_log_facets(project_id=request.project_id, filters=filters)
+
+            def _to_proto(values: list) -> list:
+                return [query_pb2.LogFacetValue(value=v.value, count=v.count) for v in values]
+
+            return query_pb2.GetLogFacetsResponse(
+                project_id=result.project_id,
+                level=_to_proto(result.level),
+                log_type=_to_proto(result.log_type),
+                status_class=_to_proto(result.status_class),
+                environment=_to_proto(result.environment),
+            )
+
+        except Exception as e:
+            await context.abort(grpc.StatusCode.INTERNAL, f"Get log facets failed: {str(e)}")
 
     async def SearchLogs(
         self, request: query_pb2.SearchLogsRequest, context: grpc.aio.ServicerContext
@@ -107,9 +208,7 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
                     else None
                 ),
                 end_time=(
-                    datetime.datetime.fromisoformat(request.end_time)
-                    if request.end_time
-                    else None
+                    datetime.datetime.fromisoformat(request.end_time) if request.end_time else None
                 ),
                 pagination=pagination,
             )
@@ -213,9 +312,7 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
                     else None
                 ),
                 end_time=(
-                    datetime.datetime.fromisoformat(request.end_time)
-                    if request.end_time
-                    else None
+                    datetime.datetime.fromisoformat(request.end_time) if request.end_time else None
                 ),
             )
 
@@ -235,9 +332,7 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
             )
 
         except Exception as e:
-            await context.abort(
-                grpc.StatusCode.INTERNAL, f"Get error rate failed: {str(e)}"
-            )
+            await context.abort(grpc.StatusCode.INTERNAL, f"Get error rate failed: {str(e)}")
 
     async def GetLogVolume(
         self, request: query_pb2.GetLogVolumeRequest, context: grpc.aio.ServicerContext
@@ -252,9 +347,7 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
                     else None
                 ),
                 end_time=(
-                    datetime.datetime.fromisoformat(request.end_time)
-                    if request.end_time
-                    else None
+                    datetime.datetime.fromisoformat(request.end_time) if request.end_time else None
                 ),
             )
 
@@ -277,9 +370,7 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
             )
 
         except Exception as e:
-            await context.abort(
-                grpc.StatusCode.INTERNAL, f"Get log volume failed: {str(e)}"
-            )
+            await context.abort(grpc.StatusCode.INTERNAL, f"Get log volume failed: {str(e)}")
 
     async def GetTopErrors(
         self, request: query_pb2.GetTopErrorsRequest, context: grpc.aio.ServicerContext
@@ -294,9 +385,7 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
                     else None
                 ),
                 end_time=(
-                    datetime.datetime.fromisoformat(request.end_time)
-                    if request.end_time
-                    else None
+                    datetime.datetime.fromisoformat(request.end_time) if request.end_time else None
                 ),
                 status=request.status if request.status else None,
             )
@@ -320,9 +409,7 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
             )
 
         except Exception as e:
-            await context.abort(
-                grpc.StatusCode.INTERNAL, f"Get top errors failed: {str(e)}"
-            )
+            await context.abort(grpc.StatusCode.INTERNAL, f"Get top errors failed: {str(e)}")
 
     async def GetUsageStats(
         self, request: query_pb2.GetUsageStatsRequest, context: grpc.aio.ServicerContext
@@ -331,14 +418,10 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
             result = await metrics_service.get_usage_stats(
                 project_id=request.project_id,
                 start_date=(
-                    datetime.date.fromisoformat(request.start_date)
-                    if request.start_date
-                    else None
+                    datetime.date.fromisoformat(request.start_date) if request.start_date else None
                 ),
                 end_date=(
-                    datetime.date.fromisoformat(request.end_date)
-                    if request.end_date
-                    else None
+                    datetime.date.fromisoformat(request.end_date) if request.end_date else None
                 ),
             )
 
@@ -357,9 +440,7 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
             )
 
         except Exception as e:
-            await context.abort(
-                grpc.StatusCode.INTERNAL, f"Get usage stats failed: {str(e)}"
-            )
+            await context.abort(grpc.StatusCode.INTERNAL, f"Get usage stats failed: {str(e)}")
 
     async def GetAggregatedMetrics(
         self,
@@ -472,9 +553,15 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
                     sdk_version=error.sdk_version or "",
                     platform=error.platform or "",
                     occurrence_count=error.occurrence_count,
-                    first_seen=error.first_seen.isoformat() if error.first_seen else error.timestamp.isoformat(),
-                    last_seen=error.last_seen.isoformat() if error.last_seen else error.timestamp.isoformat(),
-                    latest_log_id=error.latest_log_id if error.latest_log_id is not None else error.log_id,
+                    first_seen=error.first_seen.isoformat()
+                    if error.first_seen
+                    else error.timestamp.isoformat(),
+                    last_seen=error.last_seen.isoformat()
+                    if error.last_seen
+                    else error.timestamp.isoformat(),
+                    latest_log_id=error.latest_log_id
+                    if error.latest_log_id is not None
+                    else error.log_id,
                 )
                 if error.group_key is not None:
                     entry_kwargs["group_key"] = error.group_key
@@ -497,9 +584,7 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
 
         except Exception as e:
-            await context.abort(
-                grpc.StatusCode.INTERNAL, f"Get error list failed: {str(e)}"
-            )
+            await context.abort(grpc.StatusCode.INTERNAL, f"Get error list failed: {str(e)}")
 
     async def GetBottleneckMetrics(
         self,
@@ -583,9 +668,7 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
 
         except Exception as e:
-            await context.abort(
-                grpc.StatusCode.INTERNAL, f"Get bottleneck list failed: {str(e)}"
-            )
+            await context.abort(grpc.StatusCode.INTERNAL, f"Get bottleneck list failed: {str(e)}")
 
     async def GetHealthSummary(
         self,
@@ -626,11 +709,127 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
 
         except Exception as e:
-            await context.abort(
-                grpc.StatusCode.INTERNAL, f"Get health summary failed: {str(e)}"
+            await context.abort(grpc.StatusCode.INTERNAL, f"Get health summary failed: {str(e)}")
+
+    async def ListErrorGroups(
+        self,
+        request: query_pb2.ListErrorGroupsRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> query_pb2.ListErrorGroupsResponse:
+        try:
+            pagination = schemas.Pagination(
+                limit=request.limit if request.limit > 0 else 100,
+                offset=request.offset if request.offset >= 0 else 0,
             )
 
-    # ==================== Distributed Tracing ====================
+            result = await error_groups_service.list_error_groups(
+                project_id=request.project_id,
+                status=request.status if request.HasField("status") else None,
+                pagination=pagination,
+            )
+
+            return query_pb2.ListErrorGroupsResponse(
+                project_id=result.project_id,
+                groups=[_error_group_to_proto(g) for g in result.groups],
+                total=result.total,
+                has_more=result.has_more,
+            )
+
+        except ValueError as e:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
+
+        except Exception as e:
+            await context.abort(grpc.StatusCode.INTERNAL, f"List error groups failed: {str(e)}")
+
+    async def GetErrorGroup(
+        self,
+        request: query_pb2.GetErrorGroupRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> query_pb2.GetErrorGroupResponse:
+        try:
+            result = await error_groups_service.get_error_group(
+                project_id=request.project_id, group_id=request.group_id
+            )
+
+            if result is None:
+                return query_pb2.GetErrorGroupResponse(found=False)
+
+            sparkline = await error_groups_service.get_error_occurrence_sparkline(
+                project_id=request.project_id,
+                group_id=request.group_id,
+                hours=24,
+            )
+
+            response_kwargs: dict = dict(
+                group=_error_group_to_proto(result.group),
+                found=True,
+            )
+            if result.sample_stack_trace is not None:
+                response_kwargs["sample_stack_trace"] = result.sample_stack_trace
+            if result.sample_log is not None:
+                response_kwargs["sample_log"] = _log_to_proto(result.sample_log)
+            if sparkline is not None:
+                response_kwargs["occurrence_sparkline"] = [
+                    query_pb2.ErrorOccurrenceBucket(bucket=b.bucket.isoformat(), count=b.count)
+                    for b in sparkline.buckets
+                ]
+
+            return query_pb2.GetErrorGroupResponse(**response_kwargs)
+
+        except Exception as e:
+            await context.abort(grpc.StatusCode.INTERNAL, f"Get error group failed: {str(e)}")
+
+    async def UpdateErrorGroupStatus(
+        self,
+        request: query_pb2.UpdateErrorGroupStatusRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> query_pb2.UpdateErrorGroupStatusResponse:
+        try:
+            group = await error_groups_service.update_error_group_status(
+                project_id=request.project_id,
+                group_id=request.group_id,
+                new_status=request.status,
+                resolved_in_release=(
+                    request.resolved_in_release if request.HasField("resolved_in_release") else None
+                ),
+            )
+
+            if group is None:
+                return query_pb2.UpdateErrorGroupStatusResponse(found=False)
+
+            return query_pb2.UpdateErrorGroupStatusResponse(
+                group=_error_group_to_proto(group), found=True
+            )
+
+        except ValueError as e:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
+
+        except Exception as e:
+            await context.abort(
+                grpc.StatusCode.INTERNAL, f"Update error group status failed: {str(e)}"
+            )
+
+    async def AssignErrorGroup(
+        self,
+        request: query_pb2.AssignErrorGroupRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> query_pb2.AssignErrorGroupResponse:
+        try:
+            group = await error_groups_service.assign_error_group(
+                project_id=request.project_id,
+                group_id=request.group_id,
+                assigned_to=(request.assigned_to if request.HasField("assigned_to") else None),
+            )
+
+            if group is None:
+                return query_pb2.AssignErrorGroupResponse(found=False)
+
+            return query_pb2.AssignErrorGroupResponse(
+                group=_error_group_to_proto(group), found=True
+            )
+
+        except Exception as e:
+            await context.abort(grpc.StatusCode.INTERNAL, f"Assign error group failed: {str(e)}")
 
     async def GetTrace(
         self,
@@ -709,9 +908,7 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
                 traces=traces, total=result["total"], has_more=result["has_more"]
             )
         except Exception as e:
-            await context.abort(
-                grpc.StatusCode.INTERNAL, f"ListTraces failed: {str(e)}"
-            )
+            await context.abort(grpc.StatusCode.INTERNAL, f"ListTraces failed: {str(e)}")
 
     async def GetSpanLatency(
         self,
@@ -739,11 +936,50 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
                 )
                 for b in buckets
             ]
-            return query_pb2.GetSpanLatencyResponse(
-                project_id=request.project_id, data=data
+            return query_pb2.GetSpanLatencyResponse(project_id=request.project_id, data=data)
+        except Exception as e:
+            await context.abort(grpc.StatusCode.INTERNAL, f"GetSpanLatency failed: {str(e)}")
+
+    async def GetMetricSeries(
+        self,
+        request: query_pb2.GetMetricSeriesRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> query_pb2.GetMetricSeriesResponse:
+        try:
+            series = await metric_points_service.get_metric_series(request.project_id)
+            return query_pb2.GetMetricSeriesResponse(
+                project_id=request.project_id,
+                series=[
+                    query_pb2.MetricSeriesInfo(
+                        name=s["name"], type=s["type"], tag_keys=s["tag_keys"]
+                    )
+                    for s in series
+                ],
             )
         except Exception as e:
-            await context.abort(
-                grpc.StatusCode.INTERNAL, f"GetSpanLatency failed: {str(e)}"
-            )
+            await context.abort(grpc.StatusCode.INTERNAL, f"GetMetricSeries failed: {str(e)}")
 
+    async def QueryMetrics(
+        self,
+        request: query_pb2.QueryMetricsRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> query_pb2.QueryMetricsResponse:
+        try:
+            data = await metric_points_service.query_metrics(
+                project_id=request.project_id,
+                name=request.name,
+                tags=dict(request.tags) if request.tags else None,
+                aggregation=request.aggregation,
+                from_time=request.from_time if request.HasField("from_time") else None,
+                to_time=request.to_time if request.HasField("to_time") else None,
+            )
+            return query_pb2.QueryMetricsResponse(
+                project_id=request.project_id,
+                name=request.name,
+                aggregation=request.aggregation,
+                data=[
+                    query_pb2.MetricDataPoint(bucket=d["bucket"], value=d["value"]) for d in data
+                ],
+            )
+        except Exception as e:
+            await context.abort(grpc.StatusCode.INTERNAL, f"QueryMetrics failed: {str(e)}")

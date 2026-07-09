@@ -1,3 +1,4 @@
+import grpc
 import pytest
 from auth_service.proto import auth_pb2
 
@@ -28,19 +29,17 @@ class TestCompleteUserJourney(BaseGrpcTest):
         print(f"✅ Step 1: Registered account {account_id}")
 
         login_response = await self.stub.Login(
-            auth_pb2.LoginRequest(
-                email="journey@example.com", password="SecurePassword123!"
-            )
+            auth_pb2.LoginRequest(email="journey@example.com", password="SecurePassword123!")
         )
         assert login_response.account_id == account_id
-        print(f"✅ Step 2: Logged in successfully")
+        print("✅ Step 2: Logged in successfully")
 
         get_account_response = await self.stub.GetAccount(
             auth_pb2.GetAccountRequest(account_id=account_id)
         )
         assert get_account_response.account_id == account_id
         assert get_account_response.email == "journey@example.com"
-        print(f"✅ Step 3: Retrieved account info")
+        print("✅ Step 3: Retrieved account info")
 
         project_response = await self.stub.CreateProject(
             auth_pb2.CreateProjectRequest(
@@ -66,9 +65,9 @@ class TestCompleteUserJourney(BaseGrpcTest):
         )
         assert validate_response.valid is True
         assert validate_response.project_id == project_id
-        print(f"✅ Step 6: API key validated")
+        print("✅ Step 6: API key validated")
 
-        print(f"\n🎉 Complete onboarding flow succeeded!")
+        print("\n🎉 Complete onboarding flow succeeded!")
 
     async def test_multi_environment_setup(self):
         """
@@ -147,9 +146,7 @@ class TestTeamCollaboration(BaseGrpcTest):
                 )
             )
 
-            users.append(
-                {"account_id": account.account_id, "project_id": project.project_id}
-            )
+            users.append({"account_id": account.account_id, "project_id": project.project_id})
 
         for i, user in enumerate(users):
             projects = await self.stub.GetProjects(
@@ -238,7 +235,7 @@ class TestApiKeyLifecycle(BaseGrpcTest):
         assert response2.valid is True
 
         await self.stub.RevokeApiKey(auth_pb2.RevokeApiKeyRequest(key_id=key1.key_id))
-        print(f"✅ Revoked key v1")
+        print("✅ Revoked key v1")
 
         response1 = await self.stub.ValidateApiKey(
             auth_pb2.ValidateApiKeyRequest(api_key=key1.full_key)
@@ -249,7 +246,7 @@ class TestApiKeyLifecycle(BaseGrpcTest):
         assert response1.valid is False
         assert response2.valid is True
 
-        print(f"✅ Key rotation completed successfully")
+        print("✅ Key rotation completed successfully")
 
     async def test_emergency_key_revocation(self):
         """Test revoking all keys in emergency scenario."""
@@ -271,9 +268,7 @@ class TestApiKeyLifecycle(BaseGrpcTest):
         keys = []
         for i in range(3):
             key = await self.stub.CreateApiKey(
-                auth_pb2.CreateApiKeyRequest(
-                    project_id=project.project_id, name=f"Key {i}"
-                )
+                auth_pb2.CreateApiKeyRequest(project_id=project.project_id, name=f"Key {i}")
             )
             keys.append(key)
 
@@ -286,9 +281,7 @@ class TestApiKeyLifecycle(BaseGrpcTest):
         print(f"✅ Created {len(keys)} active keys")
 
         for key in keys:
-            await self.stub.RevokeApiKey(
-                auth_pb2.RevokeApiKeyRequest(key_id=key.key_id)
-            )
+            await self.stub.RevokeApiKey(auth_pb2.RevokeApiKeyRequest(key_id=key.key_id))
 
         print(f"✅ Revoked all {len(keys)} keys")
 
@@ -298,7 +291,7 @@ class TestApiKeyLifecycle(BaseGrpcTest):
             )
             assert response.valid is False
 
-        print(f"✅ Emergency revocation completed")
+        print("✅ Emergency revocation completed")
 
 
 @pytest.mark.asyncio
@@ -314,23 +307,17 @@ class TestErrorRecovery(BaseGrpcTest):
         )
 
         for i in range(3):
-            try:
+            with pytest.raises(grpc.RpcError) as exc_info:
                 await self.stub.Login(
-                    auth_pb2.LoginRequest(
-                        email="recovery@example.com", password=f"wrong{i}"
-                    )
+                    auth_pb2.LoginRequest(email="recovery@example.com", password=f"wrong{i}")
                 )
-            except:
-                pass
+            assert exc_info.value.code() == grpc.StatusCode.UNAUTHENTICATED
 
         response = await self.stub.Login(
-            auth_pb2.LoginRequest(
-                email="recovery@example.com", password="correct_password"
-            )
+            auth_pb2.LoginRequest(email="recovery@example.com", password="correct_password")
         )
 
         assert response.account_id > 0
-        print("✅ Successfully logged in after failed attempts")
 
     async def test_continue_after_invalid_operations(self):
         """Test that invalid operations don't break subsequent valid ones."""
@@ -340,7 +327,7 @@ class TestErrorRecovery(BaseGrpcTest):
             )
         )
 
-        try:
+        with pytest.raises(grpc.RpcError) as exc_info:
             await self.stub.CreateProject(
                 auth_pb2.CreateProjectRequest(
                     account_id=99999,
@@ -349,15 +336,13 @@ class TestErrorRecovery(BaseGrpcTest):
                     environment="production",
                 )
             )
-        except:
-            pass
+        assert exc_info.value.code() == grpc.StatusCode.INTERNAL
 
-        try:
+        with pytest.raises(grpc.RpcError) as exc_info:
             await self.stub.CreateApiKey(
                 auth_pb2.CreateApiKeyRequest(project_id=99999, name="Invalid")
             )
-        except:
-            pass
+        assert exc_info.value.code() == grpc.StatusCode.INTERNAL
 
         project = await self.stub.CreateProject(
             auth_pb2.CreateProjectRequest(
@@ -369,7 +354,6 @@ class TestErrorRecovery(BaseGrpcTest):
         )
 
         assert project.project_id > 0
-        print("✅ Valid operations work after invalid attempts")
 
 
 @pytest.mark.asyncio

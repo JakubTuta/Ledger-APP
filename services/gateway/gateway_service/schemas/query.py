@@ -8,12 +8,8 @@ class LogEntryResponse(pydantic.BaseModel):
     id: int = pydantic.Field(description="Unique log ID")
     project_id: int = pydantic.Field(description="Project ID")
     timestamp: datetime.datetime = pydantic.Field(description="Log timestamp")
-    ingested_at: datetime.datetime = pydantic.Field(
-        description="Time when log was ingested"
-    )
-    level: str = pydantic.Field(
-        description="Log level (debug, info, warning, error, critical)"
-    )
+    ingested_at: datetime.datetime = pydantic.Field(description="Time when log was ingested")
+    level: str = pydantic.Field(description="Log level (debug, info, warning, error, critical)")
     log_type: str = pydantic.Field(
         description=(
             "Log type:\n"
@@ -25,33 +21,21 @@ class LogEntryResponse(pydantic.BaseModel):
             "- `custom`: application-specific logs"
         )
     )
-    importance: str = pydantic.Field(
-        description="Importance level (critical, high, standard, low)"
-    )
+    importance: str = pydantic.Field(description="Importance level (critical, high, standard, low)")
     environment: typing.Optional[str] = pydantic.Field(
         default=None, description="Environment (development, staging, production)"
     )
-    release: typing.Optional[str] = pydantic.Field(
-        default=None, description="Release version"
-    )
-    message: typing.Optional[str] = pydantic.Field(
-        default=None, description="Log message"
-    )
+    release: typing.Optional[str] = pydantic.Field(default=None, description="Release version")
+    message: typing.Optional[str] = pydantic.Field(default=None, description="Log message")
     error_type: typing.Optional[str] = pydantic.Field(
         default=None, description="Error type (e.g., ValueError, TypeError)"
     )
-    error_message: typing.Optional[str] = pydantic.Field(
-        default=None, description="Error message"
-    )
-    stack_trace: typing.Optional[str] = pydantic.Field(
-        default=None, description="Stack trace"
-    )
+    error_message: typing.Optional[str] = pydantic.Field(default=None, description="Error message")
+    stack_trace: typing.Optional[str] = pydantic.Field(default=None, description="Stack trace")
     attributes: typing.Optional[dict] = pydantic.Field(
         default=None, description="Additional attributes (JSON)"
     )
-    sdk_version: typing.Optional[str] = pydantic.Field(
-        default=None, description="SDK version"
-    )
+    sdk_version: typing.Optional[str] = pydantic.Field(default=None, description="SDK version")
     platform: typing.Optional[str] = pydantic.Field(
         default=None, description="Platform (e.g., Python, JavaScript)"
     )
@@ -67,9 +51,7 @@ class LogEntryResponse(pydantic.BaseModel):
     method: typing.Optional[str] = pydantic.Field(
         default=None, description="HTTP method (GET, POST, etc.)"
     )
-    path: typing.Optional[str] = pydantic.Field(
-        default=None, description="HTTP request path"
-    )
+    path: typing.Optional[str] = pydantic.Field(default=None, description="HTTP request path")
     status_code: typing.Optional[int] = pydantic.Field(
         default=None, description="HTTP response status code"
     )
@@ -88,9 +70,7 @@ class AggregatedMetricDataResponse(pydantic.BaseModel):
     endpoint_method: typing.Optional[str] = pydantic.Field(
         default=None, description="HTTP method (GET, POST, etc.)"
     )
-    endpoint_path: typing.Optional[str] = pydantic.Field(
-        default=None, description="Endpoint path"
-    )
+    endpoint_path: typing.Optional[str] = pydantic.Field(default=None, description="Endpoint path")
     log_level: typing.Optional[str] = pydantic.Field(
         default=None, description="Log level (debug, info, warning, error, critical)"
     )
@@ -119,14 +99,10 @@ class AggregatedMetricDataResponse(pydantic.BaseModel):
 class AggregatedMetricsResponse(pydantic.BaseModel):
     project_id: int = pydantic.Field(description="Project ID")
     metric_type: str = pydantic.Field(description="Metric type (exception, endpoint, log_volume)")
-    granularity: typing.Literal["hourly", "daily"] = pydantic.Field(
-        description="Data granularity"
-    )
+    granularity: typing.Literal["hourly", "daily"] = pydantic.Field(description="Data granularity")
     start_date: str = pydantic.Field(description="Start date in YYYYMMDD format")
     end_date: str = pydantic.Field(description="End date in YYYYMMDD format")
-    data: list[AggregatedMetricDataResponse] = pydantic.Field(
-        description="Aggregated metrics data"
-    )
+    data: list[AggregatedMetricDataResponse] = pydantic.Field(description="Aggregated metrics data")
 
 
 class ErrorListEntryResponse(pydantic.BaseModel):
@@ -135,18 +111,38 @@ class ErrorListEntryResponse(pydantic.BaseModel):
     level: str = pydantic.Field(description="Log level (error, critical)")
     log_type: str = pydantic.Field(description="Log type (console, logger, exception, etc.)")
     message: str = pydantic.Field(description="Error message")
-    error_type: typing.Optional[str] = pydantic.Field(default=None, description="Error type (e.g., ValueError)")
+    error_type: typing.Optional[str] = pydantic.Field(
+        default=None, description="Error type (e.g., ValueError)"
+    )
     timestamp: datetime.datetime = pydantic.Field(description="Error timestamp")
-    error_fingerprint: typing.Optional[str] = pydantic.Field(default=None, description="Error fingerprint for grouping")
-    attributes: typing.Optional[dict] = pydantic.Field(default=None, description="Additional attributes")
+    error_fingerprint: typing.Optional[str] = pydantic.Field(
+        default=None, description="Error fingerprint for grouping"
+    )
+    attributes: typing.Optional[dict] = pydantic.Field(
+        default=None, description="Additional attributes"
+    )
     sdk_version: typing.Optional[str] = pydantic.Field(default=None, description="SDK version")
-    platform: typing.Optional[str] = pydantic.Field(default=None, description="Platform (e.g., Python)")
-    group_key: typing.Optional[str] = pydantic.Field(default=None, description="Grouping key (fingerprint or hash)")
-    occurrence_count: int = pydantic.Field(default=1, description="Number of occurrences in time period")
-    first_seen: typing.Optional[datetime.datetime] = pydantic.Field(default=None, description="First occurrence timestamp")
-    last_seen: typing.Optional[datetime.datetime] = pydantic.Field(default=None, description="Most recent occurrence timestamp")
-    status_code: typing.Optional[int] = pydantic.Field(default=None, description="HTTP status code (if HTTP error)")
-    path: typing.Optional[str] = pydantic.Field(default=None, description="Request path (if HTTP error)")
+    platform: typing.Optional[str] = pydantic.Field(
+        default=None, description="Platform (e.g., Python)"
+    )
+    group_key: typing.Optional[str] = pydantic.Field(
+        default=None, description="Grouping key (fingerprint or hash)"
+    )
+    occurrence_count: int = pydantic.Field(
+        default=1, description="Number of occurrences in time period"
+    )
+    first_seen: typing.Optional[datetime.datetime] = pydantic.Field(
+        default=None, description="First occurrence timestamp"
+    )
+    last_seen: typing.Optional[datetime.datetime] = pydantic.Field(
+        default=None, description="Most recent occurrence timestamp"
+    )
+    status_code: typing.Optional[int] = pydantic.Field(
+        default=None, description="HTTP status code (if HTTP error)"
+    )
+    path: typing.Optional[str] = pydantic.Field(
+        default=None, description="Request path (if HTTP error)"
+    )
     stack_trace: typing.Optional[str] = pydantic.Field(default=None, description="Stack trace")
 
     model_config = pydantic.ConfigDict(from_attributes=True)
@@ -162,8 +158,32 @@ class ErrorListResponse(pydantic.BaseModel):
 class LogsListResponse(pydantic.BaseModel):
     project_id: int = pydantic.Field(description="Project ID")
     logs: list[LogEntryResponse] = pydantic.Field(description="List of log entries")
-    total: int | None = pydantic.Field(default=None, description="Total count — omitted when using limit+1 pagination")
+    total: int | None = pydantic.Field(
+        default=None, description="Total count — omitted when using limit+1 pagination"
+    )
     has_more: bool = pydantic.Field(description="Whether there are more logs to fetch")
+    next_cursor: str | None = pydantic.Field(
+        default=None,
+        description="Opaque cursor for the next page; pass back as ?cursor= to keep paging. "
+        "Preferred over offset for deep pagination.",
+    )
+
+
+class LogFacetValueResponse(pydantic.BaseModel):
+    value: str = pydantic.Field(description="Facet value (e.g. 'error', 'console', '4xx')")
+    count: int = pydantic.Field(
+        description="Number of logs matching this value under the current filters"
+    )
+
+
+class LogFacetsResponse(pydantic.BaseModel):
+    project_id: int = pydantic.Field(description="Project ID")
+    level: list[LogFacetValueResponse] = pydantic.Field(description="Counts by log level")
+    log_type: list[LogFacetValueResponse] = pydantic.Field(description="Counts by log type")
+    status_class: list[LogFacetValueResponse] = pydantic.Field(
+        description="Counts by HTTP status class (2xx/3xx/4xx/5xx)"
+    )
+    environment: list[LogFacetValueResponse] = pydantic.Field(description="Counts by environment")
 
 
 class BottleneckListEntryResponse(pydantic.BaseModel):
@@ -173,7 +193,9 @@ class BottleneckListEntryResponse(pydantic.BaseModel):
     min_value: typing.Optional[float] = pydantic.Field(default=None, description="Min duration ms")
     max_value: typing.Optional[float] = pydantic.Field(default=None, description="Max duration ms")
     avg_value: typing.Optional[float] = pydantic.Field(default=None, description="Avg duration ms")
-    median_value: typing.Optional[float] = pydantic.Field(default=None, description="Median duration ms")
+    median_value: typing.Optional[float] = pydantic.Field(
+        default=None, description="Median duration ms"
+    )
 
 
 class BottleneckListResponse(pydantic.BaseModel):
@@ -184,7 +206,11 @@ class BottleneckListResponse(pydantic.BaseModel):
     sort: typing.Literal["asc", "desc"] = pydantic.Field(description="Sort direction")
     start_date: str = pydantic.Field(description="Start date in YYYYMMDD format")
     end_date: str = pydantic.Field(description="End date in YYYYMMDD format")
-    max_value: float = pydantic.Field(description="Max stat value across all routes (for progress bar scaling)")
-    entries: list[BottleneckListEntryResponse] = pydantic.Field(description="Paginated route entries")
+    max_value: float = pydantic.Field(
+        description="Max stat value across all routes (for progress bar scaling)"
+    )
+    entries: list[BottleneckListEntryResponse] = pydantic.Field(
+        description="Paginated route entries"
+    )
     total: int = pydantic.Field(description="Total number of routes with data")
     has_more: bool = pydantic.Field(description="Whether there are more pages")

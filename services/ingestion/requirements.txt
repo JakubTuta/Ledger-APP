@@ -18,7 +18,7 @@ aio-pika>=9.4,<10
 msgpack==1.1.2
 
 # Scheduling
-apscheduler==3.10.4
+apscheduler==3.11.0
 
 # Configuration & Validation
 pydantic==2.12.3
