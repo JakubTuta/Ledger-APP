@@ -33,21 +33,29 @@ jobs:
       - name: ruff check
         run: ruff check .
 
-  # ==================== Tests: fully mocked services ====================
-  # gateway mocks Redis/gRPC (tests/mocks.py) and analytics mocks Redis +
-  # SQLAlchemy sessions (unittest.mock.AsyncMock) — neither touches real
-  # infra, so no service containers are needed here.
+  # ==================== Tests: gateway (mocked gRPC, real Redis) ====================
+  # gateway mocks gRPC (tests/mocks.py) for all tests, and mocks Redis for most -
+  # but test_log_tail.py/test_notifications.py open a real redis.asyncio pub/sub
+  # connection directly (MockRedisClient can't reproduce pub/sub semantics), and
+  # test_quota_atomicity.py exercises real Redis atomicity under concurrent
+  # asyncio.gather. Needs a real Redis service container.
   test-unit:
-    name: Test (${{ matrix.service }})
+    name: Test (gateway)
     needs: lint
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        service: [gateway, analytics]
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
     defaults:
       run:
-        working-directory: services/${{ matrix.service }}
+        working-directory: services/gateway
     steps:
       - uses: actions/checkout@v4
 
@@ -55,7 +63,62 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: services/${{ matrix.service }}/requirements.txt
+          cache-dependency-path: services/gateway/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: pytest tests/ -v
+
+  # ==================== Tests: analytics (real Postgres, mocked Redis) ====================
+  # analytics mocks Redis (unittest.mock.AsyncMock) but tests/conftest.py /
+  # tests/db_setup.py always set up real auth_db (port 5432) and logs_db
+  # (port 5433) Postgres instances - analytics owns no ORM models of its own
+  # and reuses auth_service/ingestion_service's real Base.metadata for table
+  # creation. Needs both Postgres instances simultaneously.
+  test-analytics:
+    name: Test (analytics)
+    needs: lint
+    runs-on: ubuntu-latest
+    services:
+      postgres-auth:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      postgres-logs:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    defaults:
+      run:
+        working-directory: services/analytics
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: services/analytics/requirements.txt
 
       - name: Install dependencies
         run: pip install -r requirements.txt
