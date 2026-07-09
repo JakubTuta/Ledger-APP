@@ -41,11 +41,11 @@ class TestEnforceRetention:
         old_month = (datetime.date.today() - datetime.timedelta(days=400)).strftime("%Y_%m")
         logs_session = AsyncMock()
         logs_session.execute = AsyncMock(
-            side_effect=lambda query, params=None: _FakeResult(
-                fetchall_value=[(f"logs_{old_month}",)]
+            side_effect=lambda query, params=None: (
+                _FakeResult(fetchall_value=[(f"logs_{old_month}",)])
+                if "pg_tables" in str(getattr(query, "text", query))
+                else _FakeResult()
             )
-            if "pg_tables" in str(getattr(query, "text", query))
-            else _FakeResult()
         )
         logs_session = _session_cm(logs_session)
 
@@ -67,11 +67,11 @@ class TestEnforceRetention:
         current_month = datetime.date.today().strftime("%Y_%m")
         logs_session = AsyncMock()
         logs_session.execute = AsyncMock(
-            side_effect=lambda query, params=None: _FakeResult(
-                fetchall_value=[(f"logs_{current_month}",)]
+            side_effect=lambda query, params=None: (
+                _FakeResult(fetchall_value=[(f"logs_{current_month}",)])
+                if "pg_tables" in str(getattr(query, "text", query))
+                else _FakeResult()
             )
-            if "pg_tables" in str(getattr(query, "text", query))
-            else _FakeResult()
         )
         logs_session = _session_cm(logs_session)
 

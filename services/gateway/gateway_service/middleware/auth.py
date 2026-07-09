@@ -219,17 +219,21 @@ class AuthMiddleware:
                     )
                 )
                 task.add_done_callback(
-                    lambda t: logger.error("Negative cache write failed: %s", t.exception())
-                    if not t.cancelled() and t.exception()
-                    else None
+                    lambda t: (
+                        logger.error("Negative cache write failed: %s", t.exception())
+                        if not t.cancelled() and t.exception()
+                        else None
+                    )
                 )
             raise
 
         task = asyncio.create_task(self.redis.set_cached_api_key(api_key, auth_data))
         task.add_done_callback(
-            lambda t: logger.error("Cache write failed: %s", t.exception())
-            if not t.cancelled() and t.exception()
-            else None
+            lambda t: (
+                logger.error("Cache write failed: %s", t.exception())
+                if not t.cancelled() and t.exception()
+                else None
+            )
         )
 
         return auth_data
