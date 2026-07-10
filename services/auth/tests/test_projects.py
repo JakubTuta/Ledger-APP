@@ -29,7 +29,37 @@ class TestProjectEndpoints(BaseGrpcTest):
         assert response.slug == "my-project"
         assert response.environment == "production"
         assert response.retention_days == 30
-        assert response.daily_quota == 100_000
+        assert response.logs_daily_quota == 100_000
+        assert response.spans_daily_quota == 300_000
+        assert response.metrics_daily_quota == 100_000
+
+    async def test_update_project_quotas(self):
+        """Test updating a project's per-signal quotas independently."""
+        account = await self.stub.Register(
+            auth_pb2.RegisterRequest(
+                email="updatequota@example.com", password="password123", plan="pro"
+            )
+        )
+        project = await self.stub.CreateProject(
+            auth_pb2.CreateProjectRequest(
+                account_id=account.account_id,
+                name="Update Quota Project",
+                slug="update-quota-project",
+                environment="production",
+            )
+        )
+
+        request = auth_pb2.UpdateProjectRequest(
+            project_id=project.project_id,
+            requester_account_id=account.account_id,
+            spans_daily_quota=500_000,
+        )
+        response = await self.stub.UpdateProject(request)
+
+        assert response.logs_daily_quota == 100_000
+        assert response.spans_daily_quota == 500_000
+        assert response.metrics_daily_quota == 100_000
+        print("✅ Updated spans_daily_quota independently of logs/metrics")
 
     async def test_create_project_duplicate_slug(self):
         """Test creating project with duplicate slug fails."""

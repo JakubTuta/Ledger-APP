@@ -82,14 +82,14 @@ class RateLimitMiddleware:
                     )
             else:
                 rate_limits = request.state.rate_limits
-                daily_quota = request.state.daily_quota
+                logs_daily_quota = request.state.logs_daily_quota
 
                 await self._check_rate_limits(
                     project_id, rate_limits["per_minute"], rate_limits["per_hour"]
                 )
 
                 if request.url.path not in self.DAILY_QUOTA_EXEMPT_PATHS:
-                    await self._check_daily_quota(project_id, daily_quota)
+                    await self._check_daily_quota(project_id, logs_daily_quota)
 
                 extra_headers = {
                     "X-RateLimit-Limit-Minute": str(rate_limits["per_minute"]),
@@ -175,17 +175,18 @@ class RateLimitMiddleware:
                 },
             )
 
-    async def _check_daily_quota(self, project_id: int, daily_quota: int):
-        current_usage = await self.redis.get_daily_usage(project_id)
+    async def _check_daily_quota(self, project_id: int, logs_daily_quota: int):
+        current_usage = await self.redis.get_daily_usage(project_id, signal="logs")
 
-        if current_usage >= daily_quota:
+        if current_usage >= logs_daily_quota:
             logger.warning(
-                f"Project {project_id} exceeded daily quota: {current_usage}/{daily_quota}"
+                f"Project {project_id} exceeded daily logs quota: "
+                f"{current_usage}/{logs_daily_quota}"
             )
 
             raise HTTPException(
                 status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                detail=f"Daily quota exceeded: {current_usage}/{daily_quota}",
+                detail=f"Daily quota exceeded: {current_usage}/{logs_daily_quota}",
             )
 
     def get_stats(self) -> typing.Dict:

@@ -32,9 +32,9 @@ logger = logging.getLogger(__name__)
                             "requests_per_hour": 50000,
                         },
                         "quotas": {
-                            "daily_quota": 1000000,
-                            "daily_usage": 45678,
-                            "quota_remaining": 954322,
+                            "logs": {"quota": 100000, "usage": 1234, "remaining": 98766},
+                            "spans": {"quota": 300000, "usage": 555, "remaining": 299445},
+                            "metrics": {"quota": 100000, "usage": 42, "remaining": 99958},
                             "quota_reset_at": "2024-01-16T00:00:00Z",
                         },
                         "constraints": {
@@ -135,17 +135,14 @@ async def get_settings(request: fastapi.Request) -> schemas.SettingsResponse:
                 timeout=config.settings.GRPC_TIMEOUT,
             )
 
-            usage_response = await stub.GetDailyUsage(
-                auth_pb2.GetDailyUsageRequest(
-                    project_id=project_id, date=datetime.date.today().isoformat()
-                ),
-                timeout=config.settings.GRPC_TIMEOUT,
-            )
+        usage_by_signal = await request.app.state.redis_client.get_daily_usage_by_signal(project_id)
 
-        quota_remaining = project_response.daily_quota - usage_response.log_count
         tomorrow = datetime.datetime.now(datetime.timezone.utc).replace(
             hour=0, minute=0, second=0, microsecond=0
         ) + datetime.timedelta(days=1)
+
+        def _signal_quota(quota: int, usage: int) -> schemas.SignalQuota:
+            return schemas.SignalQuota(quota=quota, usage=usage, remaining=max(0, quota - usage))
 
         return schemas.SettingsResponse(
             project_id=project_id,
@@ -157,9 +154,11 @@ async def get_settings(request: fastapi.Request) -> schemas.SettingsResponse:
                 requests_per_hour=request.state.rate_limits["per_hour"],
             ),
             quotas=schemas.Quotas(
-                daily_quota=project_response.daily_quota,
-                daily_usage=usage_response.log_count,
-                quota_remaining=max(0, quota_remaining),
+                logs=_signal_quota(project_response.logs_daily_quota, usage_by_signal["logs"]),
+                spans=_signal_quota(project_response.spans_daily_quota, usage_by_signal["spans"]),
+                metrics=_signal_quota(
+                    project_response.metrics_daily_quota, usage_by_signal["metrics"]
+                ),
                 quota_reset_at=tomorrow.isoformat(),
             ),
             constraints=schemas.Constraints(

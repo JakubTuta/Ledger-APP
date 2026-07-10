@@ -90,7 +90,8 @@ def get_auth_context(request: fastapi.Request) -> typing.Dict:
     Performance: O(1) attribute access, bundles multiple fields.
 
     Returns:
-        Dict with project_id, account_id, rate_limits, daily_quota
+        Dict with project_id, account_id, rate_limits, logs_daily_quota,
+        spans_daily_quota, metrics_daily_quota
 
     Usage:
         @router.post("/logs")
@@ -109,7 +110,9 @@ def get_auth_context(request: fastapi.Request) -> typing.Dict:
         "project_id": request.state.project_id,
         "account_id": request.state.account_id,
         "rate_limits": request.state.rate_limits,
-        "daily_quota": request.state.daily_quota,
+        "logs_daily_quota": request.state.logs_daily_quota,
+        "spans_daily_quota": request.state.spans_daily_quota,
+        "metrics_daily_quota": request.state.metrics_daily_quota,
     }
 
 

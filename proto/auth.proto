@@ -352,7 +352,9 @@ message CreateProjectResponse {
   string slug = 3;
   string environment = 4;
   int32 retention_days = 5;
-  int64 daily_quota = 6;
+  int64 logs_daily_quota = 6;
+  int64 spans_daily_quota = 7;
+  int64 metrics_daily_quota = 8;
 }
 
 message GetProjectsRequest {
@@ -365,9 +367,11 @@ message ProjectInfo {
   string slug = 3;
   string environment = 4;
   int32 retention_days = 5;
-  int64 daily_quota = 6;
+  int64 logs_daily_quota = 6;
   repeated string available_routes = 7;
   string role = 8;
+  int64 spans_daily_quota = 9;
+  int64 metrics_daily_quota = 10;
 }
 
 message GetProjectsResponse {
@@ -384,15 +388,19 @@ message GetProjectByIdResponse {
   string slug = 3;
   string environment = 4;
   int32 retention_days = 5;
-  int64 daily_quota = 6;
+  int64 logs_daily_quota = 6;
   repeated string available_routes = 7;
+  int64 spans_daily_quota = 8;
+  int64 metrics_daily_quota = 9;
 }
 
 message UpdateProjectRequest {
   int64 project_id = 1;
   int64 requester_account_id = 2;
   optional int32 retention_days = 3;
-  optional int64 daily_quota = 4;
+  optional int64 logs_daily_quota = 4;
+  optional int64 spans_daily_quota = 5;
+  optional int64 metrics_daily_quota = 6;
 }
 
 message UpdateProjectResponse {
@@ -401,7 +409,9 @@ message UpdateProjectResponse {
   string slug = 3;
   string environment = 4;
   int32 retention_days = 5;
-  int64 daily_quota = 6;
+  int64 logs_daily_quota = 6;
+  int64 spans_daily_quota = 7;
+  int64 metrics_daily_quota = 8;
 }
 
 // ==================== Project Sharing Messages ====================
@@ -484,6 +494,8 @@ message GetDailyUsageRequest {
 message GetDailyUsageResponse {
   int64 log_count = 1;
   string date = 2;
+  int64 span_count = 3;
+  int64 metric_point_count = 4;
 }
 
 // ==================== API Key Messages ====================
@@ -507,12 +519,14 @@ message ValidateApiKeyResponse {
   bool valid = 1;
   int64 project_id = 2;
   int64 account_id = 3;
-  int64 daily_quota = 4;
+  int64 logs_daily_quota = 4;
   int32 retention_days = 5;
   int32 rate_limit_per_minute = 6;
   int32 rate_limit_per_hour = 7;
   int64 current_usage = 8;
   string error_message = 9;
+  int64 spans_daily_quota = 10;
+  int64 metrics_daily_quota = 11;
 }
 
 message RevokeApiKeyRequest {

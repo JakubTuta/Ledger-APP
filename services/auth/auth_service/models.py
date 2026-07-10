@@ -210,7 +210,9 @@ class Project(database.Base):
     environment: Mapped[str] = mapped_column(VARCHAR(20), default="production", nullable=False)
 
     retention_days: Mapped[int] = mapped_column(SmallInteger, default=30, nullable=False)
-    daily_quota: Mapped[int] = mapped_column(BigInteger, default=100_000, nullable=False)
+    logs_daily_quota: Mapped[int] = mapped_column(BigInteger, default=100_000, nullable=False)
+    spans_daily_quota: Mapped[int] = mapped_column(BigInteger, default=300_000, nullable=False)
+    metrics_daily_quota: Mapped[int] = mapped_column(BigInteger, default=100_000, nullable=False)
 
     available_routes: Mapped[list[str]] = mapped_column(
         ARRAY(String), default=list, nullable=False, server_default="{}"
@@ -262,8 +264,16 @@ class Project(database.Base):
             name="check_retention_days",
         ),
         CheckConstraint(
-            "daily_quota >= 1000",
-            name="check_daily_quota",
+            "logs_daily_quota >= 1000",
+            name="check_logs_daily_quota",
+        ),
+        CheckConstraint(
+            "spans_daily_quota >= 1000",
+            name="check_spans_daily_quota",
+        ),
+        CheckConstraint(
+            "metrics_daily_quota >= 1000",
+            name="check_metrics_daily_quota",
         ),
     )
 
@@ -377,6 +387,8 @@ class DailyUsage(database.Base):
     logs_ingested: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
     logs_queried: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
     storage_bytes: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
+    spans_ingested: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
+    metric_points_ingested: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
 
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),

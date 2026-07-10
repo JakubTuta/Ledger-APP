@@ -193,11 +193,16 @@ class RedisClient:
     async def delete_totp_session(self, totp_session_token: str):
         await self.delete(self._totp_session_key(totp_session_token))
 
-    async def get_daily_usage(self, project_id: int) -> int:
+    _USAGE_SIGNALS = ("logs", "spans", "metrics")
+
+    def _daily_usage_key(self, project_id: int, signal: str, today: str) -> str:
+        return f"usage:{project_id}:{signal}:{today}"
+
+    async def get_daily_usage(self, project_id: int, signal: str = "logs") -> int:
         import datetime
 
         today = datetime.date.today().strftime("%Y%m%d")
-        key = f"usage:{project_id}:{today}"
+        key = self._daily_usage_key(project_id, signal, today)
 
         try:
             count = await self.client.get(key)  # type: ignore
@@ -207,10 +212,27 @@ class RedisClient:
             logger.error(f"Get daily usage error: {e}")
             return 0
 
+    async def get_daily_usage_by_signal(self, project_id: int) -> dict[str, int]:
+        """Fetch today's usage for all three signals in a single round trip."""
+        import datetime
+
+        today = datetime.date.today().strftime("%Y%m%d")
+        keys = [self._daily_usage_key(project_id, signal, today) for signal in self._USAGE_SIGNALS]
+
+        try:
+            values = await self.client.mget(keys)  # type: ignore
+        except RedisError as e:
+            logger.error(f"Get daily usage by signal error: {e}")
+            values = [None] * len(self._USAGE_SIGNALS)
+
+        return {
+            signal: int(value) if value else 0 for signal, value in zip(self._USAGE_SIGNALS, values)
+        }
+
     async def try_consume_quota(
-        self, project_id: int, amount: int, daily_quota: int
+        self, project_id: int, signal: str, amount: int, quota: int
     ) -> tuple[bool, int]:
-        """Atomically reserve `amount` against the daily quota.
+        """Atomically reserve `amount` against a signal's daily quota.
 
         Returns (allowed, usage_after). On denial the reservation is rolled back
         so usage reflects only accepted items, avoiding the increment-after-accept
@@ -219,11 +241,11 @@ class RedisClient:
         import datetime
 
         today = datetime.date.today().strftime("%Y%m%d")
-        key = f"usage:{project_id}:{today}"
+        key = self._daily_usage_key(project_id, signal, today)
 
         try:
             allowed, usage = await self.client.eval(  # type: ignore
-                _QUOTA_CONSUME_LUA, 1, key, amount, daily_quota, 48 * 3600
+                _QUOTA_CONSUME_LUA, 1, key, amount, quota, 48 * 3600
             )
             return bool(allowed), int(usage)
 

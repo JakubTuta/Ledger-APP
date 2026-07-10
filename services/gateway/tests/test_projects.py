@@ -19,7 +19,7 @@ class TestCreateProject(BaseGatewayTest):
                 "account_id": 1,
                 "rate_limit_per_minute": 1000,
                 "rate_limit_per_hour": 50000,
-                "daily_quota": 1000000,
+                "logs_daily_quota": 1000000,
                 "current_usage": 0,
             },
         )
@@ -41,7 +41,7 @@ class TestCreateProject(BaseGatewayTest):
         assert data["slug"] == "my-test-project"
         assert data["environment"] == "production"
         assert data["retention_days"] == 30
-        assert data["daily_quota"] > 0
+        assert data["logs_daily_quota"] > 0
         print(f"✅ Created project ID: {data['project_id']}")
 
     async def test_create_project_duplicate_slug(self):
@@ -54,7 +54,7 @@ class TestCreateProject(BaseGatewayTest):
                 "account_id": 1,
                 "rate_limit_per_minute": 1000,
                 "rate_limit_per_hour": 50000,
-                "daily_quota": 1000000,
+                "logs_daily_quota": 1000000,
                 "current_usage": 0,
             },
         )
@@ -93,7 +93,7 @@ class TestCreateProject(BaseGatewayTest):
                 "account_id": 1,
                 "rate_limit_per_minute": 1000,
                 "rate_limit_per_hour": 50000,
-                "daily_quota": 1000000,
+                "logs_daily_quota": 1000000,
                 "current_usage": 0,
             },
         )
@@ -129,7 +129,7 @@ class TestCreateProject(BaseGatewayTest):
                 "account_id": 1,
                 "rate_limit_per_minute": 1000,
                 "rate_limit_per_hour": 50000,
-                "daily_quota": 1000000,
+                "logs_daily_quota": 1000000,
                 "current_usage": 0,
             },
         )
@@ -158,7 +158,7 @@ class TestCreateProject(BaseGatewayTest):
                 "account_id": 1,
                 "rate_limit_per_minute": 1000,
                 "rate_limit_per_hour": 50000,
-                "daily_quota": 1000000,
+                "logs_daily_quota": 1000000,
                 "current_usage": 0,
             },
         )
@@ -205,7 +205,7 @@ class TestListProjects(BaseGatewayTest):
                 "account_id": 1,
                 "rate_limit_per_minute": 1000,
                 "rate_limit_per_hour": 50000,
-                "daily_quota": 1000000,
+                "logs_daily_quota": 1000000,
                 "current_usage": 0,
             },
         )
@@ -219,7 +219,7 @@ class TestListProjects(BaseGatewayTest):
                     slug="project-1",
                     environment="production",
                     retention_days=30,
-                    daily_quota=1000000,
+                    logs_daily_quota=1000000,
                 ),
                 auth_pb2.ProjectInfo(
                     project_id=2,
@@ -227,7 +227,7 @@ class TestListProjects(BaseGatewayTest):
                     slug="project-2",
                     environment="staging",
                     retention_days=7,
-                    daily_quota=500000,
+                    logs_daily_quota=500000,
                 ),
             ]
         )
@@ -255,7 +255,7 @@ class TestListProjects(BaseGatewayTest):
                 "account_id": 1,
                 "rate_limit_per_minute": 1000,
                 "rate_limit_per_hour": 50000,
-                "daily_quota": 1000000,
+                "logs_daily_quota": 1000000,
                 "current_usage": 0,
             },
         )
@@ -293,7 +293,7 @@ class TestGetProjectBySlug(BaseGatewayTest):
                 "account_id": 1,
                 "rate_limit_per_minute": 1000,
                 "rate_limit_per_hour": 50000,
-                "daily_quota": 1000000,
+                "logs_daily_quota": 1000000,
                 "current_usage": 0,
             },
         )
@@ -307,7 +307,7 @@ class TestGetProjectBySlug(BaseGatewayTest):
                     slug="my-project",
                     environment="production",
                     retention_days=30,
-                    daily_quota=1000000,
+                    logs_daily_quota=1000000,
                 ),
             ]
         )
@@ -333,7 +333,7 @@ class TestGetProjectBySlug(BaseGatewayTest):
                 "account_id": 1,
                 "rate_limit_per_minute": 1000,
                 "rate_limit_per_hour": 50000,
-                "daily_quota": 1000000,
+                "logs_daily_quota": 1000000,
                 "current_usage": 0,
             },
         )

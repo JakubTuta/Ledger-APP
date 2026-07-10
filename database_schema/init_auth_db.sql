@@ -55,7 +55,9 @@ CREATE TABLE IF NOT EXISTS projects (
     slug VARCHAR(255) NOT NULL,
     environment VARCHAR(20) DEFAULT 'production',
     retention_days SMALLINT DEFAULT 30,
-    daily_quota BIGINT DEFAULT 100000,
+    logs_daily_quota BIGINT DEFAULT 100000,
+    spans_daily_quota BIGINT DEFAULT 300000,
+    metrics_daily_quota BIGINT DEFAULT 100000,
     available_routes TEXT[] DEFAULT '{}',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -103,6 +105,8 @@ CREATE TABLE IF NOT EXISTS daily_usage (
     logs_ingested BIGINT DEFAULT 0,
     logs_queried BIGINT DEFAULT 0,
     storage_bytes BIGINT DEFAULT 0,
+    spans_ingested BIGINT DEFAULT 0,
+    metric_points_ingested BIGINT DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     CONSTRAINT uq_project_date UNIQUE (project_id, date)

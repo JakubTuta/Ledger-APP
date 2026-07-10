@@ -76,7 +76,15 @@ class AuthMiddleware:
                     "per_hour": auth_data.get("rate_limit_per_hour", 50000),
                 },
             )
-            state["daily_quota"] = auth_data.get("daily_quota", config.settings.DEFAULT_DAILY_QUOTA)
+            state["logs_daily_quota"] = auth_data.get(
+                "logs_daily_quota", config.settings.DEFAULT_LOGS_DAILY_QUOTA
+            )
+            state["spans_daily_quota"] = auth_data.get(
+                "spans_daily_quota", config.settings.DEFAULT_SPANS_DAILY_QUOTA
+            )
+            state["metrics_daily_quota"] = auth_data.get(
+                "metrics_daily_quota", config.settings.DEFAULT_METRICS_DAILY_QUOTA
+            )
 
             await self.app(scope, receive, send)
 
@@ -258,7 +266,9 @@ class AuthMiddleware:
                 "account_id": response.account_id,
                 "rate_limit_per_minute": response.rate_limit_per_minute,
                 "rate_limit_per_hour": response.rate_limit_per_hour,
-                "daily_quota": response.daily_quota,
+                "logs_daily_quota": response.logs_daily_quota,
+                "spans_daily_quota": response.spans_daily_quota,
+                "metrics_daily_quota": response.metrics_daily_quota,
             }
 
             return auth_data
@@ -342,5 +352,7 @@ def get_auth_data(request: fastapi.Request) -> typing.Dict:
         "project_id": request.state.project_id,
         "account_id": request.state.account_id,
         "rate_limits": request.state.rate_limits,
-        "daily_quota": request.state.daily_quota,
+        "logs_daily_quota": request.state.logs_daily_quota,
+        "spans_daily_quota": request.state.spans_daily_quota,
+        "metrics_daily_quota": request.state.metrics_daily_quota,
     }

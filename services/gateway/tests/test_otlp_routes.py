@@ -266,6 +266,77 @@ class TestOtlpTraceRoute(test_base.BaseGatewayTest):
 
         assert response.status_code == 400
 
+    async def test_spans_quota_exceeded_rejects_without_forwarding(self, setup_method):
+        await self.set_api_key_cache("test_api_key_123", project_id=1, spans_daily_quota=1)
+        self.mock_redis.data["daily_usage:1:spans"] = 1
+
+        mock_stub = self.mock_grpc_pool.get_stub("ingestion", None)
+
+        async def fail_if_called(*args, **kwargs):
+            raise AssertionError("IngestSpansBatch should not be called once quota is exhausted")
+
+        mock_stub.IngestSpansBatch = fail_if_called
+
+        response = await self.client.post(
+            "/v1/traces",
+            content=_json_trace_body(),
+            headers={
+                "X-API-Key": "test_api_key_123",
+                "Content-Type": "application/json",
+            },
+        )
+
+        assert response.status_code == 200
+        data = json.loads(response.content)
+        assert data["partialSuccess"]["rejectedSpans"] == "1"
+
+    async def test_spans_quota_exhaustion_does_not_block_logs_or_metrics(self, setup_method):
+        """Regression test for the shared-quota incident: exhausting the spans
+        quota must not affect logs or metrics ingestion for the same project."""
+        await self.set_api_key_cache(
+            "test_api_key_123",
+            project_id=1,
+            spans_daily_quota=1,
+            logs_daily_quota=1000000,
+            metrics_daily_quota=1000000,
+        )
+        self.mock_redis.data["daily_usage:1:spans"] = 1
+
+        spans_response = await self.client.post(
+            "/v1/traces",
+            content=_json_trace_body(),
+            headers={
+                "X-API-Key": "test_api_key_123",
+                "Content-Type": "application/json",
+            },
+        )
+        spans_data = json.loads(spans_response.content)
+        assert spans_data["partialSuccess"]["rejectedSpans"] == "1"
+
+        logs_response = await self.client.post(
+            "/v1/logs",
+            content=_json_log_body(),
+            headers={
+                "X-API-Key": "test_api_key_123",
+                "Content-Type": "application/json",
+            },
+        )
+        assert logs_response.status_code == 200
+        logs_data = json.loads(logs_response.content)
+        assert "partialSuccess" not in logs_data or not logs_data.get("partialSuccess")
+
+        metrics_response = await self.client.post(
+            "/v1/metrics",
+            content=_json_metric_body(),
+            headers={
+                "X-API-Key": "test_api_key_123",
+                "Content-Type": "application/json",
+            },
+        )
+        assert metrics_response.status_code == 200
+        metrics_data = json.loads(metrics_response.content)
+        assert "partialSuccess" not in metrics_data or not metrics_data.get("partialSuccess")
+
 
 @pytest.mark.asyncio
 class TestOtlpLogsRoute(test_base.BaseGatewayTest):
@@ -307,8 +378,8 @@ class TestOtlpLogsRoute(test_base.BaseGatewayTest):
         assert usage == 1
 
     async def test_quota_exceeded_rejects_without_forwarding(self, setup_method):
-        await self.set_api_key_cache("test_api_key_123", project_id=1, daily_quota=1)
-        self.mock_redis.data["daily_usage:1"] = 1
+        await self.set_api_key_cache("test_api_key_123", project_id=1, logs_daily_quota=1)
+        self.mock_redis.data["daily_usage:1:logs"] = 1
 
         mock_stub = self.mock_grpc_pool.get_stub("ingestion", None)
 
@@ -334,7 +405,7 @@ class TestOtlpLogsRoute(test_base.BaseGatewayTest):
         assert usage == 1
 
     async def test_quota_consumed_exactly_by_batch_size(self, setup_method):
-        await self.set_api_key_cache("test_api_key_123", project_id=1, daily_quota=100)
+        await self.set_api_key_cache("test_api_key_123", project_id=1, logs_daily_quota=100)
 
         data = {
             "resourceLogs": [
@@ -386,8 +457,8 @@ class TestOtlpMetricsRoute(test_base.BaseGatewayTest):
         /v1/traces, since the route reserves quota atomically itself and reports
         denials as a 200 partial-success (never a hard error an OTel exporter would
         retry-storm on)."""
-        await self.set_api_key_cache("test_api_key_123", project_id=1, daily_quota=1)
-        self.mock_redis.data["daily_usage:1"] = 1
+        await self.set_api_key_cache("test_api_key_123", project_id=1, metrics_daily_quota=1)
+        self.mock_redis.data["daily_usage:1:metrics"] = 1
 
         response = await self.client.post(
             "/v1/metrics",

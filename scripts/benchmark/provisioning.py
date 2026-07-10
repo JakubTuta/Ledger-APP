@@ -126,7 +126,7 @@ async def _raise_limits(
             cfg.per_hour_limit,
         )
         await conn.execute(
-            "UPDATE projects SET daily_quota=$2 WHERE id=$1",
+            "UPDATE projects SET logs_daily_quota=$2, spans_daily_quota=$2, metrics_daily_quota=$2 WHERE id=$1",
             project_id,
             cfg.daily_quota,
         )

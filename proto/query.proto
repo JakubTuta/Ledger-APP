@@ -205,8 +205,14 @@ message GetUsageStatsRequest {
 message UsageStatsData {
     string date = 1;
     int32 log_count = 2;
-    int32 daily_quota = 3;
-    float quota_used_percent = 4;
+    int32 logs_daily_quota = 3;
+    float logs_quota_used_percent = 4;
+    int32 span_count = 5;
+    int32 metric_point_count = 6;
+    int32 spans_daily_quota = 7;
+    int32 metrics_daily_quota = 8;
+    float spans_quota_used_percent = 9;
+    float metrics_quota_used_percent = 10;
 }
 
 message GetUsageStatsResponse {

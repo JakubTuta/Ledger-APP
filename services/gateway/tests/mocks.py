@@ -2,6 +2,7 @@ import typing
 
 import gateway_service.proto.auth_pb2 as auth_pb2
 import gateway_service.proto.ingestion_pb2 as ingestion_pb2
+import gateway_service.proto.query_pb2 as query_pb2
 
 
 class MockRedisClient:
@@ -70,9 +71,15 @@ class MockRedisClient:
         key = f"project_access:{account_id}:{project_id}"
         self.data.pop(key, None)
 
-    async def get_daily_usage(self, project_id: int) -> int:
-        key = f"daily_usage:{project_id}"
+    async def get_daily_usage(self, project_id: int, signal: str = "logs") -> int:
+        key = f"daily_usage:{project_id}:{signal}"
         return self.data.get(key, 0)
+
+    async def get_daily_usage_by_signal(self, project_id: int) -> dict:
+        return {
+            signal: self.data.get(f"daily_usage:{project_id}:{signal}", 0)
+            for signal in ("logs", "spans", "metrics")
+        }
 
     async def check_rate_limit(
         self,
@@ -104,13 +111,13 @@ class MockRedisClient:
         }
 
     async def try_consume_quota(
-        self, project_id: int, amount: int, daily_quota: int
+        self, project_id: int, signal: str, amount: int, quota: int
     ) -> tuple[bool, int]:
-        key = f"daily_usage:{project_id}"
+        key = f"daily_usage:{project_id}:{signal}"
         current = self.data.get(key, 0)
         new_usage = current + amount
 
-        if new_usage > daily_quota:
+        if new_usage > quota:
             return False, current
 
         self.data[key] = new_usage
@@ -212,6 +219,8 @@ class MockGRPCPool:
                 self.stubs[service_name] = MockAuthStub()
             elif service_name == "ingestion":
                 self.stubs[service_name] = MockIngestionStub()
+            elif service_name == "query":
+                self.stubs[service_name] = MockQueryStub()
         return self.stubs[service_name]
 
     def get_auth_stub(self):
@@ -240,6 +249,19 @@ class MockGRPCPool:
 
         return ContextManager(self.get_stub("ingestion", None))
 
+    def get_query_stub(self):
+        class ContextManager:
+            def __init__(self, stub):
+                self.stub = stub
+
+            async def __aenter__(self):
+                return self.stub
+
+            async def __aexit__(self, exc_type, exc_val, exc_tb):
+                pass
+
+        return ContextManager(self.get_stub("query", None))
+
     def get_stats(self) -> dict:
         return {
             "auth": {
@@ -266,6 +288,8 @@ class MockAuthStub:
         self.validate_api_key_response = None
         self.create_project_response = None
         self.get_projects_response = None
+        self.get_project_by_id_response = None
+        self.update_project_response = None
         self.create_api_key_response = None
         self.revoke_api_key_response = None
         self.get_account_response = None
@@ -310,7 +334,9 @@ class MockAuthStub:
             valid=True,
             project_id=1,
             account_id=1,
-            daily_quota=1000000,
+            logs_daily_quota=1000000,
+            spans_daily_quota=1000000,
+            metrics_daily_quota=1000000,
             retention_days=30,
             rate_limit_per_minute=1000,
             rate_limit_per_hour=50000,
@@ -327,13 +353,49 @@ class MockAuthStub:
             slug=request.slug,
             environment=request.environment,
             retention_days=30,
-            daily_quota=1000000,
+            logs_daily_quota=1000000,
+            spans_daily_quota=1000000,
+            metrics_daily_quota=1000000,
         )
 
     async def GetProjects(self, request, timeout=None):
         if self.get_projects_response:
             return self.get_projects_response
         return auth_pb2.GetProjectsResponse(projects=[])
+
+    async def GetProjectById(self, request, timeout=None):
+        if self.get_project_by_id_response:
+            return self.get_project_by_id_response
+        return auth_pb2.GetProjectByIdResponse(
+            project_id=request.project_id,
+            name="Test Project",
+            slug="test-project",
+            environment="production",
+            retention_days=30,
+            logs_daily_quota=1000000,
+            spans_daily_quota=1000000,
+            metrics_daily_quota=1000000,
+        )
+
+    async def UpdateProject(self, request, timeout=None):
+        if self.update_project_response:
+            return self.update_project_response
+        return auth_pb2.UpdateProjectResponse(
+            project_id=request.project_id,
+            name="Test Project",
+            slug="test-project",
+            environment="production",
+            retention_days=(request.retention_days if request.HasField("retention_days") else 30),
+            logs_daily_quota=(
+                request.logs_daily_quota if request.HasField("logs_daily_quota") else 1000000
+            ),
+            spans_daily_quota=(
+                request.spans_daily_quota if request.HasField("spans_daily_quota") else 1000000
+            ),
+            metrics_daily_quota=(
+                request.metrics_daily_quota if request.HasField("metrics_daily_quota") else 1000000
+            ),
+        )
 
     async def CreateApiKey(self, request, timeout=None):
         if self.create_api_key_response:
@@ -468,3 +530,13 @@ class MockIngestionStub:
             accepted=len(request.points),
             rejected=0,
         )
+
+
+class MockQueryStub:
+    def __init__(self):
+        self.get_usage_stats_response = None
+
+    async def GetUsageStats(self, request, timeout=None):
+        if self.get_usage_stats_response:
+            return self.get_usage_stats_response
+        return query_pb2.GetUsageStatsResponse(project_id=request.project_id, usage=[])

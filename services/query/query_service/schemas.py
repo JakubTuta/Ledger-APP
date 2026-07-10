@@ -184,8 +184,14 @@ class TopErrorsResponse(pydantic.BaseModel):
 class UsageStatsData(pydantic.BaseModel):
     date: datetime.date
     log_count: int
-    daily_quota: int
-    quota_used_percent: float
+    span_count: int = 0
+    metric_point_count: int = 0
+    logs_daily_quota: int
+    spans_daily_quota: int = 0
+    metrics_daily_quota: int = 0
+    logs_quota_used_percent: float
+    spans_quota_used_percent: float = 0.0
+    metrics_quota_used_percent: float = 0.0
 
 
 class UsageStatsResponse(pydantic.BaseModel):

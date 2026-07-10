@@ -62,7 +62,10 @@ from gateway_service.schemas.projects import (
     ProjectListResponse,
     ProjectQuotaResponse,
     ProjectResponse,
+    SignalQuota,
     UpdateProjectRequest,
+    UsageStatsDay,
+    UsageStatsResponse,
 )
 from gateway_service.schemas.query import (
     AggregatedMetricDataResponse,
@@ -129,6 +132,9 @@ __all__ = [
     "ProjectListResponse",
     "ProjectQuotaResponse",
     "UpdateProjectRequest",
+    "SignalQuota",
+    "UsageStatsDay",
+    "UsageStatsResponse",
     # API Key schemas
     "CreateApiKeyRequest",
     "CreateApiKeyResponse",

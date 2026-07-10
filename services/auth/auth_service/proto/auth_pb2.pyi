@@ -372,20 +372,24 @@ class CreateProjectRequest(_message.Message):
     def __init__(self, account_id: _Optional[int] = ..., name: _Optional[str] = ..., slug: _Optional[str] = ..., environment: _Optional[str] = ...) -> None: ...
 
 class CreateProjectResponse(_message.Message):
-    __slots__ = ("project_id", "name", "slug", "environment", "retention_days", "daily_quota")
+    __slots__ = ("project_id", "name", "slug", "environment", "retention_days", "logs_daily_quota", "spans_daily_quota", "metrics_daily_quota")
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     SLUG_FIELD_NUMBER: _ClassVar[int]
     ENVIRONMENT_FIELD_NUMBER: _ClassVar[int]
     RETENTION_DAYS_FIELD_NUMBER: _ClassVar[int]
-    DAILY_QUOTA_FIELD_NUMBER: _ClassVar[int]
+    LOGS_DAILY_QUOTA_FIELD_NUMBER: _ClassVar[int]
+    SPANS_DAILY_QUOTA_FIELD_NUMBER: _ClassVar[int]
+    METRICS_DAILY_QUOTA_FIELD_NUMBER: _ClassVar[int]
     project_id: int
     name: str
     slug: str
     environment: str
     retention_days: int
-    daily_quota: int
-    def __init__(self, project_id: _Optional[int] = ..., name: _Optional[str] = ..., slug: _Optional[str] = ..., environment: _Optional[str] = ..., retention_days: _Optional[int] = ..., daily_quota: _Optional[int] = ...) -> None: ...
+    logs_daily_quota: int
+    spans_daily_quota: int
+    metrics_daily_quota: int
+    def __init__(self, project_id: _Optional[int] = ..., name: _Optional[str] = ..., slug: _Optional[str] = ..., environment: _Optional[str] = ..., retention_days: _Optional[int] = ..., logs_daily_quota: _Optional[int] = ..., spans_daily_quota: _Optional[int] = ..., metrics_daily_quota: _Optional[int] = ...) -> None: ...
 
 class GetProjectsRequest(_message.Message):
     __slots__ = ("account_id",)
@@ -394,24 +398,28 @@ class GetProjectsRequest(_message.Message):
     def __init__(self, account_id: _Optional[int] = ...) -> None: ...
 
 class ProjectInfo(_message.Message):
-    __slots__ = ("project_id", "name", "slug", "environment", "retention_days", "daily_quota", "available_routes", "role")
+    __slots__ = ("project_id", "name", "slug", "environment", "retention_days", "logs_daily_quota", "available_routes", "role", "spans_daily_quota", "metrics_daily_quota")
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     SLUG_FIELD_NUMBER: _ClassVar[int]
     ENVIRONMENT_FIELD_NUMBER: _ClassVar[int]
     RETENTION_DAYS_FIELD_NUMBER: _ClassVar[int]
-    DAILY_QUOTA_FIELD_NUMBER: _ClassVar[int]
+    LOGS_DAILY_QUOTA_FIELD_NUMBER: _ClassVar[int]
     AVAILABLE_ROUTES_FIELD_NUMBER: _ClassVar[int]
     ROLE_FIELD_NUMBER: _ClassVar[int]
+    SPANS_DAILY_QUOTA_FIELD_NUMBER: _ClassVar[int]
+    METRICS_DAILY_QUOTA_FIELD_NUMBER: _ClassVar[int]
     project_id: int
     name: str
     slug: str
     environment: str
     retention_days: int
-    daily_quota: int
+    logs_daily_quota: int
     available_routes: _containers.RepeatedScalarFieldContainer[str]
     role: str
-    def __init__(self, project_id: _Optional[int] = ..., name: _Optional[str] = ..., slug: _Optional[str] = ..., environment: _Optional[str] = ..., retention_days: _Optional[int] = ..., daily_quota: _Optional[int] = ..., available_routes: _Optional[_Iterable[str]] = ..., role: _Optional[str] = ...) -> None: ...
+    spans_daily_quota: int
+    metrics_daily_quota: int
+    def __init__(self, project_id: _Optional[int] = ..., name: _Optional[str] = ..., slug: _Optional[str] = ..., environment: _Optional[str] = ..., retention_days: _Optional[int] = ..., logs_daily_quota: _Optional[int] = ..., available_routes: _Optional[_Iterable[str]] = ..., role: _Optional[str] = ..., spans_daily_quota: _Optional[int] = ..., metrics_daily_quota: _Optional[int] = ...) -> None: ...
 
 class GetProjectsResponse(_message.Message):
     __slots__ = ("projects",)
@@ -426,50 +434,62 @@ class GetProjectByIdRequest(_message.Message):
     def __init__(self, project_id: _Optional[int] = ...) -> None: ...
 
 class GetProjectByIdResponse(_message.Message):
-    __slots__ = ("project_id", "name", "slug", "environment", "retention_days", "daily_quota", "available_routes")
+    __slots__ = ("project_id", "name", "slug", "environment", "retention_days", "logs_daily_quota", "available_routes", "spans_daily_quota", "metrics_daily_quota")
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     SLUG_FIELD_NUMBER: _ClassVar[int]
     ENVIRONMENT_FIELD_NUMBER: _ClassVar[int]
     RETENTION_DAYS_FIELD_NUMBER: _ClassVar[int]
-    DAILY_QUOTA_FIELD_NUMBER: _ClassVar[int]
+    LOGS_DAILY_QUOTA_FIELD_NUMBER: _ClassVar[int]
     AVAILABLE_ROUTES_FIELD_NUMBER: _ClassVar[int]
+    SPANS_DAILY_QUOTA_FIELD_NUMBER: _ClassVar[int]
+    METRICS_DAILY_QUOTA_FIELD_NUMBER: _ClassVar[int]
     project_id: int
     name: str
     slug: str
     environment: str
     retention_days: int
-    daily_quota: int
+    logs_daily_quota: int
     available_routes: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, project_id: _Optional[int] = ..., name: _Optional[str] = ..., slug: _Optional[str] = ..., environment: _Optional[str] = ..., retention_days: _Optional[int] = ..., daily_quota: _Optional[int] = ..., available_routes: _Optional[_Iterable[str]] = ...) -> None: ...
+    spans_daily_quota: int
+    metrics_daily_quota: int
+    def __init__(self, project_id: _Optional[int] = ..., name: _Optional[str] = ..., slug: _Optional[str] = ..., environment: _Optional[str] = ..., retention_days: _Optional[int] = ..., logs_daily_quota: _Optional[int] = ..., available_routes: _Optional[_Iterable[str]] = ..., spans_daily_quota: _Optional[int] = ..., metrics_daily_quota: _Optional[int] = ...) -> None: ...
 
 class UpdateProjectRequest(_message.Message):
-    __slots__ = ("project_id", "requester_account_id", "retention_days", "daily_quota")
+    __slots__ = ("project_id", "requester_account_id", "retention_days", "logs_daily_quota", "spans_daily_quota", "metrics_daily_quota")
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
     REQUESTER_ACCOUNT_ID_FIELD_NUMBER: _ClassVar[int]
     RETENTION_DAYS_FIELD_NUMBER: _ClassVar[int]
-    DAILY_QUOTA_FIELD_NUMBER: _ClassVar[int]
+    LOGS_DAILY_QUOTA_FIELD_NUMBER: _ClassVar[int]
+    SPANS_DAILY_QUOTA_FIELD_NUMBER: _ClassVar[int]
+    METRICS_DAILY_QUOTA_FIELD_NUMBER: _ClassVar[int]
     project_id: int
     requester_account_id: int
     retention_days: int
-    daily_quota: int
-    def __init__(self, project_id: _Optional[int] = ..., requester_account_id: _Optional[int] = ..., retention_days: _Optional[int] = ..., daily_quota: _Optional[int] = ...) -> None: ...
+    logs_daily_quota: int
+    spans_daily_quota: int
+    metrics_daily_quota: int
+    def __init__(self, project_id: _Optional[int] = ..., requester_account_id: _Optional[int] = ..., retention_days: _Optional[int] = ..., logs_daily_quota: _Optional[int] = ..., spans_daily_quota: _Optional[int] = ..., metrics_daily_quota: _Optional[int] = ...) -> None: ...
 
 class UpdateProjectResponse(_message.Message):
-    __slots__ = ("project_id", "name", "slug", "environment", "retention_days", "daily_quota")
+    __slots__ = ("project_id", "name", "slug", "environment", "retention_days", "logs_daily_quota", "spans_daily_quota", "metrics_daily_quota")
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     SLUG_FIELD_NUMBER: _ClassVar[int]
     ENVIRONMENT_FIELD_NUMBER: _ClassVar[int]
     RETENTION_DAYS_FIELD_NUMBER: _ClassVar[int]
-    DAILY_QUOTA_FIELD_NUMBER: _ClassVar[int]
+    LOGS_DAILY_QUOTA_FIELD_NUMBER: _ClassVar[int]
+    SPANS_DAILY_QUOTA_FIELD_NUMBER: _ClassVar[int]
+    METRICS_DAILY_QUOTA_FIELD_NUMBER: _ClassVar[int]
     project_id: int
     name: str
     slug: str
     environment: str
     retention_days: int
-    daily_quota: int
-    def __init__(self, project_id: _Optional[int] = ..., name: _Optional[str] = ..., slug: _Optional[str] = ..., environment: _Optional[str] = ..., retention_days: _Optional[int] = ..., daily_quota: _Optional[int] = ...) -> None: ...
+    logs_daily_quota: int
+    spans_daily_quota: int
+    metrics_daily_quota: int
+    def __init__(self, project_id: _Optional[int] = ..., name: _Optional[str] = ..., slug: _Optional[str] = ..., environment: _Optional[str] = ..., retention_days: _Optional[int] = ..., logs_daily_quota: _Optional[int] = ..., spans_daily_quota: _Optional[int] = ..., metrics_daily_quota: _Optional[int] = ...) -> None: ...
 
 class GenerateInviteCodeRequest(_message.Message):
     __slots__ = ("project_id", "requester_account_id")
@@ -590,12 +610,16 @@ class GetDailyUsageRequest(_message.Message):
     def __init__(self, project_id: _Optional[int] = ..., date: _Optional[str] = ...) -> None: ...
 
 class GetDailyUsageResponse(_message.Message):
-    __slots__ = ("log_count", "date")
+    __slots__ = ("log_count", "date", "span_count", "metric_point_count")
     LOG_COUNT_FIELD_NUMBER: _ClassVar[int]
     DATE_FIELD_NUMBER: _ClassVar[int]
+    SPAN_COUNT_FIELD_NUMBER: _ClassVar[int]
+    METRIC_POINT_COUNT_FIELD_NUMBER: _ClassVar[int]
     log_count: int
     date: str
-    def __init__(self, log_count: _Optional[int] = ..., date: _Optional[str] = ...) -> None: ...
+    span_count: int
+    metric_point_count: int
+    def __init__(self, log_count: _Optional[int] = ..., date: _Optional[str] = ..., span_count: _Optional[int] = ..., metric_point_count: _Optional[int] = ...) -> None: ...
 
 class CreateApiKeyRequest(_message.Message):
     __slots__ = ("project_id", "name")
@@ -622,26 +646,30 @@ class ValidateApiKeyRequest(_message.Message):
     def __init__(self, api_key: _Optional[str] = ...) -> None: ...
 
 class ValidateApiKeyResponse(_message.Message):
-    __slots__ = ("valid", "project_id", "account_id", "daily_quota", "retention_days", "rate_limit_per_minute", "rate_limit_per_hour", "current_usage", "error_message")
+    __slots__ = ("valid", "project_id", "account_id", "logs_daily_quota", "retention_days", "rate_limit_per_minute", "rate_limit_per_hour", "current_usage", "error_message", "spans_daily_quota", "metrics_daily_quota")
     VALID_FIELD_NUMBER: _ClassVar[int]
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
     ACCOUNT_ID_FIELD_NUMBER: _ClassVar[int]
-    DAILY_QUOTA_FIELD_NUMBER: _ClassVar[int]
+    LOGS_DAILY_QUOTA_FIELD_NUMBER: _ClassVar[int]
     RETENTION_DAYS_FIELD_NUMBER: _ClassVar[int]
     RATE_LIMIT_PER_MINUTE_FIELD_NUMBER: _ClassVar[int]
     RATE_LIMIT_PER_HOUR_FIELD_NUMBER: _ClassVar[int]
     CURRENT_USAGE_FIELD_NUMBER: _ClassVar[int]
     ERROR_MESSAGE_FIELD_NUMBER: _ClassVar[int]
+    SPANS_DAILY_QUOTA_FIELD_NUMBER: _ClassVar[int]
+    METRICS_DAILY_QUOTA_FIELD_NUMBER: _ClassVar[int]
     valid: bool
     project_id: int
     account_id: int
-    daily_quota: int
+    logs_daily_quota: int
     retention_days: int
     rate_limit_per_minute: int
     rate_limit_per_hour: int
     current_usage: int
     error_message: str
-    def __init__(self, valid: bool = ..., project_id: _Optional[int] = ..., account_id: _Optional[int] = ..., daily_quota: _Optional[int] = ..., retention_days: _Optional[int] = ..., rate_limit_per_minute: _Optional[int] = ..., rate_limit_per_hour: _Optional[int] = ..., current_usage: _Optional[int] = ..., error_message: _Optional[str] = ...) -> None: ...
+    spans_daily_quota: int
+    metrics_daily_quota: int
+    def __init__(self, valid: bool = ..., project_id: _Optional[int] = ..., account_id: _Optional[int] = ..., logs_daily_quota: _Optional[int] = ..., retention_days: _Optional[int] = ..., rate_limit_per_minute: _Optional[int] = ..., rate_limit_per_hour: _Optional[int] = ..., current_usage: _Optional[int] = ..., error_message: _Optional[str] = ..., spans_daily_quota: _Optional[int] = ..., metrics_daily_quota: _Optional[int] = ...) -> None: ...
 
 class RevokeApiKeyRequest(_message.Message):
     __slots__ = ("key_id", "requester_account_id")

@@ -58,6 +58,8 @@ class BenchmarkConfig(pydantic.BaseModel):
     respect_limits: bool = False
     per_minute_limit: int = 1_000_000
     per_hour_limit: int = 1_000_000_000
+    # Ceiling applied to all three per-signal quotas (logs/spans/metrics) during
+    # provisioning, so benchmark load isn't throttled by any one signal's quota.
     daily_quota: int = 1_000_000_000
     json_output: str | None = None
     verbose: bool = False

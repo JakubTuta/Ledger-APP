@@ -18,13 +18,15 @@ _SUPPORTED_CONTENT_TYPES = ("application/x-protobuf", "application/json")
 
 
 async def _reserve_ingest_capacity(
-    request: fastapi.Request, project_id: int, item_count: int
+    request: fastapi.Request, project_id: int, item_count: int, signal: str, quota: int
 ) -> str | None:
     """Atomically reserve quota/rate capacity for `item_count` items before forwarding to gRPC.
 
     Returns an error message if the batch should be rejected, or None if accepted.
     Reserving before the gRPC call (rather than incrementing after accept) closes the
     race where concurrent bursts could overshoot the daily quota by a full request.
+    `signal` selects which of the three independent per-day counters (logs/spans/metrics)
+    this batch consumes from — a burst on one signal can no longer starve the others.
     """
     redis = request.app.state.redis_client
     rate_limits = request.state.rate_limits
@@ -43,11 +45,13 @@ async def _reserve_ingest_capacity(
             headers={"Retry-After": "60"},
         )
 
-    quota_allowed, usage = await redis.try_consume_quota(
-        project_id, item_count, request.state.daily_quota
-    )
+    quota_allowed, usage = await redis.try_consume_quota(project_id, signal, item_count, quota)
     if not quota_allowed:
-        return f"Daily quota exceeded ({usage}/{request.state.daily_quota})"
+        logger.warning(
+            f"Project {project_id} daily {signal} quota exceeded, rejecting {item_count} items "
+            f"({usage}/{quota})"
+        )
+        return f"Daily {signal} quota exceeded ({usage}/{quota})"
 
     return None
 
@@ -88,7 +92,9 @@ async def export_traces(request: fastapi.Request) -> fastapi.Response:
         grpc_pool = request.app.state.grpc_pool
         project_id = request.state.project_id
 
-        quota_error = await _reserve_ingest_capacity(request, project_id, len(spans))
+        quota_error = await _reserve_ingest_capacity(
+            request, project_id, len(spans), "spans", request.state.spans_daily_quota
+        )
         if quota_error is not None:
             rejected = len(spans)
             error_message = quota_error
@@ -166,7 +172,9 @@ async def export_logs(request: fastapi.Request) -> fastapi.Response:
         grpc_pool = request.app.state.grpc_pool
         project_id = request.state.project_id
 
-        quota_error = await _reserve_ingest_capacity(request, project_id, len(logs))
+        quota_error = await _reserve_ingest_capacity(
+            request, project_id, len(logs), "logs", request.state.logs_daily_quota
+        )
         if quota_error is not None:
             rejected = len(logs)
             error_message = quota_error
@@ -244,7 +252,9 @@ async def export_metrics(request: fastapi.Request) -> fastapi.Response:
         grpc_pool = request.app.state.grpc_pool
         project_id = request.state.project_id
 
-        quota_error = await _reserve_ingest_capacity(request, project_id, len(points))
+        quota_error = await _reserve_ingest_capacity(
+            request, project_id, len(points), "metrics", request.state.metrics_daily_quota
+        )
         if quota_error is not None:
             rejected = len(points)
             error_message = quota_error

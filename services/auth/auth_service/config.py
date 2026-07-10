@@ -116,7 +116,9 @@ class Settings(pydantic_settings.BaseSettings):
 
     DEFAULT_RATE_LIMIT_PER_MINUTE: typing.ClassVar[int] = 1000
     DEFAULT_RATE_LIMIT_PER_HOUR: typing.ClassVar[int] = 20_000
-    DEFAULT_DAILY_QUOTA: typing.ClassVar[int] = 100_000
+    DEFAULT_LOGS_DAILY_QUOTA: typing.ClassVar[int] = 100_000
+    DEFAULT_SPANS_DAILY_QUOTA: typing.ClassVar[int] = 300_000
+    DEFAULT_METRICS_DAILY_QUOTA: typing.ClassVar[int] = 100_000
 
     CACHE_TTL_SECONDS: typing.ClassVar[int] = 300
     DASHBOARD_CACHE_TTL: typing.ClassVar[int] = 300

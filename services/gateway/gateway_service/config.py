@@ -198,7 +198,9 @@ class Settings(pydantic_settings.BaseSettings):
             raise ValueError("Production must have at least 2 workers")
         return v
 
-    DEFAULT_DAILY_QUOTA: typing.ClassVar[int] = 100_000
+    DEFAULT_LOGS_DAILY_QUOTA: typing.ClassVar[int] = 100_000
+    DEFAULT_SPANS_DAILY_QUOTA: typing.ClassVar[int] = 300_000
+    DEFAULT_METRICS_DAILY_QUOTA: typing.ClassVar[int] = 100_000
 
     @property
     def is_production(self) -> bool:

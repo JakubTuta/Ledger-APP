@@ -675,7 +675,9 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     slug=project.slug,
                     environment=project.environment,
                     retention_days=project.retention_days,
-                    daily_quota=project.daily_quota,
+                    logs_daily_quota=project.logs_daily_quota,
+                    spans_daily_quota=project.spans_daily_quota,
+                    metrics_daily_quota=project.metrics_daily_quota,
                 )
 
         except ValueError as e:
@@ -708,7 +710,9 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                         slug=p.slug,
                         environment=p.environment,
                         retention_days=p.retention_days,
-                        daily_quota=p.daily_quota,
+                        logs_daily_quota=p.logs_daily_quota,
+                        spans_daily_quota=p.spans_daily_quota,
+                        metrics_daily_quota=p.metrics_daily_quota,
                         available_routes=p.available_routes or [],
                         role=role,
                     )
@@ -746,7 +750,9 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     slug=project.slug,
                     environment=project.environment,
                     retention_days=project.retention_days,
-                    daily_quota=project.daily_quota,
+                    logs_daily_quota=project.logs_daily_quota,
+                    spans_daily_quota=project.spans_daily_quota,
+                    metrics_daily_quota=project.metrics_daily_quota,
                     available_routes=project.available_routes or [],
                 )
 
@@ -770,7 +776,17 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     retention_days=(
                         request.retention_days if request.HasField("retention_days") else None
                     ),
-                    daily_quota=(request.daily_quota if request.HasField("daily_quota") else None),
+                    logs_daily_quota=(
+                        request.logs_daily_quota if request.HasField("logs_daily_quota") else None
+                    ),
+                    spans_daily_quota=(
+                        request.spans_daily_quota if request.HasField("spans_daily_quota") else None
+                    ),
+                    metrics_daily_quota=(
+                        request.metrics_daily_quota
+                        if request.HasField("metrics_daily_quota")
+                        else None
+                    ),
                 )
                 await session.commit()
 
@@ -780,7 +796,9 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     slug=project.slug,
                     environment=project.environment,
                     retention_days=project.retention_days,
-                    daily_quota=project.daily_quota,
+                    logs_daily_quota=project.logs_daily_quota,
+                    spans_daily_quota=project.spans_daily_quota,
+                    metrics_daily_quota=project.metrics_daily_quota,
                 )
         except PermissionError as e:
             context.set_code(grpc.StatusCode.PERMISSION_DENIED)
@@ -852,7 +870,9 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     valid=True,
                     project_id=project_id,
                     account_id=info.get("account_id", 0),
-                    daily_quota=info["daily_quota"],
+                    logs_daily_quota=info["logs_daily_quota"],
+                    spans_daily_quota=info["spans_daily_quota"],
+                    metrics_daily_quota=info["metrics_daily_quota"],
                     retention_days=info["retention_days"],
                     rate_limit_per_minute=info["rate_limit_per_minute"],
                     rate_limit_per_hour=info["rate_limit_per_hour"],
@@ -1116,6 +1136,8 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                 return auth_pb2.GetDailyUsageResponse(
                     log_count=usage.logs_ingested,
                     date=request.date,
+                    span_count=usage.spans_ingested,
+                    metric_point_count=usage.metric_points_ingested,
                 )
 
         except Exception as e:

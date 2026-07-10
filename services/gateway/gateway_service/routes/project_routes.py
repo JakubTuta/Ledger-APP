@@ -7,7 +7,8 @@ import grpc
 import gateway_service.schemas as schemas
 from gateway_service import dependencies
 from gateway_service.proto import auth_pb2, auth_pb2_grpc
-from gateway_service.services import grpc_pool
+from gateway_service.proto import query_pb2
+from gateway_service.services import grpc_pool, redis_client
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,9 @@ router = fastapi.APIRouter(tags=["Projects"])
                         "slug": "my-production-app",
                         "environment": "production",
                         "retention_days": 30,
-                        "daily_quota": 1000000,
+                        "logs_daily_quota": 100000,
+                        "spans_daily_quota": 300000,
+                        "metrics_daily_quota": 100000,
                     }
                 }
             },
@@ -102,7 +105,9 @@ async def create_project(
             slug=response.slug,
             environment=response.environment,
             retention_days=response.retention_days,
-            daily_quota=response.daily_quota,
+            logs_daily_quota=response.logs_daily_quota,
+            spans_daily_quota=response.spans_daily_quota,
+            metrics_daily_quota=response.metrics_daily_quota,
         )
 
     except asyncio.TimeoutError:
@@ -152,7 +157,9 @@ async def create_project(
                                 "slug": "my-production-app",
                                 "environment": "production",
                                 "retention_days": 30,
-                                "daily_quota": 1000000,
+                                "logs_daily_quota": 100000,
+                                "spans_daily_quota": 300000,
+                                "metrics_daily_quota": 100000,
                             }
                         ],
                         "total": 1,
@@ -191,7 +198,9 @@ async def list_projects(
                 slug=p.slug,
                 environment=p.environment,
                 retention_days=p.retention_days,
-                daily_quota=p.daily_quota,
+                logs_daily_quota=p.logs_daily_quota,
+                spans_daily_quota=p.spans_daily_quota,
+                metrics_daily_quota=p.metrics_daily_quota,
                 available_routes=list(p.available_routes),
             )
             for p in response.projects
@@ -230,7 +239,9 @@ async def list_projects(
                         "slug": "my-production-app",
                         "environment": "production",
                         "retention_days": 30,
-                        "daily_quota": 1000000,
+                        "logs_daily_quota": 100000,
+                        "spans_daily_quota": 300000,
+                        "metrics_daily_quota": 100000,
                     }
                 }
             },
@@ -276,7 +287,9 @@ async def get_project_by_slug(
                     slug=p.slug,
                     environment=p.environment,
                     retention_days=p.retention_days,
-                    daily_quota=p.daily_quota,
+                    logs_daily_quota=p.logs_daily_quota,
+                    spans_daily_quota=p.spans_daily_quota,
+                    metrics_daily_quota=p.metrics_daily_quota,
                     available_routes=list(p.available_routes),
                 )
 
@@ -318,9 +331,9 @@ async def get_project_by_slug(
                         "project_name": "My Production App",
                         "project_slug": "my-production-app",
                         "environment": "production",
-                        "daily_quota": 1000000,
-                        "daily_usage": 45678,
-                        "quota_remaining": 954322,
+                        "logs": {"quota": 100000, "usage": 1234, "remaining": 98766},
+                        "spans": {"quota": 300000, "usage": 555, "remaining": 299445},
+                        "metrics": {"quota": 100000, "usage": 42, "remaining": 99958},
                         "quota_reset_at": "2024-01-16T00:00:00Z",
                         "retention_days": 30,
                     }
@@ -349,12 +362,15 @@ async def get_project_quota(
     project_id: int = fastapi.Path(..., description="Project ID", examples=[456]),
     account_id: int = fastapi.Depends(dependencies.get_current_account_id),
     grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
+    redis: redis_client.RedisClient = fastapi.Depends(dependencies.get_redis_client),
 ):
     """
     Get quota and usage information for a specific project.
 
-    Returns daily quota, current usage, and remaining quota for the project.
-    This endpoint is designed for frontend dashboard display and uses JWT
+    Returns daily quota, current usage, and remaining quota per signal
+    (logs, spans, metrics) for the project. Usage is read from the same
+    per-signal Redis counters ingestion quota is enforced against. This
+    endpoint is designed for frontend dashboard display and uses JWT
     authentication. The user must own the project to view its quota.
 
     Requires JWT authentication (Authorization: Bearer token_xxx).
@@ -377,28 +393,23 @@ async def get_project_quota(
             timeout=5.0,
         )
 
-        usage_response = await asyncio.wait_for(
-            stub.GetDailyUsage(
-                auth_pb2.GetDailyUsageRequest(
-                    project_id=project_id, date=datetime.date.today().isoformat()
-                )
-            ),
-            timeout=5.0,
-        )
+        usage_by_signal = await redis.get_daily_usage_by_signal(project_id)
 
-        quota_remaining = project_response.daily_quota - usage_response.log_count
         tomorrow = datetime.datetime.now(datetime.timezone.utc).replace(
             hour=0, minute=0, second=0, microsecond=0
         ) + datetime.timedelta(days=1)
+
+        def _signal_quota(quota: int, usage: int) -> schemas.SignalQuota:
+            return schemas.SignalQuota(quota=quota, usage=usage, remaining=max(0, quota - usage))
 
         return schemas.ProjectQuotaResponse(
             project_id=project_id,
             project_name=project_response.name,
             project_slug=project_response.slug,
             environment=project_response.environment,
-            daily_quota=project_response.daily_quota,
-            daily_usage=usage_response.log_count,
-            quota_remaining=max(0, quota_remaining),
+            logs=_signal_quota(project_response.logs_daily_quota, usage_by_signal["logs"]),
+            spans=_signal_quota(project_response.spans_daily_quota, usage_by_signal["spans"]),
+            metrics=_signal_quota(project_response.metrics_daily_quota, usage_by_signal["metrics"]),
             quota_reset_at=tomorrow.isoformat(),
             retention_days=project_response.retention_days,
         )
@@ -427,6 +438,140 @@ async def get_project_quota(
         )
 
 
+@router.get(
+    "/projects/{project_id}/usage-stats",
+    response_model=schemas.UsageStatsResponse,
+    summary="Get project usage history",
+    description="Retrieve per-day ingestion counts and quota usage for a project over a date range, split by signal (logs/spans/metrics). Designed for frontend history charts.",
+    response_description="Per-day usage history",
+    responses={
+        200: {
+            "description": "Usage history retrieved successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "project_id": 456,
+                        "usage": [
+                            {
+                                "date": "2026-07-10",
+                                "log_count": 1234,
+                                "span_count": 4567,
+                                "metric_point_count": 89,
+                                "logs_daily_quota": 100000,
+                                "spans_daily_quota": 300000,
+                                "metrics_daily_quota": 100000,
+                                "logs_quota_used_percent": 1.23,
+                                "spans_quota_used_percent": 0.19,
+                                "metrics_quota_used_percent": 0.09,
+                            }
+                        ],
+                    }
+                }
+            },
+        },
+        400: {
+            "description": "Invalid start_date/end_date",
+            "content": {
+                "application/json": {"example": {"detail": "start_date must be a valid ISO date"}}
+            },
+        },
+        403: {
+            "description": "Permission denied (don't own this project)",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "You don't have permission to view this project"}
+                }
+            },
+        },
+        503: {
+            "description": "Service timeout",
+            "content": {"application/json": {"example": {"detail": "Service timeout"}}},
+        },
+    },
+)
+async def get_project_usage_stats(
+    project_id: int = fastapi.Path(..., description="Project ID", examples=[456]),
+    start_date: str | None = fastapi.Query(None, description="Start date (YYYY-MM-DD), inclusive"),
+    end_date: str | None = fastapi.Query(None, description="End date (YYYY-MM-DD), inclusive"),
+    account_id: int = fastapi.Depends(dependencies.get_current_account_id),
+    grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
+):
+    """
+    Get per-day usage history for a project, split by signal.
+
+    Backed by the analytics service's usage-stats cache/table (`GetUsageStats`
+    gRPC). Requires JWT authentication; the user must own the project.
+    """
+    for raw_date in (start_date, end_date):
+        if raw_date is not None:
+            try:
+                datetime.date.fromisoformat(raw_date)
+            except ValueError:
+                raise fastapi.HTTPException(
+                    status_code=fastapi.status.HTTP_400_BAD_REQUEST,
+                    detail="start_date/end_date must be valid ISO dates (YYYY-MM-DD)",
+                )
+
+    try:
+        auth_stub = grpc_pool.get_stub("auth", auth_pb2_grpc.AuthServiceStub)
+
+        projects_request = auth_pb2.GetProjectsRequest(account_id=account_id)
+        projects_response = await asyncio.wait_for(
+            auth_stub.GetProjects(projects_request), timeout=5.0
+        )
+
+        project_ids = [p.project_id for p in projects_response.projects]
+        if project_id not in project_ids:
+            raise fastapi.HTTPException(
+                status_code=fastapi.status.HTTP_403_FORBIDDEN,
+                detail="You don't have permission to view this project",
+            )
+
+        async with grpc_pool.get_query_stub() as stub:
+            response = await stub.GetUsageStats(
+                query_pb2.GetUsageStatsRequest(
+                    project_id=project_id,
+                    start_date=start_date or "",
+                    end_date=end_date or "",
+                ),
+                timeout=10.0,
+            )
+
+        usage = [
+            schemas.UsageStatsDay(
+                date=item.date,
+                log_count=item.log_count,
+                span_count=item.span_count,
+                metric_point_count=item.metric_point_count,
+                logs_daily_quota=item.logs_daily_quota,
+                spans_daily_quota=item.spans_daily_quota,
+                metrics_daily_quota=item.metrics_daily_quota,
+                logs_quota_used_percent=item.logs_quota_used_percent,
+                spans_quota_used_percent=item.spans_quota_used_percent,
+                metrics_quota_used_percent=item.metrics_quota_used_percent,
+            )
+            for item in response.usage
+        ]
+
+        return schemas.UsageStatsResponse(project_id=project_id, usage=usage)
+
+    except fastapi.HTTPException:
+        raise
+
+    except asyncio.TimeoutError:
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Service timeout",
+        )
+
+    except grpc.RpcError as e:
+        logger.error(f"gRPC error getting usage stats: {e.code()} - {e.details()}")
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get usage stats",
+        )
+
+
 @router.patch(
     "/projects/{project_id}",
     response_model=schemas.ProjectResponse,
@@ -441,7 +586,7 @@ async def update_project(
     grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
 ):
     """
-    Update a project's `retention_days` and/or `daily_quota`.
+    Update a project's `retention_days` and/or per-signal daily quotas.
 
     Requires JWT authentication and project ownership.
     """
@@ -455,8 +600,12 @@ async def update_project(
         )
         if body.retention_days is not None:
             proto_request.retention_days = body.retention_days
-        if body.daily_quota is not None:
-            proto_request.daily_quota = body.daily_quota
+        if body.logs_daily_quota is not None:
+            proto_request.logs_daily_quota = body.logs_daily_quota
+        if body.spans_daily_quota is not None:
+            proto_request.spans_daily_quota = body.spans_daily_quota
+        if body.metrics_daily_quota is not None:
+            proto_request.metrics_daily_quota = body.metrics_daily_quota
 
         response = await asyncio.wait_for(stub.UpdateProject(proto_request), timeout=5.0)
 
@@ -466,7 +615,9 @@ async def update_project(
             slug=response.slug,
             environment=response.environment,
             retention_days=response.retention_days,
-            daily_quota=response.daily_quota,
+            logs_daily_quota=response.logs_daily_quota,
+            spans_daily_quota=response.spans_daily_quota,
+            metrics_daily_quota=response.metrics_daily_quota,
         )
 
     except asyncio.TimeoutError:

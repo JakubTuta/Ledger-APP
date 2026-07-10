@@ -429,8 +429,14 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
                 query_pb2.UsageStatsData(
                     date=usage.date.isoformat(),
                     log_count=usage.log_count,
-                    daily_quota=usage.daily_quota,
-                    quota_used_percent=usage.quota_used_percent,
+                    span_count=usage.span_count,
+                    metric_point_count=usage.metric_point_count,
+                    logs_daily_quota=usage.logs_daily_quota,
+                    spans_daily_quota=usage.spans_daily_quota,
+                    metrics_daily_quota=usage.metrics_daily_quota,
+                    logs_quota_used_percent=usage.logs_quota_used_percent,
+                    spans_quota_used_percent=usage.spans_quota_used_percent,
+                    metrics_quota_used_percent=usage.metrics_quota_used_percent,
                 )
                 for usage in result.usage
             ]

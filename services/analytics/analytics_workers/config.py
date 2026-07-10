@@ -238,7 +238,9 @@ class Settings(pydantic_settings.BaseSettings):
     ANALYTICS_TOP_ERRORS_TTL: typing.ClassVar[int] = 900
     ANALYTICS_TOP_ERRORS_LIMIT: typing.ClassVar[int] = 50
     ANALYTICS_USAGE_STATS_TTL: typing.ClassVar[int] = 3600
-    DEFAULT_DAILY_QUOTA: typing.ClassVar[int] = 100_000
+    DEFAULT_LOGS_DAILY_QUOTA: typing.ClassVar[int] = 100_000
+    DEFAULT_SPANS_DAILY_QUOTA: typing.ClassVar[int] = 300_000
+    DEFAULT_METRICS_DAILY_QUOTA: typing.ClassVar[int] = 100_000
     ANALYTICS_JOB_MISFIRE_GRACE_TIME: typing.ClassVar[int] = 60
     ANALYTICS_QUERY_TIMEOUT: typing.ClassVar[int] = 60
 

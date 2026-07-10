@@ -305,16 +305,28 @@ class GetUsageStatsRequest(_message.Message):
     def __init__(self, project_id: _Optional[int] = ..., start_date: _Optional[str] = ..., end_date: _Optional[str] = ...) -> None: ...
 
 class UsageStatsData(_message.Message):
-    __slots__ = ("date", "log_count", "daily_quota", "quota_used_percent")
+    __slots__ = ("date", "log_count", "logs_daily_quota", "logs_quota_used_percent", "span_count", "metric_point_count", "spans_daily_quota", "metrics_daily_quota", "spans_quota_used_percent", "metrics_quota_used_percent")
     DATE_FIELD_NUMBER: _ClassVar[int]
     LOG_COUNT_FIELD_NUMBER: _ClassVar[int]
-    DAILY_QUOTA_FIELD_NUMBER: _ClassVar[int]
-    QUOTA_USED_PERCENT_FIELD_NUMBER: _ClassVar[int]
+    LOGS_DAILY_QUOTA_FIELD_NUMBER: _ClassVar[int]
+    LOGS_QUOTA_USED_PERCENT_FIELD_NUMBER: _ClassVar[int]
+    SPAN_COUNT_FIELD_NUMBER: _ClassVar[int]
+    METRIC_POINT_COUNT_FIELD_NUMBER: _ClassVar[int]
+    SPANS_DAILY_QUOTA_FIELD_NUMBER: _ClassVar[int]
+    METRICS_DAILY_QUOTA_FIELD_NUMBER: _ClassVar[int]
+    SPANS_QUOTA_USED_PERCENT_FIELD_NUMBER: _ClassVar[int]
+    METRICS_QUOTA_USED_PERCENT_FIELD_NUMBER: _ClassVar[int]
     date: str
     log_count: int
-    daily_quota: int
-    quota_used_percent: float
-    def __init__(self, date: _Optional[str] = ..., log_count: _Optional[int] = ..., daily_quota: _Optional[int] = ..., quota_used_percent: _Optional[float] = ...) -> None: ...
+    logs_daily_quota: int
+    logs_quota_used_percent: float
+    span_count: int
+    metric_point_count: int
+    spans_daily_quota: int
+    metrics_daily_quota: int
+    spans_quota_used_percent: float
+    metrics_quota_used_percent: float
+    def __init__(self, date: _Optional[str] = ..., log_count: _Optional[int] = ..., logs_daily_quota: _Optional[int] = ..., logs_quota_used_percent: _Optional[float] = ..., span_count: _Optional[int] = ..., metric_point_count: _Optional[int] = ..., spans_daily_quota: _Optional[int] = ..., metrics_daily_quota: _Optional[int] = ..., spans_quota_used_percent: _Optional[float] = ..., metrics_quota_used_percent: _Optional[float] = ...) -> None: ...
 
 class GetUsageStatsResponse(_message.Message):
     __slots__ = ("project_id", "usage")

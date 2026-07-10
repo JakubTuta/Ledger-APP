@@ -47,6 +47,9 @@ class BaseGatewayTest:
     def get_mock_auth_stub(self):
         return self.mock_grpc_pool.get_stub("auth", None)
 
+    def get_mock_query_stub(self):
+        return self.mock_grpc_pool.get_stub("query", None)
+
     def make_session_token(self, account_id: int = 1, email: str = "test@example.com") -> str:
         """Mint a JWT access token matching AuthMiddleware._validate_session_token,
         for tests exercising the session-token (login) auth path rather than API keys."""
@@ -67,7 +70,9 @@ class BaseGatewayTest:
         account_id: int = 1,
         rate_limit_per_minute: int = 1000,
         rate_limit_per_hour: int = 50000,
-        daily_quota: int = 1000000,
+        logs_daily_quota: int = 1000000,
+        spans_daily_quota: int = 1000000,
+        metrics_daily_quota: int = 1000000,
         current_usage: int = 0,
     ):
         await self.mock_redis.set_cached_api_key(
@@ -77,7 +82,9 @@ class BaseGatewayTest:
                 "account_id": account_id,
                 "rate_limit_per_minute": rate_limit_per_minute,
                 "rate_limit_per_hour": rate_limit_per_hour,
-                "daily_quota": daily_quota,
+                "logs_daily_quota": logs_daily_quota,
+                "spans_daily_quota": spans_daily_quota,
+                "metrics_daily_quota": metrics_daily_quota,
                 "current_usage": current_usage,
             },
         )

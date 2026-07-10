@@ -17,7 +17,7 @@ class TestRateLimitMiddleware(BaseGatewayTest):
                 "account_id": 1,
                 "rate_limit_per_minute": 10,
                 "rate_limit_per_hour": 100,
-                "daily_quota": 1000000,
+                "logs_daily_quota": 1000000,
                 "current_usage": 0,
             },
         )
@@ -40,7 +40,7 @@ class TestRateLimitMiddleware(BaseGatewayTest):
                 "account_id": 1,
                 "rate_limit_per_minute": 3,
                 "rate_limit_per_hour": 100,
-                "daily_quota": 1000000,
+                "logs_daily_quota": 1000000,
                 "current_usage": 0,
             },
         )
@@ -72,7 +72,7 @@ class TestRateLimitMiddleware(BaseGatewayTest):
                 "account_id": 1,
                 "rate_limit_per_minute": 1000,
                 "rate_limit_per_hour": 5,
-                "daily_quota": 1000000,
+                "logs_daily_quota": 1000000,
                 "current_usage": 0,
             },
         )
@@ -103,7 +103,7 @@ class TestRateLimitMiddleware(BaseGatewayTest):
                 "account_id": 1,
                 "rate_limit_per_minute": 10,
                 "rate_limit_per_hour": 100,
-                "daily_quota": 1000000,
+                "logs_daily_quota": 1000000,
                 "current_usage": 0,
             },
         )
@@ -130,7 +130,7 @@ class TestRateLimitMiddleware(BaseGatewayTest):
                 "account_id": 1,
                 "rate_limit_per_minute": 3,
                 "rate_limit_per_hour": 100,
-                "daily_quota": 1000000,
+                "logs_daily_quota": 1000000,
                 "current_usage": 0,
             },
         )
@@ -142,7 +142,7 @@ class TestRateLimitMiddleware(BaseGatewayTest):
                 "account_id": 1,
                 "rate_limit_per_minute": 3,
                 "rate_limit_per_hour": 100,
-                "daily_quota": 1000000,
+                "logs_daily_quota": 1000000,
                 "current_usage": 0,
             },
         )
@@ -177,12 +177,12 @@ class TestRateLimitMiddleware(BaseGatewayTest):
                 "account_id": 1,
                 "rate_limit_per_minute": 1000,
                 "rate_limit_per_hour": 50000,
-                "daily_quota": 5,
+                "logs_daily_quota": 5,
                 "current_usage": 0,
             },
         )
 
-        self.mock_redis.data["daily_usage:1"] = 10
+        self.mock_redis.data["daily_usage:1:logs"] = 10
 
         response = await self.client.get(
             "/api/v1/projects",
@@ -246,7 +246,7 @@ class TestRateLimitMetrics(BaseGatewayTest):
                 "account_id": 1,
                 "rate_limit_per_minute": 3,
                 "rate_limit_per_hour": 100,
-                "daily_quota": 1000000,
+                "logs_daily_quota": 1000000,
                 "current_usage": 0,
             },
         )

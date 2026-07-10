@@ -18,7 +18,7 @@ class TestCreateApiKey(BaseGatewayTest):
                 "account_id": 1,
                 "rate_limit_per_minute": 1000,
                 "rate_limit_per_hour": 50000,
-                "daily_quota": 1000000,
+                "logs_daily_quota": 1000000,
                 "current_usage": 0,
             },
         )
@@ -49,7 +49,7 @@ class TestCreateApiKey(BaseGatewayTest):
                 "account_id": 1,
                 "rate_limit_per_minute": 1000,
                 "rate_limit_per_hour": 50000,
-                "daily_quota": 1000000,
+                "logs_daily_quota": 1000000,
                 "current_usage": 0,
             },
         )
@@ -81,7 +81,7 @@ class TestCreateApiKey(BaseGatewayTest):
                 "account_id": 1,
                 "rate_limit_per_minute": 1000,
                 "rate_limit_per_hour": 50000,
-                "daily_quota": 1000000,
+                "logs_daily_quota": 1000000,
                 "current_usage": 0,
             },
         )
@@ -116,7 +116,7 @@ class TestCreateApiKey(BaseGatewayTest):
                 "account_id": 1,
                 "rate_limit_per_minute": 1000,
                 "rate_limit_per_hour": 50000,
-                "daily_quota": 1000000,
+                "logs_daily_quota": 1000000,
                 "current_usage": 0,
             },
         )
@@ -161,7 +161,7 @@ class TestCreateApiKey(BaseGatewayTest):
                 "account_id": 1,
                 "rate_limit_per_minute": 1000,
                 "rate_limit_per_hour": 50000,
-                "daily_quota": 1000000,
+                "logs_daily_quota": 1000000,
                 "current_usage": 0,
             },
         )
@@ -185,7 +185,7 @@ class TestCreateApiKey(BaseGatewayTest):
                 "account_id": 1,
                 "rate_limit_per_minute": 1000,
                 "rate_limit_per_hour": 50000,
-                "daily_quota": 1000000,
+                "logs_daily_quota": 1000000,
                 "current_usage": 0,
             },
         )
@@ -216,7 +216,7 @@ class TestRevokeApiKey(BaseGatewayTest):
                 "account_id": 1,
                 "rate_limit_per_minute": 1000,
                 "rate_limit_per_hour": 50000,
-                "daily_quota": 1000000,
+                "logs_daily_quota": 1000000,
                 "current_usage": 0,
             },
         )
@@ -242,7 +242,7 @@ class TestRevokeApiKey(BaseGatewayTest):
                 "account_id": 1,
                 "rate_limit_per_minute": 1000,
                 "rate_limit_per_hour": 50000,
-                "daily_quota": 1000000,
+                "logs_daily_quota": 1000000,
                 "current_usage": 0,
             },
         )
@@ -276,7 +276,7 @@ class TestRevokeApiKey(BaseGatewayTest):
                 "account_id": 1,
                 "rate_limit_per_minute": 1000,
                 "rate_limit_per_hour": 50000,
-                "daily_quota": 1000000,
+                "logs_daily_quota": 1000000,
                 "current_usage": 0,
             },
         )
@@ -317,7 +317,7 @@ class TestRevokeApiKey(BaseGatewayTest):
                 "account_id": 1,
                 "rate_limit_per_minute": 1000,
                 "rate_limit_per_hour": 50000,
-                "daily_quota": 1000000,
+                "logs_daily_quota": 1000000,
                 "current_usage": 0,
             },
         )
@@ -330,7 +330,7 @@ class TestRevokeApiKey(BaseGatewayTest):
                 "account_id": 1,
                 "rate_limit_per_minute": 1000,
                 "rate_limit_per_hour": 50000,
-                "daily_quota": 1000000,
+                "logs_daily_quota": 1000000,
                 "current_usage": 0,
             },
         )
@@ -367,7 +367,7 @@ class TestApiKeyValidation(BaseGatewayTest):
                     "account_id": 1,
                     "rate_limit_per_minute": 1000,
                     "rate_limit_per_hour": 50000,
-                    "daily_quota": 1000000,
+                    "logs_daily_quota": 1000000,
                     "current_usage": 0,
                 },
             )

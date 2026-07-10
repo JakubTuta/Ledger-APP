@@ -25,9 +25,9 @@ async def _seed_account_project(auth_session) -> tuple[int, int]:
     result = await auth_session.execute(
         sa.text("""
             INSERT INTO projects
-                (account_id, name, slug, environment, retention_days, daily_quota, created_at, updated_at)
+                (account_id, name, slug, environment, retention_days, logs_daily_quota, spans_daily_quota, metrics_daily_quota, created_at, updated_at)
             VALUES
-                (:account_id, 'Monitor Project', 'monitor-project', 'production', 30, 100000, NOW(), NOW())
+                (:account_id, 'Monitor Project', 'monitor-project', 'production', 30, 100000, 300000, 100000, NOW(), NOW())
             RETURNING id
         """),
         {"account_id": account_id},

@@ -6,6 +6,12 @@ import analytics_workers.jobs.usage_stats as usage_stats_job
 import pytest
 
 
+def _empty_result() -> MagicMock:
+    result = MagicMock()
+    result.fetchall.return_value = []
+    return result
+
+
 @pytest.mark.asyncio
 async def test_generate_usage_stats_empty_database():
     mock_redis = AsyncMock()
@@ -16,9 +22,7 @@ async def test_generate_usage_stats_empty_database():
     mock_projects_result.fetchall.return_value = []
     mock_auth_session.execute.return_value = mock_projects_result
 
-    mock_logs_result = MagicMock()
-    mock_logs_result.fetchall.return_value = []
-    mock_logs_session.execute.return_value = mock_logs_result
+    mock_logs_session.execute.return_value = _empty_result()
 
     mock_logs_session.__aenter__ = AsyncMock(return_value=mock_logs_session)
     mock_logs_session.__aexit__ = AsyncMock()
@@ -43,8 +47,8 @@ async def test_generate_usage_stats_with_data():
 
     mock_projects_result = MagicMock()
     mock_projects_result.fetchall.return_value = [
-        (1, 1_000_000),
-        (2, 500_000),
+        (1, 1_000_000, 3_000_000, 1_000_000),
+        (2, 500_000, 1_500_000, 500_000),
     ]
     mock_auth_session.execute.return_value = mock_projects_result
 
@@ -54,7 +58,11 @@ async def test_generate_usage_stats_with_data():
         (1, test_date, 847_291),
         (2, test_date, 250_000),
     ]
-    mock_logs_session.execute.return_value = mock_logs_result
+    mock_logs_session.execute.side_effect = [
+        mock_logs_result,
+        _empty_result(),
+        _empty_result(),
+    ]
 
     mock_logs_session.__aenter__ = AsyncMock(return_value=mock_logs_session)
     mock_logs_session.__aexit__ = AsyncMock()
@@ -78,8 +86,14 @@ async def test_generate_usage_stats_with_data():
     assert len(cached_data) == 1
     assert cached_data[0]["date"] == test_date.isoformat()
     assert cached_data[0]["log_count"] == 847_291
-    assert cached_data[0]["daily_quota"] == 1_000_000
-    assert cached_data[0]["quota_used_percent"] == 84.73
+    assert cached_data[0]["span_count"] == 0
+    assert cached_data[0]["metric_point_count"] == 0
+    assert cached_data[0]["logs_daily_quota"] == 1_000_000
+    assert cached_data[0]["spans_daily_quota"] == 3_000_000
+    assert cached_data[0]["metrics_daily_quota"] == 1_000_000
+    assert cached_data[0]["logs_quota_used_percent"] == 84.73
+    assert cached_data[0]["spans_quota_used_percent"] == 0
+    assert cached_data[0]["metrics_quota_used_percent"] == 0
 
 
 @pytest.mark.asyncio
@@ -89,7 +103,7 @@ async def test_generate_usage_stats_quota_calculations():
     mock_auth_session = AsyncMock()
 
     mock_projects_result = MagicMock()
-    mock_projects_result.fetchall.return_value = [(1, 1_000_000)]
+    mock_projects_result.fetchall.return_value = [(1, 1_000_000, 3_000_000, 1_000_000)]
     mock_auth_session.execute.return_value = mock_projects_result
 
     test_date = date(2025, 10, 19)
@@ -97,7 +111,11 @@ async def test_generate_usage_stats_quota_calculations():
     mock_logs_result.fetchall.return_value = [
         (1, test_date, 1_500_000),
     ]
-    mock_logs_session.execute.return_value = mock_logs_result
+    mock_logs_session.execute.side_effect = [
+        mock_logs_result,
+        _empty_result(),
+        _empty_result(),
+    ]
 
     mock_logs_session.__aenter__ = AsyncMock(return_value=mock_logs_session)
     mock_logs_session.__aexit__ = AsyncMock()
@@ -112,7 +130,7 @@ async def test_generate_usage_stats_quota_calculations():
                 await usage_stats_job.generate_usage_stats()
 
     cached_data = json.loads(mock_redis.setex.call_args_list[0][0][2])
-    assert cached_data[0]["quota_used_percent"] == 150.0
+    assert cached_data[0]["logs_quota_used_percent"] == 150.0
 
 
 @pytest.mark.asyncio
@@ -122,7 +140,7 @@ async def test_generate_usage_stats_multiple_days():
     mock_auth_session = AsyncMock()
 
     mock_projects_result = MagicMock()
-    mock_projects_result.fetchall.return_value = [(1, 1_000_000)]
+    mock_projects_result.fetchall.return_value = [(1, 1_000_000, 3_000_000, 1_000_000)]
     mock_auth_session.execute.return_value = mock_projects_result
 
     date1 = date(2025, 10, 19)
@@ -135,7 +153,11 @@ async def test_generate_usage_stats_multiple_days():
         (1, date2, 900_000),
         (1, date3, 750_000),
     ]
-    mock_logs_session.execute.return_value = mock_logs_result
+    mock_logs_session.execute.side_effect = [
+        mock_logs_result,
+        _empty_result(),
+        _empty_result(),
+    ]
 
     mock_logs_session.__aenter__ = AsyncMock(return_value=mock_logs_session)
     mock_logs_session.__aexit__ = AsyncMock()
@@ -151,3 +173,45 @@ async def test_generate_usage_stats_multiple_days():
 
     cached_data = json.loads(mock_redis.setex.call_args_list[0][0][2])
     assert len(cached_data) == 3
+
+
+@pytest.mark.asyncio
+async def test_generate_usage_stats_spans_only_day_yields_zero_log_count():
+    """A day with spans but no logs must still produce a usage entry with
+    log_count: 0, not be silently dropped - regression test for the union-of-
+    signals merge logic."""
+    mock_redis = AsyncMock()
+    mock_logs_session = AsyncMock()
+    mock_auth_session = AsyncMock()
+
+    mock_projects_result = MagicMock()
+    mock_projects_result.fetchall.return_value = [(1, 1_000_000, 3_000_000, 1_000_000)]
+    mock_auth_session.execute.return_value = mock_projects_result
+
+    test_date = date(2025, 10, 19)
+
+    mock_spans_result = MagicMock()
+    mock_spans_result.fetchall.return_value = [(1, test_date, 4_567)]
+
+    mock_logs_session.execute.side_effect = [
+        _empty_result(),
+        mock_spans_result,
+        _empty_result(),
+    ]
+
+    mock_logs_session.__aenter__ = AsyncMock(return_value=mock_logs_session)
+    mock_logs_session.__aexit__ = AsyncMock()
+    mock_auth_session.__aenter__ = AsyncMock(return_value=mock_auth_session)
+    mock_auth_session.__aexit__ = AsyncMock()
+
+    with patch("analytics_workers.redis_client.get_redis", return_value=mock_redis):
+        with patch("analytics_workers.database.get_logs_session") as mock_get_logs_session:
+            with patch("analytics_workers.database.get_auth_session") as mock_get_auth_session:
+                mock_get_logs_session.return_value = mock_logs_session
+                mock_get_auth_session.return_value = mock_auth_session
+                await usage_stats_job.generate_usage_stats()
+
+    cached_data = json.loads(mock_redis.setex.call_args_list[0][0][2])
+    assert len(cached_data) == 1
+    assert cached_data[0]["log_count"] == 0
+    assert cached_data[0]["span_count"] == 4_567

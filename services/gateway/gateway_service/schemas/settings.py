@@ -2,6 +2,8 @@ import typing
 
 import pydantic
 
+from gateway_service.schemas.projects import SignalQuota
+
 
 class RateLimits(pydantic.BaseModel):
     """Rate limiting configuration."""
@@ -30,35 +32,23 @@ class RateLimits(pydantic.BaseModel):
 
 
 class Quotas(pydantic.BaseModel):
-    """Daily usage quotas and current usage."""
+    """Daily usage quotas and current usage, split per signal."""
 
-    daily_quota: int = pydantic.Field(
-        ...,
-        description="Maximum logs allowed per day",
-        ge=0,
-    )
-    daily_usage: int = pydantic.Field(
-        ...,
-        description="Number of logs ingested today",
-        ge=0,
-    )
-    quota_remaining: int = pydantic.Field(
-        ...,
-        description="Remaining quota for today",
-        ge=0,
-    )
+    logs: SignalQuota = pydantic.Field(..., description="Log ingestion quota/usage")
+    spans: SignalQuota = pydantic.Field(..., description="Span ingestion quota/usage")
+    metrics: SignalQuota = pydantic.Field(..., description="Metric point ingestion quota/usage")
     quota_reset_at: str = pydantic.Field(
         ...,
-        description="When the daily quota resets (midnight UTC, ISO 8601)",
+        description="When the daily quotas reset (midnight UTC, ISO 8601)",
     )
 
     model_config = pydantic.ConfigDict(
         json_schema_extra={
             "examples": [
                 {
-                    "daily_quota": 1000000,
-                    "daily_usage": 45678,
-                    "quota_remaining": 954322,
+                    "logs": {"quota": 100000, "usage": 1234, "remaining": 98766},
+                    "spans": {"quota": 300000, "usage": 555, "remaining": 299445},
+                    "metrics": {"quota": 100000, "usage": 42, "remaining": 99958},
                     "quota_reset_at": "2024-01-16T00:00:00Z",
                 }
             ]
@@ -254,9 +244,9 @@ class SettingsResponse(pydantic.BaseModel):
                         "requests_per_hour": 50000,
                     },
                     "quotas": {
-                        "daily_quota": 1000000,
-                        "daily_usage": 45678,
-                        "quota_remaining": 954322,
+                        "logs": {"quota": 100000, "usage": 1234, "remaining": 98766},
+                        "spans": {"quota": 300000, "usage": 555, "remaining": 299445},
+                        "metrics": {"quota": 100000, "usage": 42, "remaining": 99958},
                         "quota_reset_at": "2024-01-16T00:00:00Z",
                     },
                     "constraints": {

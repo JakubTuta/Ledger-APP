@@ -507,7 +507,9 @@ class AuthService:
             name=name,
             slug=slug,
             environment=environment,
-            daily_quota=config.settings.DEFAULT_DAILY_QUOTA,
+            logs_daily_quota=config.settings.DEFAULT_LOGS_DAILY_QUOTA,
+            spans_daily_quota=config.settings.DEFAULT_SPANS_DAILY_QUOTA,
+            metrics_daily_quota=config.settings.DEFAULT_METRICS_DAILY_QUOTA,
         )
         session.add(project)
         await session.flush()
@@ -636,14 +638,20 @@ class AuthService:
         except RedisError as e:
             logger.warning("Redis HGETALL failed for api_key cache (treating as miss): %s", e)
             cached = {}
-        if cached:
+        # A hash written by a pre-split-quota deploy won't have spans_daily_quota /
+        # metrics_daily_quota fields yet. Treat that as a cache miss so it falls
+        # through to the DB below and gets rewritten with the full field set,
+        # rather than silently defaulting quotas here (auth DB is the source of truth).
+        if cached and b"spans_daily_quota" in cached and b"metrics_daily_quota" in cached:
             return (
                 True,
                 int(cached[b"project_id"]),
                 {
                     "project_id": int(cached[b"project_id"]),
                     "account_id": int(cached.get(b"account_id", 0)),
-                    "daily_quota": int(cached[b"daily_quota"]),
+                    "logs_daily_quota": int(cached[b"logs_daily_quota"]),
+                    "spans_daily_quota": int(cached[b"spans_daily_quota"]),
+                    "metrics_daily_quota": int(cached[b"metrics_daily_quota"]),
                     "retention_days": int(cached[b"retention_days"]),
                     "rate_limit_per_minute": int(cached[b"rate_limit_per_minute"]),
                     "rate_limit_per_hour": int(cached[b"rate_limit_per_hour"]),
@@ -674,13 +682,16 @@ class AuthService:
         project_info = {
             "project_id": project.id,
             "account_id": project.account_id,
-            "daily_quota": project.daily_quota,
+            "logs_daily_quota": project.logs_daily_quota,
+            "spans_daily_quota": project.spans_daily_quota,
+            "metrics_daily_quota": project.metrics_daily_quota,
             "retention_days": project.retention_days,
             "rate_limit_per_minute": key_record.rate_limit_per_minute,
             "rate_limit_per_hour": key_record.rate_limit_per_hour,
         }
 
         try:
+            await self.redis.hdel(cache_key, "daily_quota")
             await self.redis.hset(cache_key, mapping=project_info)
             await self.redis.expire(cache_key, config.settings.CACHE_TTL_SECONDS)
         except RedisError as e:
@@ -865,7 +876,9 @@ class AuthService:
         project_id: int,
         requester_account_id: int,
         retention_days: int | None = None,
-        daily_quota: int | None = None,
+        logs_daily_quota: int | None = None,
+        spans_daily_quota: int | None = None,
+        metrics_daily_quota: int | None = None,
     ) -> models.Project:
         """Update a project's retention/quota settings. Requester must be owner."""
         requester_role = await self.get_project_role(session, project_id, requester_account_id)
@@ -884,10 +897,20 @@ class AuthService:
                 raise ValueError("retention_days must be between 1 and 365")
             project.retention_days = retention_days
 
-        if daily_quota is not None:
-            if daily_quota < 1:
-                raise ValueError("daily_quota must be a positive integer")
-            project.daily_quota = daily_quota
+        if logs_daily_quota is not None:
+            if logs_daily_quota < 1:
+                raise ValueError("logs_daily_quota must be a positive integer")
+            project.logs_daily_quota = logs_daily_quota
+
+        if spans_daily_quota is not None:
+            if spans_daily_quota < 1:
+                raise ValueError("spans_daily_quota must be a positive integer")
+            project.spans_daily_quota = spans_daily_quota
+
+        if metrics_daily_quota is not None:
+            if metrics_daily_quota < 1:
+                raise ValueError("metrics_daily_quota must be a positive integer")
+            project.metrics_daily_quota = metrics_daily_quota
 
         await session.flush()
         return project
