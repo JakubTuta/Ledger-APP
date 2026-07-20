@@ -10,7 +10,7 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Docker](https://img.shields.io/badge/docker-required-blue.svg)](https://www.docker.com/)
 
-[Live Demo](https://ledger.jtuta.cloud) • [API Docs](https://bump.sh/tuta-corp/doc/ledger-api/) • [Python SDK](https://github.com/JakubTuta/Ledger-SDK) • [Report Bug](https://github.com/JakubTuta/Ledger-APP/issues)
+[Live Demo](https://ledger.jtuta.cloud) • [Setup Guide](https://ledger.jtuta.cloud/how-to-setup) • [API Docs](https://bump.sh/tuta-corp/doc/ledger-api/) • [Python SDK](https://github.com/JakubTuta/Ledger-SDK) • [Report Bug](https://github.com/JakubTuta/Ledger-APP/issues)
 
 </div>
 
@@ -81,6 +81,9 @@ make -C scripts health
 API is live at `http://localhost:8020`.
 
 ### Send Your First Log
+
+> Prefer step-by-step, copyable instructions with tabs for basic setup, metrics, tracing, and
+> OpenTelemetry? See the **[Setup Guide](https://ledger.jtuta.cloud/how-to-setup)**.
 
 **Option 1: Python SDK (recommended)**
 
