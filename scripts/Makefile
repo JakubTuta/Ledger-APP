@@ -20,7 +20,16 @@ help:
 	@echo "  test-ingestion - Run ingestion service tests"
 	@echo "  test-analytics - Run analytics workers tests"
 	@echo "  test-query  - Run query service tests"
+	@echo "  test-migrations - Run migration service tests"
 	@echo "  benchmark   - Measure max sustainable ingestion logs/s (auto-ramp, gzip, fresh key, DB verify)"
+	@echo ""
+	@echo "Database Commands (migration service, ARGS=... is passed through):"
+	@echo "  db-status   - Show schema version, current revision and pending revisions"
+	@echo "  db-upgrade  - Apply pending migrations"
+	@echo "  db-downgrade - Roll back migrations (ARGS=\"--database auth --version 1\")"
+	@echo "  db-migrate  - Create a revision file (ARGS=\"--database auth -m message\")"
+	@echo "  db-history  - Show revision history"
+	@echo "  db-stamp    - Mark a revision as applied"
 	@echo ""
 	@echo "Production Commands:"
 	@echo "  prod-deploy - Build and push production images to registry"
@@ -38,7 +47,8 @@ setup:
 		cd ../gateway && pip install -r requirements.txt && \
 		cd ../ingestion && pip install -r requirements.txt && \
 		cd ../analytics && pip install -r requirements.txt && \
-		cd ../query && pip install -r requirements.txt"
+		cd ../query && pip install -r requirements.txt && \
+		cd ../migrations && pip install -r requirements.txt"
 	make proto
 	@echo "Setup complete. Edit .env if needed, then run 'make up'"
 
@@ -91,7 +101,7 @@ down:
 # ==================== Testing ====================
 
 .PHONY: test
-test: test-auth test-gateway test-ingestion test-analytics test-query
+test: test-auth test-gateway test-ingestion test-analytics test-query test-migrations
 
 .PHONY: test-auth
 test-auth:
@@ -113,11 +123,45 @@ test-analytics:
 test-query:
 	@bash -c "source venv/bin/activate && cd services/query && pytest tests/ -v"
 
+.PHONY: test-migrations
+test-migrations:
+	@bash -c "source venv/bin/activate && cd services/migrations && pytest tests/ -v"
+
+# ==================== Database ====================
+
+# .env carries the compose hostnames, which do not resolve from the host, and
+# the logs DB is published on 5433 rather than its container port.
+DB_ENV := ENV_FILE_PATH=$(CURDIR)/.env AUTH_DB_HOST=localhost AUTH_DB_PORT=5432 LOGS_DB_HOST=localhost LOGS_DB_PORT=5433
+
+.PHONY: db-status
+db-status:
+	@bash -c "source venv/bin/activate && cd services/migrations && $(DB_ENV) python -m migration_service status $(ARGS)"
+
+.PHONY: db-upgrade
+db-upgrade:
+	@bash -c "source venv/bin/activate && cd services/migrations && $(DB_ENV) python -m migration_service upgrade $(ARGS)"
+
+.PHONY: db-downgrade
+db-downgrade:
+	@bash -c "source venv/bin/activate && cd services/migrations && $(DB_ENV) python -m migration_service downgrade $(ARGS)"
+
+.PHONY: db-migrate
+db-migrate:
+	@bash -c "source venv/bin/activate && cd services/migrations && $(DB_ENV) python -m migration_service revision $(ARGS)"
+
+.PHONY: db-history
+db-history:
+	@bash -c "source venv/bin/activate && cd services/migrations && $(DB_ENV) python -m migration_service history $(ARGS)"
+
+.PHONY: db-stamp
+db-stamp:
+	@bash -c "source venv/bin/activate && cd services/migrations && $(DB_ENV) python -m migration_service stamp $(ARGS)"
+
 # ==================== Production ====================
 
 PROD_REGISTRY := container-repository.jtuta.cloud/ledger
 PROD_TAG := latest
-SERVICES := auth gateway ingestion analytics query
+SERVICES := auth gateway ingestion analytics query migrations
 
 .PHONY: prod-deploy
 prod-deploy:

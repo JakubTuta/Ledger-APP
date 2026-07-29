@@ -1,4 +1,5 @@
--- Auth DB bootstrap. Kept in sync with services/auth/alembic/versions/*
+-- Auth DB bootstrap. Kept in sync with
+-- services/migrations/migration_service/alembic/auth/versions/*
 -- (current head: b8c9d0e1f2a3) and services/auth/auth_service/models.py.
 --
 -- Index policy: one index per access path. A primary key already has a unique

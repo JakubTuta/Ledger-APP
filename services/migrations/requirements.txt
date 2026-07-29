@@ -1,19 +1,7 @@
 # Database
 sqlalchemy[asyncio]==2.0.44
 asyncpg==0.30.0
-
-# Redis
-redis[hiredis]==6.4.0
-
-# gRPC
-grpcio==1.75.1
-grpcio-tools==1.75.1
-protobuf==6.33.0
-
-# Security
-bcrypt==5.0.0
-pyjwt[crypto]==2.10.1
-pyotp==2.9.0
+alembic==1.17.2
 
 # Config
 pydantic==2.12.3

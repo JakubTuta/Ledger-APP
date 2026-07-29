@@ -182,6 +182,38 @@ services:
         max-size: "5m"
         max-file: "2"
 
+  # Owns the schema history of every database. Runs to completion, then the
+  # services that touch a database start behind it.
+  ledger-migrations:
+    image: container-registry.jtuta.cloud/ledger/migrations:latest
+    container_name: ledger-migrations
+    restart: "no"
+    env_file: ../secrets/.env.ledger
+    environment:
+      AUTH_DB_HOST: ledger-postgres
+      LOGS_DB_HOST: ledger-postgres-logs
+    depends_on:
+      ledger-postgres:
+        condition: service_healthy
+      ledger-postgres-logs:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          cpus: "0.05"
+          memory: 64M
+    networks:
+      - ledger-server-network
+    command: python -m migration_service upgrade
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
   ledger-auth-service:
     image: container-registry.jtuta.cloud/ledger/auth:latest
     container_name: ledger-auth-service
@@ -191,6 +223,8 @@ services:
       AUTH_DB_HOST: ledger-postgres
       REDIS_HOST: ledger-redis
     depends_on:
+      ledger-migrations:
+        condition: service_completed_successfully
       ledger-postgres:
         condition: service_healthy
       ledger-redis:
@@ -275,6 +309,8 @@ services:
       LOGS_DB_HOST: ledger-postgres-logs
       RABBITMQ_HOST: ledger-rabbitmq
     depends_on:
+      ledger-migrations:
+        condition: service_completed_successfully
       ledger-postgres-logs:
         condition: service_healthy
       ledger-redis:
@@ -319,6 +355,8 @@ services:
       LOGS_DB_HOST: ledger-postgres-logs
       RABBITMQ_HOST: ledger-rabbitmq
     depends_on:
+      ledger-migrations:
+        condition: service_completed_successfully
       ledger-postgres-logs:
         condition: service_healthy
       ledger-redis:
@@ -354,6 +392,8 @@ services:
       LOGS_DB_HOST: ledger-postgres-logs
       AUTH_DB_HOST: ledger-postgres
     depends_on:
+      ledger-migrations:
+        condition: service_completed_successfully
       ledger-postgres:
         condition: service_healthy
       ledger-postgres-logs:
@@ -386,6 +426,8 @@ services:
       REDIS_HOST: ledger-redis
       LOGS_DB_HOST: ledger-postgres-logs
     depends_on:
+      ledger-migrations:
+        condition: service_completed_successfully
       ledger-postgres-logs:
         condition: service_healthy
       ledger-redis:

@@ -248,6 +248,77 @@ jobs:
       - name: Run tests
         run: pytest tests/ -v
 
+  # ==================== Tests: migrations (real Postgres, both databases) ====================
+  # The migration service owns every database's schema history. Its unit tests
+  # only read the revision files, but the job then replays the whole history
+  # against empty Auth (5432) and Logs (5433) databases - the only check that
+  # catches a revision that no longer applies from scratch.
+  test-migrations:
+    name: Test (migrations)
+    needs: lint
+    runs-on: ubuntu-latest
+    services:
+      postgres-auth:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      postgres-logs:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      AUTH_DB_HOST: localhost
+      AUTH_DB_PORT: 5432
+      AUTH_DB_NAME: postgres
+      AUTH_DB_USER: postgres
+      AUTH_DB_PASSWORD: postgres
+      LOGS_DB_HOST: localhost
+      LOGS_DB_PORT: 5433
+      LOGS_DB_NAME: postgres
+      LOGS_DB_USER: postgres
+      LOGS_DB_PASSWORD: postgres
+    defaults:
+      run:
+        working-directory: services/migrations
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: services/migrations/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: pytest tests/ -v
+
+      - name: Apply every migration to empty databases
+        run: python -m migration_service upgrade
+
+      - name: Report schema version
+        run: python -m migration_service status
+
   # ==================== Docker build sanity check ====================
   # Build-only (no push, no registry credentials in CI). Mirrors the build
   # invocation used by scripts/Makefile's prod-deploy target.
@@ -258,7 +329,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [auth, gateway, ingestion, analytics, query]
+        service: [auth, gateway, ingestion, analytics, query, migrations]
     steps:
       - uses: actions/checkout@v4
 

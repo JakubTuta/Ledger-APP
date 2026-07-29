@@ -138,6 +138,32 @@ services:
     networks:
       - ledger-server-network
 
+  # ==================== Database Migrations (runs once, then exits) ====================
+  # Owns the schema history of every database. Every service that touches a
+  # database waits for this container to exit 0 before it starts.
+  ledger-migrations:
+    build:
+      context: ./services/migrations
+      dockerfile: Dockerfile
+    container_name: ledger-migrations
+    restart: "no"
+    env_file: .env
+    environment:
+      # Override host names for Docker network
+      AUTH_DB_HOST: ledger-postgres
+      LOGS_DB_HOST: ledger-postgres-logs
+    depends_on:
+      ledger-postgres:
+        condition: service_healthy
+      ledger-postgres-logs:
+        condition: service_healthy
+    networks:
+      - ledger-server-network
+    volumes:
+      # Mount so new revision files apply without an image rebuild
+      - ./services/migrations/migration_service:/app/migration_service:ro
+    command: python -m migration_service upgrade
+
   # ==================== Auth Service (gRPC) ====================
   ledger-auth-service:
     build:
@@ -151,6 +177,8 @@ services:
       AUTH_DB_HOST: ledger-postgres
       REDIS_HOST: ledger-redis
     depends_on:
+      ledger-migrations:
+        condition: service_completed_successfully
       ledger-postgres:
         condition: service_healthy
       ledger-redis:
@@ -231,6 +259,8 @@ services:
       LOGS_DB_HOST: ledger-postgres-logs
       RABBITMQ_HOST: ledger-rabbitmq
     depends_on:
+      ledger-migrations:
+        condition: service_completed_successfully
       ledger-postgres-logs:
         condition: service_healthy
       ledger-redis:
@@ -269,6 +299,8 @@ services:
       LOGS_DB_HOST: ledger-postgres-logs
       RABBITMQ_HOST: ledger-rabbitmq
     depends_on:
+      ledger-migrations:
+        condition: service_completed_successfully
       ledger-postgres-logs:
         condition: service_healthy
       ledger-redis:
@@ -300,6 +332,8 @@ services:
       LOGS_DB_HOST: ledger-postgres-logs
       AUTH_DB_HOST: ledger-postgres
     depends_on:
+      ledger-migrations:
+        condition: service_completed_successfully
       ledger-postgres:
         condition: service_healthy
       ledger-postgres-logs:
@@ -337,6 +371,8 @@ services:
       REDIS_HOST: ledger-redis
       LOGS_DB_HOST: ledger-postgres-logs
     depends_on:
+      ledger-migrations:
+        condition: service_completed_successfully
       ledger-postgres-logs:
         condition: service_healthy
       ledger-redis:

@@ -1,4 +1,5 @@
--- Logs DB bootstrap. Kept in sync with services/ingestion/alembic/versions/*
+-- Logs DB bootstrap. Kept in sync with
+-- services/migrations/migration_service/alembic/logs/versions/*
 -- (current head: 016) and with the ORM models in
 -- services/ingestion/ingestion_service/models.py and
 -- services/query/query_service/models.py.

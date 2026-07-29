@@ -47,8 +47,18 @@ function Show-Help {
     Write-Host "  test-ingestion - Run ingestion service tests"
     Write-Host "  test-analytics - Run analytics workers tests"
     Write-Host "  test-query   - Run query service tests"
+    Write-Host "  test-migrations - Run migration service tests"
     Write-Host "  test-e2e     - Run the end-to-end suite against a live stack (requires 'up' first)"
     Write-Host "  benchmark    - Measure max sustainable ingestion logs/s (auto-ramp, gzip, fresh key, DB verify)"
+    Write-Host ""
+    Write-Host "Database (migration service, run against the local infra containers):" -ForegroundColor Yellow
+    Write-Host "  db-status    - Show schema version, current revision and pending revisions per database"
+    Write-Host "  db-upgrade   - Apply pending migrations   (--database auth|logs, --version N)"
+    Write-Host "  db-downgrade - Roll back migrations       (--database auth|logs, --version N|--revision REV)"
+    Write-Host "  db-migrate   - Create a revision file     (--database auth|logs -m ""message"")"
+    Write-Host "  db-history   - Show revision history      (--database auth|logs)"
+    Write-Host "  db-stamp     - Mark a revision as applied (--database auth|logs --revision REV)"
+    Write-Host "  db-shell     - Open a psql shell          (auth|logs, default auth)"
     Write-Host ""
     Write-Host "Production:" -ForegroundColor Yellow
     Write-Host "  prod-deploy  - Build and push production images to registry"
@@ -71,7 +81,7 @@ function Setup {
     }
 
     $pip = Get-VenvPip
-    foreach ($service in @("auth", "gateway", "ingestion", "analytics", "query")) {
+    foreach ($service in @("auth", "gateway", "ingestion", "analytics", "query", "migrations")) {
         Write-Host "Installing $service dependencies..." -ForegroundColor Cyan
         Push-Location "services\$service"
         & $pip install -r requirements.txt
@@ -154,7 +164,7 @@ function Run-Tests {
     }
 
     $python = Get-VenvPython
-    $services = if ($Service) { @($Service) } else { @("auth", "gateway", "ingestion", "analytics", "query") }
+    $services = if ($Service) { @($Service) } else { @("auth", "gateway", "ingestion", "analytics", "query", "migrations") }
     $failed = @()
 
     foreach ($svc in $services) {
@@ -202,6 +212,49 @@ function Run-E2ETests {
     Write-Host "All E2E tests passed" -ForegroundColor Green
 }
 
+# ==================== Database ====================
+
+function Invoke-Migrations {
+    param([string[]]$Arguments)
+
+    if (-not (Test-Path "venv")) {
+        Write-Host "Virtual environment not found. Run '.\Make.ps1 setup' first." -ForegroundColor Red
+        exit 1
+    }
+
+    # .env carries the compose hostnames, which do not resolve from the host, and
+    # the logs DB is published on 5433 rather than its container port.
+    $env:ENV_FILE_PATH = (Join-Path $PWD ".env")
+    $env:AUTH_DB_HOST = "localhost"
+    $env:AUTH_DB_PORT = "5432"
+    $env:LOGS_DB_HOST = "localhost"
+    $env:LOGS_DB_PORT = "5433"
+
+    $python = Get-VenvPython
+    Push-Location "services\migrations"
+    & $python -m migration_service @Arguments
+    $exitCode = $LASTEXITCODE
+    Pop-Location
+
+    if ($exitCode -ne 0) { exit 1 }
+}
+
+function Open-DbShell {
+    param([string]$Database = "auth")
+
+    switch ($Database.ToLower()) {
+        "auth" { $container = "ledger-postgres";      $user = $env:AUTH_DB_USER; $name = $env:AUTH_DB_NAME }
+        "logs" { $container = "ledger-postgres-logs"; $user = $env:LOGS_DB_USER; $name = $env:LOGS_DB_NAME }
+        default {
+            Write-Host "Unknown database '$Database'. Use 'auth' or 'logs'." -ForegroundColor Red
+            exit 1
+        }
+    }
+
+    docker exec -it $container psql -U $user -d $name
+    if ($LASTEXITCODE -ne 0) { exit 1 }
+}
+
 function Run-Benchmark {
     if (-not (Test-Path "venv")) {
         Write-Host "Virtual environment not found. Run '.\Make.ps1 setup' first." -ForegroundColor Red
@@ -217,7 +270,7 @@ function Run-Benchmark {
 
 $PROD_REGISTRY = "container-registry.jtuta.cloud/ledger"
 $PROD_TAG = "latest"
-$PROD_SERVICES = @("auth", "gateway", "ingestion", "analytics", "query")
+$PROD_SERVICES = @("auth", "gateway", "ingestion", "analytics", "query", "migrations")
 
 function Assert-Docker {
     try { docker version | Out-Null } catch {
@@ -298,8 +351,16 @@ switch ($Command.ToLower()) {
     "test-ingestion"   { Run-Tests -Service "ingestion" }
     "test-analytics"   { Run-Tests -Service "analytics" }
     "test-query"       { Run-Tests -Service "query" }
+    "test-migrations"  { Run-Tests -Service "migrations" }
     "test-e2e"         { Run-E2ETests }
     "benchmark"        { Run-Benchmark }
+    "db-status"        { Invoke-Migrations (@("status")    + $Rest) }
+    "db-upgrade"       { Invoke-Migrations (@("upgrade")   + $Rest) }
+    "db-downgrade"     { Invoke-Migrations (@("downgrade") + $Rest) }
+    "db-migrate"       { Invoke-Migrations (@("revision")  + $Rest) }
+    "db-history"       { Invoke-Migrations (@("history")   + $Rest) }
+    "db-stamp"         { Invoke-Migrations (@("stamp")     + $Rest) }
+    "db-shell"         { if ($Rest.Count -gt 0) { Open-DbShell -Database $Rest[0] } else { Open-DbShell } }
     "prod-deploy"      { Run-ProdDeploy }
     "prod-up"          { Start-ProdServices }
     "prod-down"        { Stop-ProdServices }
