@@ -117,6 +117,28 @@ def _calculate_time_range_for_period(
     return start_time, end_time
 
 
+def _require_period_params(
+    period: str | None, period_from: str | None, period_to: str | None
+) -> None:
+    """Raise 400 unless a predefined `period` or a full `periodFrom`+`periodTo` range is given."""
+    if not period and not (period_from and period_to):
+        raise fastapi.HTTPException(
+            status_code=400,
+            detail="Either 'period' or both 'periodFrom' and 'periodTo' must be provided",
+        )
+
+
+def _reject_conflicting_period_params(
+    period: str | None, period_from: str | None, period_to: str | None
+) -> None:
+    """Raise 400 if both a predefined `period` and an explicit range were given."""
+    if period and (period_from or period_to):
+        raise fastapi.HTTPException(
+            status_code=400,
+            detail="Cannot use both 'period' and 'periodFrom'/'periodTo' parameters",
+        )
+
+
 @router.get(
     "/logs/facets",
     status_code=200,
@@ -146,52 +168,48 @@ def _calculate_time_range_for_period(
 async def get_log_facets(
     request: fastapi.Request,
     project_id: int = fastapi.Depends(dependencies.require_project_member),
-    period: typing.Optional[
-        typing.Literal[
-            "today",
-            "last7days",
-            "last30days",
-            "currentWeek",
-            "currentMonth",
-            "currentYear",
-        ]
-    ] = fastapi.Query(
+    period: typing.Literal[
+        "today",
+        "last7days",
+        "last30days",
+        "currentWeek",
+        "currentMonth",
+        "currentYear",
+    ]
+    | None = fastapi.Query(
         None,
         description="Predefined time period. Mutually exclusive with periodFrom/periodTo.",
     ),
-    periodFrom: typing.Optional[str] = fastapi.Query(
+    periodFrom: str | None = fastapi.Query(
         None,
         description="Start date in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ). Must be used with periodTo.",
     ),
-    periodTo: typing.Optional[str] = fastapi.Query(
+    periodTo: str | None = fastapi.Query(
         None,
         description="End date in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ). Must be used with periodFrom.",
     ),
-    level: typing.Optional[
-        typing.Literal["debug", "info", "warning", "error", "critical"]
-    ] = fastapi.Query(
+    level: typing.Literal["debug", "info", "warning", "error", "critical"] | None = fastapi.Query(
         None,
         description="Filter by log level. If not specified, returns all levels.",
     ),
-    log_type: typing.Optional[
-        typing.Literal[
-            "console",
-            "logger",
-            "exception",
-            "network",
-            "database",
-            "endpoint",
-            "custom",
-        ]
-    ] = fastapi.Query(
+    log_type: typing.Literal[
+        "console",
+        "logger",
+        "exception",
+        "network",
+        "database",
+        "endpoint",
+        "custom",
+    ]
+    | None = fastapi.Query(
         None,
         description="Filter by log type. If not specified, returns all types.",
     ),
-    status_class: typing.Optional[typing.List[typing.Literal["2xx", "4xx", "5xx"]]] = fastapi.Query(
+    status_class: list[typing.Literal["2xx", "4xx", "5xx"]] | None = fastapi.Query(
         None,
         description="Filter by HTTP status class (2xx, 4xx, 5xx). Can be repeated.",
     ),
-    search: typing.Optional[str] = fastapi.Query(
+    search: str | None = fastapi.Query(
         None,
         description="Substring search on HTTP method, path, message, or error message.",
         max_length=200,
@@ -204,17 +222,8 @@ async def get_log_facets(
     """
     grpc_pool = request.app.state.grpc_pool
 
-    if not period and not (periodFrom and periodTo):
-        raise fastapi.HTTPException(
-            status_code=400,
-            detail="Either 'period' or both 'periodFrom' and 'periodTo' must be provided",
-        )
-
-    if period and (periodFrom or periodTo):
-        raise fastapi.HTTPException(
-            status_code=400,
-            detail="Cannot use both 'period' and 'periodFrom'/'periodTo' parameters",
-        )
+    _require_period_params(period, periodFrom, periodTo)
+    _reject_conflicting_period_params(period, periodFrom, periodTo)
 
     try:
         if period:
@@ -605,48 +614,44 @@ async def get_log_by_id(
 async def query_logs(
     request: fastapi.Request,
     project_id: int = fastapi.Depends(dependencies.require_project_member),
-    period: typing.Optional[
-        typing.Literal[
-            "today",
-            "last7days",
-            "last30days",
-            "currentWeek",
-            "currentMonth",
-            "currentYear",
-        ]
-    ] = fastapi.Query(
+    period: typing.Literal[
+        "today",
+        "last7days",
+        "last30days",
+        "currentWeek",
+        "currentMonth",
+        "currentYear",
+    ]
+    | None = fastapi.Query(
         None,
         description="Predefined time period. Mutually exclusive with periodFrom/periodTo.",
     ),
-    periodFrom: typing.Optional[str] = fastapi.Query(
+    periodFrom: str | None = fastapi.Query(
         None,
         description="Start date in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ). Must be used with periodTo.",
     ),
-    periodTo: typing.Optional[str] = fastapi.Query(
+    periodTo: str | None = fastapi.Query(
         None,
         description="End date in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ). Must be used with periodFrom.",
     ),
-    level: typing.Optional[
-        typing.Literal["debug", "info", "warning", "error", "critical"]
-    ] = fastapi.Query(
+    level: typing.Literal["debug", "info", "warning", "error", "critical"] | None = fastapi.Query(
         None,
         description="Filter by log level. If not specified, returns all levels.",
     ),
-    log_type: typing.Optional[
-        typing.Literal[
-            "console",
-            "logger",
-            "exception",
-            "network",
-            "database",
-            "endpoint",
-            "custom",
-        ]
-    ] = fastapi.Query(
+    log_type: typing.Literal[
+        "console",
+        "logger",
+        "exception",
+        "network",
+        "database",
+        "endpoint",
+        "custom",
+    ]
+    | None = fastapi.Query(
         None,
         description="Filter by log type. If not specified, returns all types.",
     ),
-    environment: typing.Optional[str] = fastapi.Query(
+    environment: str | None = fastapi.Query(
         None,
         description="Filter by environment (e.g. production, staging). If not specified, returns all environments.",
         max_length=20,
@@ -662,16 +667,16 @@ async def query_logs(
         description="Number of logs to skip for pagination. Ignored when 'cursor' is set.",
         ge=0,
     ),
-    cursor: typing.Optional[str] = fastapi.Query(
+    cursor: str | None = fastapi.Query(
         None,
         description="Opaque keyset cursor from a previous response's next_cursor. "
         "Preferred over offset for deep pagination - takes precedence when set.",
     ),
-    status_class: typing.Optional[typing.List[typing.Literal["2xx", "4xx", "5xx"]]] = fastapi.Query(
+    status_class: list[typing.Literal["2xx", "4xx", "5xx"]] | None = fastapi.Query(
         None,
         description="Filter by HTTP status class (2xx, 4xx, 5xx). Can be repeated.",
     ),
-    search: typing.Optional[str] = fastapi.Query(
+    search: str | None = fastapi.Query(
         None,
         description="Substring search on HTTP method, path, message, or error message.",
         max_length=200,
@@ -763,17 +768,8 @@ async def query_logs(
     """
     grpc_pool = request.app.state.grpc_pool
 
-    if not period and not (periodFrom and periodTo):
-        raise fastapi.HTTPException(
-            status_code=400,
-            detail="Either 'period' or both 'periodFrom' and 'periodTo' must be provided",
-        )
-
-    if period and (periodFrom or periodTo):
-        raise fastapi.HTTPException(
-            status_code=400,
-            detail="Cannot use both 'period' and 'periodFrom'/'periodTo' parameters",
-        )
+    _require_period_params(period, periodFrom, periodTo)
+    _reject_conflicting_period_params(period, periodFrom, periodTo)
 
     try:
         if period:
@@ -908,30 +904,29 @@ async def get_aggregated_metrics(
         ...,
         description="Metric type to retrieve (exception for error tracking, endpoint for API monitoring, log_volume for log volume metrics)",
     ),
-    period: typing.Optional[
-        typing.Literal[
-            "today",
-            "last7days",
-            "last30days",
-            "currentWeek",
-            "currentMonth",
-            "currentYear",
-        ]
-    ] = fastapi.Query(
+    period: typing.Literal[
+        "today",
+        "last7days",
+        "last30days",
+        "currentWeek",
+        "currentMonth",
+        "currentYear",
+    ]
+    | None = fastapi.Query(
         None,
         description="Predefined time period. Mutually exclusive with periodFrom/periodTo.",
     ),
-    periodFrom: typing.Optional[str] = fastapi.Query(
+    periodFrom: str | None = fastapi.Query(
         None,
         description="Start date in ISO 8601 format (YYYY-MM-DD). Must be used with periodTo.",
         pattern=r"^\d{4}-\d{2}-\d{2}$",
     ),
-    periodTo: typing.Optional[str] = fastapi.Query(
+    periodTo: str | None = fastapi.Query(
         None,
         description="End date in ISO 8601 format (YYYY-MM-DD). Must be used with periodFrom.",
         pattern=r"^\d{4}-\d{2}-\d{2}$",
     ),
-    endpointPath: typing.Optional[str] = fastapi.Query(
+    endpointPath: str | None = fastapi.Query(
         None,
         description="Filter by specific endpoint path (e.g., /api/users). Only applicable when type=endpoint.",
     ),
@@ -1088,17 +1083,8 @@ async def get_aggregated_metrics(
     """
     grpc_pool = request.app.state.grpc_pool
 
-    if not period and not (periodFrom and periodTo):
-        raise fastapi.HTTPException(
-            status_code=400,
-            detail="Either 'period' or both 'periodFrom' and 'periodTo' must be provided",
-        )
-
-    if period and (periodFrom or periodTo):
-        raise fastapi.HTTPException(
-            status_code=400,
-            detail="Cannot use both 'period' and 'periodFrom'/'periodTo' parameters",
-        )
+    _require_period_params(period, periodFrom, periodTo)
+    _reject_conflicting_period_params(period, periodFrom, periodTo)
 
     period_from_date = None
     period_to_date = None
@@ -1251,30 +1237,29 @@ async def get_aggregated_metrics(
 async def get_error_list(
     request: fastapi.Request,
     project_id: int = fastapi.Depends(dependencies.require_project_member),
-    period: typing.Optional[
-        typing.Literal[
-            "today",
-            "last7days",
-            "last30days",
-            "currentWeek",
-            "currentMonth",
-            "currentYear",
-        ]
-    ] = fastapi.Query(
+    period: typing.Literal[
+        "today",
+        "last7days",
+        "last30days",
+        "currentWeek",
+        "currentMonth",
+        "currentYear",
+    ]
+    | None = fastapi.Query(
         None,
         description="Predefined time period. Mutually exclusive with periodFrom/periodTo.",
     ),
-    periodFrom: typing.Optional[str] = fastapi.Query(
+    periodFrom: str | None = fastapi.Query(
         None,
         description="Start date in ISO 8601 format (YYYY-MM-DD). Must be used with periodTo.",
         pattern=r"^\\d{4}-\\d{2}-\\d{2}$",
     ),
-    periodTo: typing.Optional[str] = fastapi.Query(
+    periodTo: str | None = fastapi.Query(
         None,
         description="End date in ISO 8601 format (YYYY-MM-DD). Must be used with periodFrom.",
         pattern=r"^\\d{4}-\\d{2}-\\d{2}$",
     ),
-    search: typing.Optional[str] = fastapi.Query(
+    search: str | None = fastapi.Query(
         None,
         description="Substring filter on path or message",
         max_length=200,
@@ -1293,17 +1278,8 @@ async def get_error_list(
 ) -> schemas.ErrorListResponse:
     grpc_pool = request.app.state.grpc_pool
 
-    if not period and not (periodFrom and periodTo):
-        raise fastapi.HTTPException(
-            status_code=400,
-            detail="Either 'period' or both 'periodFrom' and 'periodTo' must be provided",
-        )
-
-    if period and (periodFrom or periodTo):
-        raise fastapi.HTTPException(
-            status_code=400,
-            detail="Cannot use both 'period' and 'periodFrom'/'periodTo' parameters",
-        )
+    _require_period_params(period, periodFrom, periodTo)
+    _reject_conflicting_period_params(period, periodFrom, periodTo)
 
     try:
         error_list_kwargs: dict = dict(
@@ -1400,20 +1376,16 @@ async def get_bottleneck_list(
     project_id: int = fastapi.Depends(dependencies.require_project_member),
     statistic: typing.Literal["min", "max", "avg", "median", "count"] = fastapi.Query("avg"),
     sort: typing.Literal["asc", "desc"] = fastapi.Query("desc"),
-    period: typing.Optional[str] = fastapi.Query(None),
-    periodFrom: typing.Optional[str] = fastapi.Query(None),
-    periodTo: typing.Optional[str] = fastapi.Query(None),
+    period: str | None = fastapi.Query(None),
+    periodFrom: str | None = fastapi.Query(None),
+    periodTo: str | None = fastapi.Query(None),
     limit: int = fastapi.Query(25, ge=1, le=100),
     offset: int = fastapi.Query(0, ge=0),
-    search: typing.Optional[str] = fastapi.Query(None, max_length=200),
+    search: str | None = fastapi.Query(None, max_length=200),
 ) -> schemas.BottleneckListResponse:
     grpc_pool = request.app.state.grpc_pool
 
-    if not period and not (periodFrom and periodTo):
-        raise fastapi.HTTPException(
-            status_code=400,
-            detail="Either 'period' or both 'periodFrom' and 'periodTo' must be provided",
-        )
+    _require_period_params(period, periodFrom, periodTo)
 
     period_from_str = ""
     period_to_str = ""
@@ -1580,11 +1552,9 @@ async def query_metrics(
     request: fastapi.Request,
     name: str = fastapi.Query(...),
     aggregation: typing.Literal["avg", "sum", "min", "max", "count"] = fastapi.Query("avg"),
-    fromTime: typing.Optional[str] = fastapi.Query(None),
-    toTime: typing.Optional[str] = fastapi.Query(None),
-    tags: typing.Optional[str] = fastapi.Query(
-        None, description="JSON object of tag key/value filters"
-    ),
+    fromTime: str | None = fastapi.Query(None),
+    toTime: str | None = fastapi.Query(None),
+    tags: str | None = fastapi.Query(None, description="JSON object of tag key/value filters"),
     project_id: int = fastapi.Depends(dependencies.require_project_member),
 ) -> dict:
     grpc_pool = request.app.state.grpc_pool

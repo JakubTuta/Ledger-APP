@@ -395,22 +395,21 @@ async def get_project_quota(
 
         usage_by_signal = await redis.get_daily_usage_by_signal(project_id)
 
-        tomorrow = datetime.datetime.now(datetime.timezone.utc).replace(
-            hour=0, minute=0, second=0, microsecond=0
-        ) + datetime.timedelta(days=1)
-
-        def _signal_quota(quota: int, usage: int) -> schemas.SignalQuota:
-            return schemas.SignalQuota(quota=quota, usage=usage, remaining=max(0, quota - usage))
-
         return schemas.ProjectQuotaResponse(
             project_id=project_id,
             project_name=project_response.name,
             project_slug=project_response.slug,
             environment=project_response.environment,
-            logs=_signal_quota(project_response.logs_daily_quota, usage_by_signal["logs"]),
-            spans=_signal_quota(project_response.spans_daily_quota, usage_by_signal["spans"]),
-            metrics=_signal_quota(project_response.metrics_daily_quota, usage_by_signal["metrics"]),
-            quota_reset_at=tomorrow.isoformat(),
+            logs=dependencies.signal_quota(
+                project_response.logs_daily_quota, usage_by_signal["logs"]
+            ),
+            spans=dependencies.signal_quota(
+                project_response.spans_daily_quota, usage_by_signal["spans"]
+            ),
+            metrics=dependencies.signal_quota(
+                project_response.metrics_daily_quota, usage_by_signal["metrics"]
+            ),
+            quota_reset_at=dependencies.next_daily_quota_reset().isoformat(),
             retention_days=project_response.retention_days,
         )
 

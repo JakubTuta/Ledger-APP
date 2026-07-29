@@ -27,7 +27,7 @@ class RedisClient:
         self.url = url
         self.max_connections = max_connections
         self.decode_responses = decode_responses
-        self.client: typing.Optional[aioredis.Redis] = None
+        self.client: aioredis.Redis | None = None
         self._pipeline_size = 100
 
     async def connect(self):
@@ -61,7 +61,7 @@ class RedisClient:
         except RedisError:
             return False
 
-    async def get_cached_api_key(self, api_key: str) -> typing.Optional[typing.Dict]:
+    async def get_cached_api_key(self, api_key: str) -> dict | None:
         cache_key = self._api_key_cache_key(api_key)
 
         try:
@@ -74,9 +74,7 @@ class RedisClient:
             logger.error(f"Redis GET error: {e}")
             return None
 
-    async def set_cached_api_key(
-        self, api_key: str, data: typing.Dict, ttl: typing.Optional[int] = None
-    ):
+    async def set_cached_api_key(self, api_key: str, data: dict, ttl: int | None = None):
         cache_key = self._api_key_cache_key(api_key)
 
         if ttl is None:
@@ -90,7 +88,7 @@ class RedisClient:
         except RedisError as e:
             logger.error(f"Redis SETEX error: {e}")
 
-    async def get_stale_cache(self, api_key: str) -> typing.Optional[typing.Dict]:
+    async def get_stale_cache(self, api_key: str) -> dict | None:
         return await self.get_cached_api_key(api_key)
 
     async def check_rate_limit(
@@ -100,7 +98,7 @@ class RedisClient:
         limit_per_hour: int,
         key_prefix: str = "project",
         amount: int = 1,
-    ) -> tuple[bool, typing.Dict]:
+    ) -> tuple[bool, dict]:
         import time
 
         now = int(time.time())
@@ -132,9 +130,7 @@ class RedisClient:
             logger.error(f"Rate limit check error: {e}")
             return True, {"error": str(e)}
 
-    async def get_cached_project_access(
-        self, account_id: int, project_id: int
-    ) -> typing.Optional[bool]:
+    async def get_cached_project_access(self, account_id: int, project_id: int) -> bool | None:
         key = f"project_access:{account_id}:{project_id}"
         try:
             val = await self.client.get(key)  # type: ignore
@@ -179,7 +175,7 @@ class RedisClient:
         except RedisError as e:
             logger.error(f"Redis SETEX totp_session error: {e}")
 
-    async def get_totp_session(self, totp_session_token: str) -> typing.Optional[int]:
+    async def get_totp_session(self, totp_session_token: str) -> int | None:
         key = self._totp_session_key(totp_session_token)
         try:
             val = await self.client.get(key)  # type: ignore
@@ -295,7 +291,7 @@ class RedisClient:
         except RedisError as e:
             logger.error(f"Reset failures error: {e}")
 
-    async def batch_get(self, keys: typing.List[str]) -> typing.List[typing.Optional[bytes]]:
+    async def batch_get(self, keys: list[str]) -> list[bytes | None]:
         if not keys:
             return []
 
@@ -306,9 +302,7 @@ class RedisClient:
             logger.error(f"Batch GET error: {e}")
             return [None] * len(keys)
 
-    async def batch_set(
-        self, mapping: typing.Dict[str, typing.Any], ttl: typing.Optional[int] = None
-    ):
+    async def batch_set(self, mapping: dict[str, typing.Any], ttl: int | None = None):
         if not mapping:
             return
 
@@ -369,7 +363,7 @@ class RedisClient:
         except RedisError as e:
             logger.error(f"Clear pattern error: {e}")
 
-    async def get_stats(self) -> typing.Dict[str, typing.Any]:
+    async def get_stats(self) -> dict[str, typing.Any]:
         try:
             info = await self.client.info()  # type: ignore
 
@@ -386,7 +380,7 @@ class RedisClient:
             logger.error(f"Get stats error: {e}")
             return {}
 
-    def _calculate_hit_rate(self, info: typing.Dict[str, typing.Any]) -> float:
+    def _calculate_hit_rate(self, info: dict[str, typing.Any]) -> float:
         hits = info.get("keyspace_hits", 0)
         misses = info.get("keyspace_misses", 0)
         total = hits + misses

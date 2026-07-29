@@ -9,23 +9,21 @@ class ErrorGroupResponse(pydantic.BaseModel):
     project_id: int = pydantic.Field(description="Project ID")
     fingerprint: str = pydantic.Field(description="Error fingerprint (grouping key)")
     error_type: str = pydantic.Field(description="Error type (e.g., ValueError)")
-    error_message: typing.Optional[str] = pydantic.Field(default=None, description="Error message")
+    error_message: str | None = pydantic.Field(default=None, description="Error message")
     first_seen: datetime.datetime = pydantic.Field(description="First occurrence timestamp")
     last_seen: datetime.datetime = pydantic.Field(description="Most recent occurrence timestamp")
     occurrence_count: int = pydantic.Field(description="Total occurrence count")
     status: typing.Literal["unresolved", "resolved", "ignored", "muted"] = pydantic.Field(
         description="Workflow status"
     )
-    assigned_to: typing.Optional[int] = pydantic.Field(
+    assigned_to: int | None = pydantic.Field(
         default=None, description="Account ID assigned to this error group"
     )
-    sample_log_id: typing.Optional[int] = pydantic.Field(
-        default=None, description="Sample log entry ID"
-    )
-    resolved_at: typing.Optional[datetime.datetime] = pydantic.Field(
+    sample_log_id: int | None = pydantic.Field(default=None, description="Sample log entry ID")
+    resolved_at: datetime.datetime | None = pydantic.Field(
         default=None, description="When this group was last resolved"
     )
-    resolved_in_release: typing.Optional[str] = pydantic.Field(
+    resolved_in_release: str | None = pydantic.Field(
         default=None, description="Release the fix was resolved in"
     )
 
@@ -44,12 +42,8 @@ class ErrorOccurrenceBucket(pydantic.BaseModel):
 
 class ErrorGroupDetailResponse(pydantic.BaseModel):
     group: ErrorGroupResponse = pydantic.Field(description="Error group")
-    sample_stack_trace: typing.Optional[str] = pydantic.Field(
-        default=None, description="Sample stack trace"
-    )
-    sample_log: typing.Optional[dict] = pydantic.Field(
-        default=None, description="Full sample log entry"
-    )
+    sample_stack_trace: str | None = pydantic.Field(default=None, description="Sample stack trace")
+    sample_log: dict | None = pydantic.Field(default=None, description="Full sample log entry")
     occurrence_sparkline: list[ErrorOccurrenceBucket] = pydantic.Field(
         default_factory=list,
         description="Hourly occurrence counts over the last 24 hours",
@@ -60,7 +54,7 @@ class UpdateErrorGroupStatusRequest(pydantic.BaseModel):
     status: typing.Literal["unresolved", "resolved", "ignored", "muted"] = pydantic.Field(
         description="New workflow status"
     )
-    resolved_in_release: typing.Optional[str] = pydantic.Field(
+    resolved_in_release: str | None = pydantic.Field(
         default=None,
         description="Release the fix shipped in (only applied when status is 'resolved')",
         max_length=100,
@@ -68,6 +62,6 @@ class UpdateErrorGroupStatusRequest(pydantic.BaseModel):
 
 
 class AssignErrorGroupRequest(pydantic.BaseModel):
-    assigned_to: typing.Optional[int] = pydantic.Field(
+    assigned_to: int | None = pydantic.Field(
         default=None, description="Account ID to assign this error group to, or null to unassign"
     )

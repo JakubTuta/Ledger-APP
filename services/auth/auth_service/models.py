@@ -12,10 +12,10 @@ from sqlalchemy import (
     Index,
     Integer,
     SmallInteger,
+    String,
     Text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
-from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 

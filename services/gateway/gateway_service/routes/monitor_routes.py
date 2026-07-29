@@ -117,7 +117,7 @@ async def create_monitor(
             status_code=fastapi.status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required",
         )
-    is_member, _ = await dependencies._get_project_role(request, payload.project_id)
+    is_member, _ = await dependencies.get_project_role(request, payload.project_id)
     if not is_member:
         raise fastapi.HTTPException(
             status_code=fastapi.status.HTTP_403_FORBIDDEN,

@@ -21,6 +21,22 @@ _HEX32_RE = re.compile(r"^[0-9a-f]{32}$")
 _HEX16_RE = re.compile(r"^[0-9a-f]{16}$")
 
 
+def _build_error_notification(enriched_log) -> notifications.ErrorNotification:
+    log = enriched_log.log_entry
+    return notifications.ErrorNotification(
+        project_id=enriched_log.project_id,
+        level=log.level,
+        log_type=log.log_type,
+        message=log.message[:500] if log.message else "",
+        error_type=log.error_type,
+        timestamp=log.timestamp,
+        error_fingerprint=enriched_log.error_fingerprint,
+        attributes=log.attributes or {},
+        sdk_version=log.sdk_version,
+        platform=log.platform,
+    )
+
+
 def _compute_tags_hash(tags: dict) -> str:
     # Canonicalize (sorted keys, no whitespace) before hashing so the same tag
     # map always yields the same fixed-width key, regardless of insertion
@@ -57,18 +73,7 @@ class IngestionServicer(ingestion_pb2_grpc.IngestionServiceServicer):
                     config.settings.NOTIFICATIONS_PUBLISH_ERRORS,
                     config.settings.NOTIFICATIONS_PUBLISH_CRITICAL,
                 ):
-                    notification = notifications.ErrorNotification(
-                        project_id=enriched_log.project_id,
-                        level=log.level,
-                        log_type=log.log_type,
-                        message=log.message[:500] if log.message else "",
-                        error_type=log.error_type,
-                        timestamp=log.timestamp,
-                        error_fingerprint=enriched_log.error_fingerprint,
-                        attributes=log.attributes or {},
-                        sdk_version=log.sdk_version,
-                        platform=log.platform,
-                    )
+                    notification = _build_error_notification(enriched_log)
                     await self.notification_publisher.publish_error_notification(
                         enriched_log.project_id, notification
                     )
@@ -145,18 +150,7 @@ class IngestionServicer(ingestion_pb2_grpc.IngestionServiceServicer):
                             config.settings.NOTIFICATIONS_PUBLISH_ERRORS,
                             config.settings.NOTIFICATIONS_PUBLISH_CRITICAL,
                         ):
-                            notification = notifications.ErrorNotification(
-                                project_id=enriched_log.project_id,
-                                level=log.level,
-                                log_type=log.log_type,
-                                message=log.message[:500] if log.message else "",
-                                error_type=log.error_type,
-                                timestamp=log.timestamp,
-                                error_fingerprint=enriched_log.error_fingerprint,
-                                attributes=log.attributes or {},
-                                sdk_version=log.sdk_version,
-                                platform=log.platform,
-                            )
+                            notification = _build_error_notification(enriched_log)
                             notification_tasks.append(
                                 self.notification_publisher.publish_error_notification(
                                     enriched_log.project_id, notification

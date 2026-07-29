@@ -561,8 +561,6 @@ class AuthService:
         date: str,
     ) -> models.DailyUsage | None:
         """Get daily usage for a project on a specific date."""
-        from datetime import datetime
-
         date_obj = datetime.fromisoformat(date)
         start_of_day = date_obj.replace(hour=0, minute=0, second=0, microsecond=0)
         end_of_day = start_of_day.replace(hour=23, minute=59, second=59, microsecond=999999)
@@ -1063,34 +1061,3 @@ class AuthService:
         token_record.revoked = True
         await session.commit()
         return True
-
-    async def revoke_all_refresh_tokens(
-        self,
-        session: AsyncSession,
-        account_id: int,
-    ) -> int:
-        """
-        Revoke all refresh tokens for an account (logout from all devices).
-
-        Args:
-            session: Database session
-            account_id: Account ID
-
-        Returns:
-            Number of tokens revoked
-        """
-        result = await session.execute(
-            select(models.RefreshToken).where(
-                models.RefreshToken.account_id == account_id,
-                models.RefreshToken.revoked == False,
-            )
-        )
-        tokens = result.scalars().all()
-
-        count = 0
-        for token in tokens:
-            token.revoked = True
-            count += 1
-
-        await session.commit()
-        return count

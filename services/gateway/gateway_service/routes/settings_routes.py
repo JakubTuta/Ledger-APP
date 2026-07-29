@@ -6,6 +6,7 @@ import gateway_service.config as config
 import gateway_service.proto.auth_pb2 as auth_pb2
 import gateway_service.schemas as schemas
 import grpc
+from gateway_service import dependencies
 
 router = fastapi.APIRouter(tags=["Settings"])
 logger = logging.getLogger(__name__)
@@ -137,13 +138,6 @@ async def get_settings(request: fastapi.Request) -> schemas.SettingsResponse:
 
         usage_by_signal = await request.app.state.redis_client.get_daily_usage_by_signal(project_id)
 
-        tomorrow = datetime.datetime.now(datetime.timezone.utc).replace(
-            hour=0, minute=0, second=0, microsecond=0
-        ) + datetime.timedelta(days=1)
-
-        def _signal_quota(quota: int, usage: int) -> schemas.SignalQuota:
-            return schemas.SignalQuota(quota=quota, usage=usage, remaining=max(0, quota - usage))
-
         return schemas.SettingsResponse(
             project_id=project_id,
             project_name=project_response.name,
@@ -154,12 +148,16 @@ async def get_settings(request: fastapi.Request) -> schemas.SettingsResponse:
                 requests_per_hour=request.state.rate_limits["per_hour"],
             ),
             quotas=schemas.Quotas(
-                logs=_signal_quota(project_response.logs_daily_quota, usage_by_signal["logs"]),
-                spans=_signal_quota(project_response.spans_daily_quota, usage_by_signal["spans"]),
-                metrics=_signal_quota(
+                logs=dependencies.signal_quota(
+                    project_response.logs_daily_quota, usage_by_signal["logs"]
+                ),
+                spans=dependencies.signal_quota(
+                    project_response.spans_daily_quota, usage_by_signal["spans"]
+                ),
+                metrics=dependencies.signal_quota(
                     project_response.metrics_daily_quota, usage_by_signal["metrics"]
                 ),
-                quota_reset_at=tomorrow.isoformat(),
+                quota_reset_at=dependencies.next_daily_quota_reset().isoformat(),
             ),
             constraints=schemas.Constraints(
                 max_batch_size=1000,

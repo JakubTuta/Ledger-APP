@@ -1092,52 +1092,38 @@ async def _post_webhook(url: str, secret: str, payload: dict) -> tuple[bool, str
         return False, str(e)
 
 
-async def _post_slack(url: str, message: str) -> tuple[bool, str | None]:
+async def _post_chat_webhook(url: str, json_body: dict, label: str) -> tuple[bool, str | None]:
+    """Shared delivery path for chat-style webhooks (Slack/Discord): validate
+    the user-supplied URL against net_guard, then POST a fixed JSON body."""
     settings = config.get_settings()
 
     try:
         await net_guard.validate_webhook_url(url, allow_http=settings.ALERT_WEBHOOK_ALLOW_HTTP)
     except net_guard.UnsafeWebhookURLError as e:
-        logger.warning(f"Blocked unsafe Slack webhook URL {url}: {e}")
+        logger.warning(f"Blocked unsafe {label} webhook URL {url}: {e}")
         return False, str(e)
 
     try:
         async with aiohttp.ClientSession() as http:
             response = await http.post(
                 url,
-                json={"text": message},
+                json=json_body,
                 timeout=aiohttp.ClientTimeout(total=10),
             )
             if response.status >= 400:
-                return False, f"Slack webhook returned HTTP {response.status}"
+                return False, f"{label} webhook returned HTTP {response.status}"
             return True, None
     except Exception as e:
-        logger.warning(f"Slack delivery failed to {url}: {e}")
+        logger.warning(f"{label} delivery failed to {url}: {e}")
         return False, str(e)
+
+
+async def _post_slack(url: str, message: str) -> tuple[bool, str | None]:
+    return await _post_chat_webhook(url, {"text": message}, "Slack")
 
 
 async def _post_discord(url: str, message: str) -> tuple[bool, str | None]:
-    settings = config.get_settings()
-
-    try:
-        await net_guard.validate_webhook_url(url, allow_http=settings.ALERT_WEBHOOK_ALLOW_HTTP)
-    except net_guard.UnsafeWebhookURLError as e:
-        logger.warning(f"Blocked unsafe Discord webhook URL {url}: {e}")
-        return False, str(e)
-
-    try:
-        async with aiohttp.ClientSession() as http:
-            response = await http.post(
-                url,
-                json={"content": message},
-                timeout=aiohttp.ClientTimeout(total=10),
-            )
-            if response.status >= 400:
-                return False, f"Discord webhook returned HTTP {response.status}"
-            return True, None
-    except Exception as e:
-        logger.warning(f"Discord delivery failed to {url}: {e}")
-        return False, str(e)
+    return await _post_chat_webhook(url, {"content": message}, "Discord")
 
 
 _PAGERDUTY_EVENTS_URL = "https://events.pagerduty.com/v2/enqueue"

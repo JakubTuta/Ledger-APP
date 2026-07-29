@@ -41,9 +41,9 @@ def _proto_to_error_group(group: "query_pb2.ErrorGroupData") -> schemas.ErrorGro
 async def list_error_groups(
     request: fastapi.Request,
     project_id: int = fastapi.Depends(dependencies.require_project_member),
-    status: typing.Optional[
-        typing.Literal["unresolved", "resolved", "ignored", "muted"]
-    ] = fastapi.Query(None, description="Filter by workflow status"),
+    status: typing.Literal["unresolved", "resolved", "ignored", "muted"] | None = fastapi.Query(
+        None, description="Filter by workflow status"
+    ),
     limit: int = fastapi.Query(100, ge=1, le=1000, description="Max number of groups to return"),
     offset: int = fastapi.Query(0, ge=0, description="Number of groups to skip for pagination"),
 ) -> schemas.ErrorGroupListResponse:

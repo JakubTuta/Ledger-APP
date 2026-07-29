@@ -1,5 +1,4 @@
 import logging
-import typing
 
 from fastapi import HTTPException, status
 from starlette.requests import Request
@@ -189,7 +188,7 @@ class RateLimitMiddleware:
                 detail=f"Daily quota exceeded: {current_usage}/{logs_daily_quota}",
             )
 
-    def get_stats(self) -> typing.Dict:
+    def get_stats(self) -> dict:
         rate_limited_percentage = 0.0
         if self._total_requests > 0:
             rate_limited_percentage = (self._rate_limited_requests / self._total_requests) * 100

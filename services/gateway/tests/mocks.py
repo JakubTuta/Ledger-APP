@@ -1,5 +1,3 @@
-import typing
-
 import gateway_service.proto.auth_pb2 as auth_pb2
 import gateway_service.proto.ingestion_pb2 as ingestion_pb2
 import gateway_service.proto.query_pb2 as query_pb2
@@ -10,10 +8,10 @@ class MockRedisClient:
         self.data = {}
         self.client = self
 
-    async def get(self, key: str) -> typing.Optional[str]:
+    async def get(self, key: str) -> str | None:
         return self.data.get(key)
 
-    async def set(self, key: str, value: str, ex: typing.Optional[int] = None) -> None:
+    async def set(self, key: str, value: str, ex: int | None = None) -> None:
         self.data[key] = value
 
     async def setex(self, key: str, seconds: int, value: str) -> None:
@@ -41,23 +39,19 @@ class MockRedisClient:
     async def ping(self) -> bool:
         return True
 
-    async def get_cached_api_key(self, api_key: str) -> typing.Optional[dict]:
+    async def get_cached_api_key(self, api_key: str) -> dict | None:
         key = f"api_key:cache:{api_key}"
         return self.data.get(key)
 
-    async def set_cached_api_key(
-        self, api_key: str, data: dict, ttl: typing.Optional[int] = None
-    ) -> None:
+    async def set_cached_api_key(self, api_key: str, data: dict, ttl: int | None = None) -> None:
         key = f"api_key:cache:{api_key}"
         self.data[key] = data
 
-    async def get_stale_cache(self, api_key: str) -> typing.Optional[dict]:
+    async def get_stale_cache(self, api_key: str) -> dict | None:
         key = f"api_key:stale:{api_key}"
         return self.data.get(key)
 
-    async def get_cached_project_access(
-        self, account_id: int, project_id: int
-    ) -> typing.Optional[bool]:
+    async def get_cached_project_access(self, account_id: int, project_id: int) -> bool | None:
         key = f"project_access:{account_id}:{project_id}"
         return self.data.get(key)
 

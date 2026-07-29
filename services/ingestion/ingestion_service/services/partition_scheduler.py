@@ -84,9 +84,6 @@ class PartitionScheduler:
         self.scheduler.shutdown(wait=True)
         self.running = False
 
-    def get_jobs(self) -> list:
-        return self.scheduler.get_jobs()
-
 
 _scheduler_instance = None
 

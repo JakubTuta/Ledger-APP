@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import typing
 
 import fastapi
 import grpc
@@ -117,7 +116,7 @@ class AuthMiddleware:
 
         return False
 
-    def _extract_auth_token(self, request: fastapi.Request) -> typing.Tuple[str, str]:
+    def _extract_auth_token(self, request: fastapi.Request) -> tuple[str, str]:
         """
         Extract authentication token and type from request.
 
@@ -154,7 +153,7 @@ class AuthMiddleware:
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-    async def _validate_session_token(self, token: str) -> typing.Dict:
+    async def _validate_session_token(self, token: str) -> dict:
         """
         Validate JWT access token from login.
 
@@ -202,7 +201,7 @@ class AuthMiddleware:
 
     _NEGATIVE_CACHE_TTL = 30
 
-    async def _validate_api_key(self, api_key: str) -> typing.Dict:
+    async def _validate_api_key(self, api_key: str) -> dict:
         cached_data = await self.redis.get_cached_api_key(api_key)
 
         if cached_data:
@@ -246,7 +245,7 @@ class AuthMiddleware:
 
         return auth_data
 
-    async def _fetch_from_auth_service(self, api_key: str) -> typing.Dict:
+    async def _fetch_from_auth_service(self, api_key: str) -> dict:
         try:
             stub = self.grpc_pool.get_stub("auth", auth_pb2_grpc.AuthServiceStub)
 
@@ -318,7 +317,7 @@ class AuthMiddleware:
             return 0.0
         return (self._cache_hits / total) * 100
 
-    def get_stats(self) -> typing.Dict:
+    def get_stats(self) -> dict:
         total_requests = self._cache_hits + self._cache_misses
 
         return {
@@ -331,7 +330,7 @@ class AuthMiddleware:
         }
 
 
-def get_auth_data(request: fastapi.Request) -> typing.Dict:
+def get_auth_data(request: fastapi.Request) -> dict:
     """
     Extract authentication data from request state.
 

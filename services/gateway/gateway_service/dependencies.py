@@ -1,8 +1,20 @@
-import typing
+import datetime
 
 import fastapi
+import gateway_service.schemas as schemas
 from gateway_service.proto import auth_pb2, auth_pb2_grpc
 from gateway_service.services import grpc_pool, redis_client
+
+
+def signal_quota(quota: int, usage: int) -> schemas.SignalQuota:
+    """Build a SignalQuota, clamping remaining at 0 if usage has overshot quota."""
+    return schemas.SignalQuota(quota=quota, usage=usage, remaining=max(0, quota - usage))
+
+
+def next_daily_quota_reset() -> datetime.datetime:
+    """Midnight UTC tomorrow - when the per-project daily ingestion quota counters reset."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    return now.replace(hour=0, minute=0, second=0, microsecond=0) + datetime.timedelta(days=1)
 
 
 def get_grpc_pool(request: fastapi.Request) -> grpc_pool.GRPCPoolManager:
@@ -83,7 +95,7 @@ def get_current_account_id(request: fastapi.Request) -> int:
     return request.state.account_id
 
 
-def get_auth_context(request: fastapi.Request) -> typing.Dict:
+def get_auth_context(request: fastapi.Request) -> dict:
     """
     Get full authentication context.
 
@@ -116,10 +128,10 @@ def get_auth_context(request: fastapi.Request) -> typing.Dict:
     }
 
 
-async def _get_project_role(
+async def get_project_role(
     request: fastapi.Request,
     project_id: int,
-) -> typing.Tuple[bool, str]:
+) -> tuple[bool, str]:
     """Return (is_member, role) for the authenticated account, with Redis caching."""
     account_id: int = request.state.account_id
     redis_client_inst: redis_client.RedisClient = request.app.state.redis_client
@@ -155,7 +167,7 @@ async def require_project_member(
             status_code=fastapi.status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required",
         )
-    is_member, _ = await _get_project_role(request, project_id)
+    is_member, _ = await get_project_role(request, project_id)
     if not is_member:
         raise fastapi.HTTPException(
             status_code=fastapi.status.HTTP_403_FORBIDDEN,
@@ -274,7 +286,7 @@ class SortParams:
         self,
         sort_by: str = "created_at",
         sort_order: str = "desc",
-        allowed_fields: typing.Optional[list[str]] = None,
+        allowed_fields: list[str] | None = None,
     ):
         if sort_order.lower() not in ["asc", "desc"]:
             raise fastapi.HTTPException(
@@ -296,9 +308,7 @@ class SortParams:
         return f"{self.sort_by} {self.sort_order}"
 
 
-async def check_endpoint_rate_limit(
-    request: fastapi.Request, endpoint_limit: typing.Optional[int] = None
-):
+async def check_endpoint_rate_limit(request: fastapi.Request, endpoint_limit: int | None = None):
     """
     Check rate limit for specific endpoint.
 

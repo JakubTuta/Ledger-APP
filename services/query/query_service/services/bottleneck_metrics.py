@@ -6,41 +6,7 @@ import sqlalchemy as sa
 import query_service.database as database
 import query_service.models as models
 import query_service.schemas as schemas
-
-
-def _parse_period(
-    period: str | None,
-    period_from: datetime.date | None,
-    period_to: datetime.date | None,
-) -> tuple[datetime.date, datetime.date]:
-    today = datetime.date.today()
-
-    if period:
-        if period == "today":
-            return today, today
-        elif period == "last7days":
-            return today - datetime.timedelta(days=6), today
-        elif period == "last30days":
-            return today - datetime.timedelta(days=29), today
-        elif period == "currentWeek":
-            start = today - datetime.timedelta(days=today.weekday())
-            return start, today
-        elif period == "currentMonth":
-            start = today.replace(day=1)
-            return start, today
-        elif period == "currentYear":
-            start = today.replace(month=1, day=1)
-            return start, today
-        else:
-            raise ValueError(f"Invalid period: {period}")
-    elif period_from and period_to:
-        if period_from > period_to:
-            raise ValueError("period_from must be before or equal to period_to")
-        if period_from > today or period_to > today:
-            raise ValueError("Dates cannot be in the future")
-        return period_from, period_to
-    else:
-        raise ValueError("Either period or both period_from and period_to must be provided")
+from query_service.services.aggregated_metrics import _parse_period
 
 
 async def get_bottleneck_list(

@@ -1,6 +1,5 @@
 import gzip
 import logging
-import typing
 
 from starlette.types import ASGIApp, Receive, Scope, Send
 
@@ -23,7 +22,7 @@ class GzipRequestMiddleware:
             await self.app(scope, receive, send)
             return
 
-        chunks: typing.List[bytes] = []
+        chunks: list[bytes] = []
         while True:
             message = await receive()
             chunks.append(message.get("body", b""))

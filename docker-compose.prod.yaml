@@ -182,8 +182,6 @@ services:
         max-size: "5m"
         max-file: "2"
 
-  # Owns the schema history of every database. Runs to completion, then the
-  # services that touch a database start behind it.
   ledger-migrations:
     image: container-registry.jtuta.cloud/ledger/migrations:latest
     container_name: ledger-migrations

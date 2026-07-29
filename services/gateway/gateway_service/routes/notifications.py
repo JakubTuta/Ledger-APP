@@ -2,20 +2,18 @@ import asyncio
 import json
 import logging
 from datetime import datetime
-from typing import AsyncGenerator, Set
+from typing import AsyncGenerator
 
 import fastapi
 import grpc
 import redis.asyncio as redis
 from gateway_service import config
 from gateway_service.proto import auth_pb2, auth_pb2_grpc
+from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
 router = fastapi.APIRouter(tags=["Notifications"])
 logger = logging.getLogger(__name__)
-
-
-from pydantic import BaseModel, Field
 
 
 class ProjectNotificationSettings(BaseModel):
@@ -43,7 +41,7 @@ class NotificationPreferencesResponse(BaseModel):
 
 
 class NotificationStream:
-    def __init__(self, redis_url: str, project_ids: Set[int], preferences: dict):
+    def __init__(self, redis_url: str, project_ids: set[int], preferences: dict):
         self.redis_url = redis_url
         self.project_ids = project_ids
         self.preferences = preferences
@@ -121,7 +119,7 @@ class NotificationStream:
             }
 
 
-async def get_user_projects(grpc_pool, account_id: int) -> Set[int]:
+async def get_user_projects(grpc_pool, account_id: int) -> set[int]:
     try:
         channel = grpc_pool.get_channel("auth")
         stub = auth_pb2_grpc.AuthServiceStub(channel)

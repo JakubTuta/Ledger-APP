@@ -1,7 +1,6 @@
 import email.message
 import logging
 import secrets
-import typing
 
 import aiosmtplib
 import fastapi
@@ -46,9 +45,7 @@ def _clear_refresh_cookie(response: fastapi.Response) -> None:
     response.delete_cookie(key=REFRESH_COOKIE_NAME, path=REFRESH_COOKIE_PATH)
 
 
-def _get_refresh_token_from_request(
-    request: fastapi.Request, body_token: typing.Optional[str]
-) -> typing.Optional[str]:
+def _get_refresh_token_from_request(request: fastapi.Request, body_token: str | None) -> str | None:
     """Prefer an explicit body token (back-compat); fall back to the httpOnly cookie."""
     if body_token:
         return body_token
@@ -387,7 +384,7 @@ async def login_account(
 async def refresh_token(
     request: fastapi.Request,
     response: fastapi.Response,
-    body: typing.Optional[schemas.RefreshTokenRequest] = fastapi.Body(default=None),
+    body: schemas.RefreshTokenRequest | None = fastapi.Body(default=None),
     grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
 ):
     """
@@ -1379,5 +1376,4 @@ async def get_auth_stats(request: fastapi.Request):
         circuit_breakers = request.state.circuit_breakers
         stats["circuit_breakers"] = circuit_breakers.get_all_stats()
 
-    return stats
     return stats

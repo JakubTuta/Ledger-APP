@@ -101,15 +101,6 @@ async def ensure_partition_for_date(
     return True
 
 
-async def ensure_partition_for_timestamp(
-    session: AsyncSession,
-    table_name: str,
-    timestamp: datetime.datetime,
-) -> bool:
-    date = timestamp.date() if isinstance(timestamp, datetime.datetime) else timestamp
-    return await ensure_partition_for_date(session, table_name, date)
-
-
 async def ensure_partitions_range(
     session: AsyncSession,
     table_name: str,
@@ -170,8 +161,3 @@ async def ensure_all_partitions(
         "spans": spans_created,
         "metric_points": metric_points_created,
     }
-
-
-def clear_partition_cache() -> None:
-    global _partition_cache
-    _partition_cache.clear()

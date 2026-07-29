@@ -2,7 +2,6 @@ import asyncio
 import contextlib
 import json
 import logging
-import typing
 
 import grpc
 from gateway_service import config
@@ -16,7 +15,7 @@ class GRPCChannelPool:
         self.service_name = service_name
         self.address = address
         self.pool_size = pool_size
-        self.channels: typing.List[grpc.aio.Channel] = []
+        self.channels: list[grpc.aio.Channel] = []
         self.current_index = 0
         self._lock = asyncio.Lock()
 
@@ -39,7 +38,7 @@ class GRPCChannelPool:
             }
         )
 
-    def _channel_options(self) -> typing.List[typing.Tuple]:
+    def _channel_options(self) -> list[tuple]:
         return [
             ("grpc.max_receive_message_length", 100 * 1024 * 1024),
             ("grpc.max_send_message_length", 100 * 1024 * 1024),
@@ -105,12 +104,10 @@ class GRPCChannelPool:
 
 class GRPCPoolManager:
     def __init__(self):
-        self.pools: typing.Dict[str, GRPCChannelPool] = {}
+        self.pools: dict[str, GRPCChannelPool] = {}
         self._lock = asyncio.Lock()
 
-    async def add_service(
-        self, service_name: str, address: str, pool_size: typing.Optional[int] = None
-    ):
+    async def add_service(self, service_name: str, address: str, pool_size: int | None = None):
         if pool_size is None:
             pool_size = config.settings.GRPC_POOL_SIZE
 
@@ -180,7 +177,7 @@ class GRPCPoolManager:
 
         self.pools.clear()
 
-    def get_stats(self) -> typing.Dict:
+    def get_stats(self) -> dict:
         stats = {}
         for service_name, pool in self.pools.items():
             stats[service_name] = {

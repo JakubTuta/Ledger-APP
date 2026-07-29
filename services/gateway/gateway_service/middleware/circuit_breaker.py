@@ -2,7 +2,6 @@ import asyncio
 import enum
 import logging
 import time
-import typing
 
 import fastapi
 from gateway_service import config
@@ -34,7 +33,7 @@ class CircuitBreaker:
 
         self.state = CircuitState.CLOSED
         self.failure_count = 0
-        self.last_failure_time: typing.Optional[float] = None
+        self.last_failure_time: float | None = None
         self.half_open_calls = 0
 
         self._lock = asyncio.Lock()
@@ -147,7 +146,7 @@ class CircuitBreaker:
                     )
                     self.state = CircuitState.OPEN
 
-    def get_stats(self) -> typing.Dict:
+    def get_stats(self) -> dict:
         failure_rate = 0.0
         if self._total_calls > 0:
             failure_rate = (self._failed_calls / self._total_calls) * 100
@@ -179,7 +178,7 @@ class CircuitBreakerMiddleware:
 
     def __init__(self, app: ASGIApp):
         self.app = app
-        self.breakers: typing.Dict[str, CircuitBreaker] = {}
+        self.breakers: dict[str, CircuitBreaker] = {}
 
     def _init_breaker(self, service_name: str):
         self.breakers[service_name] = CircuitBreaker(
@@ -217,7 +216,7 @@ class CircuitBreakerMiddleware:
             logger.error(f"Circuit breaker middleware error: {e}", exc_info=True)
             raise
 
-    def get_all_stats(self) -> typing.Dict[str, typing.Dict]:
+    def get_all_stats(self) -> dict[str, dict]:
         return {name: breaker.get_stats() for name, breaker in self.breakers.items()}
 
 

@@ -1,8 +1,8 @@
 import json
 import logging
 import time
-from typing import Optional
 from datetime import datetime
+
 import redis.asyncio as redis
 from pydantic import BaseModel
 
@@ -10,17 +10,17 @@ logger = logging.getLogger(__name__)
 
 
 class ErrorNotification(BaseModel):
-    log_id: Optional[str] = None
+    log_id: str | None = None
     project_id: int
     level: str
     log_type: str
     message: str
-    error_type: Optional[str] = None
+    error_type: str | None = None
     timestamp: datetime
-    error_fingerprint: Optional[str] = None
+    error_fingerprint: str | None = None
     attributes: dict = {}
-    sdk_version: Optional[str] = None
-    platform: Optional[str] = None
+    sdk_version: str | None = None
+    platform: str | None = None
 
 
 class NotificationPublisher:

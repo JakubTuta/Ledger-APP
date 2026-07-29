@@ -12,7 +12,6 @@ import models
 async def get_queue_depth(
     client: httpx.AsyncClient,
     cfg: benchmark_config.BenchmarkConfig,
-    api_key: str,
 ) -> int:
     url = f"{cfg.rabbitmq_management_url}/api/queues/%2F/{cfg.rabbitmq_queue}"
     r = await client.get(
@@ -28,7 +27,6 @@ async def get_queue_depth(
 async def wait_for_drain(
     client: httpx.AsyncClient,
     cfg: benchmark_config.BenchmarkConfig,
-    api_key: str,
     timeout: float,
 ) -> models.DrainResult:
     depth_series: list[int] = []
@@ -47,7 +45,7 @@ async def wait_for_drain(
             )
 
         try:
-            depth = await get_queue_depth(client, cfg, api_key)
+            depth = await get_queue_depth(client, cfg)
         except Exception:
             await asyncio.sleep(1.0)
             continue

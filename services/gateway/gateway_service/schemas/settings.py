@@ -1,5 +1,3 @@
-import typing
-
 import pydantic
 
 from gateway_service.schemas.projects import SignalQuota
@@ -103,15 +101,15 @@ class Constraints(pydantic.BaseModel):
         ...,
         description="Maximum length for error_type field (characters)",
     )
-    supported_log_levels: typing.List[str] = pydantic.Field(
+    supported_log_levels: list[str] = pydantic.Field(
         ...,
         description="Valid values for the 'level' field",
     )
-    supported_log_types: typing.List[str] = pydantic.Field(
+    supported_log_types: list[str] = pydantic.Field(
         ...,
         description="Valid values for the 'log_type' field",
     )
-    supported_importance_levels: typing.List[str] = pydantic.Field(
+    supported_importance_levels: list[str] = pydantic.Field(
         ...,
         description="Valid values for the 'importance' field",
     )

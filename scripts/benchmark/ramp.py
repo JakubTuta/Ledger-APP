@@ -25,14 +25,14 @@ async def run_ramp(
         timeout=httpx.Timeout(30.0),
         limits=monitor_limits,
     ) as monitor_client:
-        initial_depth = await drain_module.get_queue_depth(monitor_client, cfg, api_key)
+        initial_depth = await drain_module.get_queue_depth(monitor_client, cfg)
         if initial_depth > 100:
             print(
                 f"[ramp] Initial queue depth {initial_depth} > 100 — waiting for drain...",
                 flush=True,
             )
             pre_drain = await drain_module.wait_for_drain(
-                monitor_client, cfg, api_key, timeout=float(cfg.ramp_drain_timeout)
+                monitor_client, cfg, timeout=float(cfg.ramp_drain_timeout)
             )
             if not pre_drain.drained:
                 print(
@@ -65,7 +65,6 @@ async def run_ramp(
             drain = await drain_module.wait_for_drain(
                 monitor_client,
                 cfg,
-                api_key,
                 timeout=float(cfg.ramp_drain_timeout),
             )
 
@@ -138,7 +137,6 @@ async def run_ramp(
                 await drain_module.wait_for_drain(
                     monitor_client,
                     cfg,
-                    api_key,
                     timeout=float(cfg.ramp_drain_timeout),
                 )
                 print(

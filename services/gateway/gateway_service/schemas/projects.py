@@ -1,5 +1,3 @@
-import typing
-
 import pydantic
 
 
@@ -93,7 +91,7 @@ class ProjectResponse(pydantic.BaseModel):
 class ProjectListResponse(pydantic.BaseModel):
     """Response containing a list of projects."""
 
-    projects: typing.List[ProjectResponse] = pydantic.Field(..., description="List of projects")
+    projects: list[ProjectResponse] = pydantic.Field(..., description="List of projects")
     total: int = pydantic.Field(..., description="Total number of projects")
 
     model_config = pydantic.ConfigDict(
@@ -165,16 +163,16 @@ class ProjectQuotaResponse(pydantic.BaseModel):
 class UpdateProjectRequest(pydantic.BaseModel):
     """Update a project's retention/quota settings. Project owner only."""
 
-    retention_days: typing.Optional[int] = pydantic.Field(
+    retention_days: int | None = pydantic.Field(
         None, ge=1, le=365, description="Log retention period in days (1-365)"
     )
-    logs_daily_quota: typing.Optional[int] = pydantic.Field(
+    logs_daily_quota: int | None = pydantic.Field(
         None, ge=1, description="Maximum logs allowed per day"
     )
-    spans_daily_quota: typing.Optional[int] = pydantic.Field(
+    spans_daily_quota: int | None = pydantic.Field(
         None, ge=1, description="Maximum spans allowed per day"
     )
-    metrics_daily_quota: typing.Optional[int] = pydantic.Field(
+    metrics_daily_quota: int | None = pydantic.Field(
         None, ge=1, description="Maximum metric points allowed per day"
     )
 
@@ -208,7 +206,7 @@ class UsageStatsResponse(pydantic.BaseModel):
     """Per-day usage history for a project, one entry per day with data."""
 
     project_id: int = pydantic.Field(..., description="Project identifier")
-    usage: typing.List[UsageStatsDay] = pydantic.Field(
+    usage: list[UsageStatsDay] = pydantic.Field(
         ..., description="Per-day usage entries (missing days had no ingestion)"
     )
 

@@ -1,5 +1,4 @@
 import logging
-import typing
 
 import fastapi
 import gateway_service.proto.query_pb2 as query_pb2
@@ -22,7 +21,7 @@ VALID_PERIODS = {"today", "last7days", "last30days", "currentWeek", "currentMont
 )
 async def get_health_summary(
     request: fastapi.Request,
-    project_ids: typing.List[str] = fastapi.Query(..., description="One or more project IDs"),
+    project_ids: list[str] = fastapi.Query(..., description="One or more project IDs"),
     period: str = fastapi.Query(
         "today",
         description="Time range preset: today | last7days | last30days | currentWeek | currentMonth | currentYear",

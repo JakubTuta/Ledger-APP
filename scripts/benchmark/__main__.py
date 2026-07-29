@@ -186,7 +186,7 @@ async def orchestrate(cfg: benchmark_config.BenchmarkConfig) -> models.RunReport
             limits=drain_client_limits,
         ) as monitor_client:
             print("[bench] Draining queue ...", flush=True)
-            drain = await drain_module.wait_for_drain(monitor_client, cfg, api_key, timeout=120.0)
+            drain = await drain_module.wait_for_drain(monitor_client, cfg, timeout=120.0)
 
             db_delta: int | None = None
             if not cfg.no_db_verify:

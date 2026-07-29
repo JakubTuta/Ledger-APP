@@ -53,7 +53,7 @@ def create_refresh_token() -> tuple[str, str]:
     return raw_token, token_hash
 
 
-def verify_access_token(token: str) -> typing.Dict[str, typing.Any]:
+def verify_access_token(token: str) -> dict[str, typing.Any]:
     """
     Verify and decode JWT access token.
 

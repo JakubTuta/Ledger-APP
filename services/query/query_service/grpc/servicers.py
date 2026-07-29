@@ -106,38 +106,7 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
                 project_id=request.project_id, filters=filters, pagination=pagination
             )
 
-            log_entries = []
-            for log in result.logs:
-                entry = query_pb2.LogEntry(
-                    id=log.id,
-                    project_id=log.project_id,
-                    timestamp=log.timestamp.isoformat(),
-                    ingested_at=log.ingested_at.isoformat(),
-                    level=log.level,
-                    log_type=log.log_type,
-                    importance=log.importance,
-                    environment=log.environment or "",
-                    release=log.release or "",
-                    message=log.message or "",
-                    error_type=log.error_type or "",
-                    error_message=log.error_message or "",
-                    stack_trace=log.stack_trace or "",
-                    attributes=json.dumps(log.attributes) if log.attributes else "",
-                    sdk_version=log.sdk_version or "",
-                    platform=log.platform or "",
-                    platform_version=log.platform_version or "",
-                    processing_time_ms=log.processing_time_ms or 0,
-                    error_fingerprint=log.error_fingerprint or "",
-                )
-                if log.method is not None:
-                    entry.method = log.method
-                if log.path is not None:
-                    entry.path = log.path
-                if log.status_code is not None:
-                    entry.status_code = log.status_code
-                if log.duration_ms is not None:
-                    entry.duration_ms = log.duration_ms
-                log_entries.append(entry)
+            log_entries = [_log_to_proto(log) for log in result.logs]
 
             response = query_pb2.QueryLogsResponse(
                 logs=log_entries, total=result.total or 0, has_more=result.has_more
@@ -213,38 +182,7 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
                 pagination=pagination,
             )
 
-            log_entries = []
-            for log in result.logs:
-                entry = query_pb2.LogEntry(
-                    id=log.id,
-                    project_id=log.project_id,
-                    timestamp=log.timestamp.isoformat(),
-                    ingested_at=log.ingested_at.isoformat(),
-                    level=log.level,
-                    log_type=log.log_type,
-                    importance=log.importance,
-                    environment=log.environment or "",
-                    release=log.release or "",
-                    message=log.message or "",
-                    error_type=log.error_type or "",
-                    error_message=log.error_message or "",
-                    stack_trace=log.stack_trace or "",
-                    attributes=json.dumps(log.attributes) if log.attributes else "",
-                    sdk_version=log.sdk_version or "",
-                    platform=log.platform or "",
-                    platform_version=log.platform_version or "",
-                    processing_time_ms=log.processing_time_ms or 0,
-                    error_fingerprint=log.error_fingerprint or "",
-                )
-                if log.method is not None:
-                    entry.method = log.method
-                if log.path is not None:
-                    entry.path = log.path
-                if log.status_code is not None:
-                    entry.status_code = log.status_code
-                if log.duration_ms is not None:
-                    entry.duration_ms = log.duration_ms
-                log_entries.append(entry)
+            log_entries = [_log_to_proto(log) for log in result.logs]
 
             return query_pb2.SearchLogsResponse(
                 logs=log_entries, total=result.total or 0, has_more=result.has_more
@@ -264,37 +202,7 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
             if not log:
                 return query_pb2.GetLogResponse(found=False)
 
-            log_entry = query_pb2.LogEntry(
-                id=log.id,
-                project_id=log.project_id,
-                timestamp=log.timestamp.isoformat(),
-                ingested_at=log.ingested_at.isoformat(),
-                level=log.level,
-                log_type=log.log_type,
-                importance=log.importance,
-                environment=log.environment or "",
-                release=log.release or "",
-                message=log.message or "",
-                error_type=log.error_type or "",
-                error_message=log.error_message or "",
-                stack_trace=log.stack_trace or "",
-                attributes=json.dumps(log.attributes) if log.attributes else "",
-                sdk_version=log.sdk_version or "",
-                platform=log.platform or "",
-                platform_version=log.platform_version or "",
-                processing_time_ms=log.processing_time_ms or 0,
-                error_fingerprint=log.error_fingerprint or "",
-            )
-            if log.method is not None:
-                log_entry.method = log.method
-            if log.path is not None:
-                log_entry.path = log.path
-            if log.status_code is not None:
-                log_entry.status_code = log.status_code
-            if log.duration_ms is not None:
-                log_entry.duration_ms = log.duration_ms
-
-            return query_pb2.GetLogResponse(log=log_entry, found=True)
+            return query_pb2.GetLogResponse(log=_log_to_proto(log), found=True)
 
         except Exception as e:
             await context.abort(grpc.StatusCode.INTERNAL, f"Get log failed: {str(e)}")
