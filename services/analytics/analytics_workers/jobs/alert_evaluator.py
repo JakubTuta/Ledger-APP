@@ -89,13 +89,26 @@ async def evaluate_alert_rules() -> None:
             rules = rules_result.fetchall()
 
         if rules:
-            for rule in rules:
-                try:
-                    async with database.get_logs_session() as logs_session:
-                        async with database.get_auth_session() as auth_session:
+            # One session pair for the whole pass, not one per rule: this job
+            # runs every minute, and a deployment with a few dozen rules was
+            # checking out and tearing down 2 pooled connections per rule per
+            # minute.
+            #
+            # Each rule still ends its own transaction, though. _fire()/_resolve()
+            # deliver to webhooks and SMTP inline, so leaving one transaction
+            # open across the whole pass would pin a snapshot (and hold back
+            # vacuum on logs) for as long as the slowest connector takes.
+            async with database.get_logs_session() as logs_session:
+                async with database.get_auth_session() as auth_session:
+                    for rule in rules:
+                        try:
                             await _evaluate_rule(rule, logs_session, auth_session)
-                except Exception as e:
-                    logger.error(f"Rule {rule[0]} evaluation failed: {e}", exc_info=True)
+                            await logs_session.commit()
+                            await auth_session.commit()
+                        except Exception as e:
+                            logger.error(f"Rule {rule[0]} evaluation failed: {e}", exc_info=True)
+                            await logs_session.rollback()
+                            await auth_session.rollback()
 
         elapsed = time.perf_counter() - start
         logger.info(f"Alert evaluation done in {elapsed:.2f}s for {len(rules)} rules")
@@ -435,51 +448,50 @@ async def _query_metric(
     latency_since = now - datetime.timedelta(minutes=_LATENCY_LOOKBACK_MINUTES)
 
     if metric in ("p95_latency", "p99_latency"):
-        column = "p95_ms" if metric == "p95_latency" else "p99_ms"
-        rollup_result = await session.execute(
+        # Worst per-endpoint hourly percentile inside the lookback window, read
+        # from the hourly rollup. This evaluator runs every minute for every
+        # enabled rule, so it must never touch raw logs. aggregated_metrics is
+        # keyed by (date, hour), so the lookback bound has to be expressed as
+        # both - filtering on `date` alone would widen a 60-minute window to
+        # every hour of the current day.
+        column = "p95_duration_ms" if metric == "p95_latency" else "p99_duration_ms"
+        result = await session.execute(
             sa.text(
                 f"""
                 SELECT MAX({column})
-                FROM endpoint_latency_1h
-                WHERE project_id = :pid AND bucket >= :since AND count > 0
-                """
-            ),
-            {"pid": project_id, "since": latency_since},
-        )
-        rollup_val = rollup_result.scalar()
-        if rollup_val is not None:
-            return float(rollup_val)
-
-        pct = 0.95 if metric == "p95_latency" else 0.99
-        result = await session.execute(
-            sa.text(
-                """
-                SELECT COALESCE(
-                    PERCENTILE_CONT(:pct) WITHIN GROUP (
-                        ORDER BY (attributes->'endpoint'->>'duration_ms')::float
-                    ), 0)
-                FROM logs
+                FROM aggregated_metrics
                 WHERE project_id = :pid
-                  AND timestamp >= :since
-                  AND log_type = 'endpoint'
-                  AND attributes->'endpoint'->>'duration_ms' IS NOT NULL
+                  AND metric_type = 'endpoint'
+                  AND date >= :since_date
+                  AND (date > :since_date OR hour >= :since_hour)
+                  AND log_count > 0
                 """
             ),
-            {"pid": project_id, "since": latency_since, "pct": pct},
+            {
+                "pid": project_id,
+                "since_date": latency_since.strftime("%Y%m%d"),
+                "since_hour": latency_since.hour,
+            },
         )
         val = result.scalar()
         return float(val) if val is not None else None
 
     if metric in ("error_rate_5xx", "error_rate_4xx"):
         low, high = (500, 599) if metric == "error_rate_5xx" else (400, 499)
+        # `status_code IS NOT NULL` is what the denominator already counted, so
+        # hoisting it into the WHERE clause is value-neutral - but it lets the
+        # planner use the partial idx_logs_project_http and read only this
+        # project's HTTP rows in the window instead of all of its logs.
         result = await session.execute(
             sa.text(
                 """
                 SELECT COALESCE(
                     100.0 * count(*) FILTER (WHERE status_code BETWEEN :low AND :high)
-                    / NULLIF(count(*) FILTER (WHERE status_code IS NOT NULL), 0), 0)
+                    / NULLIF(count(*), 0), 0)
                 FROM logs
-                WHERE project_id = :pid AND timestamp >= :since
+                WHERE project_id = :pid
+                  AND timestamp >= :since
+                  AND status_code IS NOT NULL
                 """
             ),
             {"pid": project_id, "since": since, "low": low, "high": high},

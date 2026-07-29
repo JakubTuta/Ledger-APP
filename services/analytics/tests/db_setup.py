@@ -82,18 +82,6 @@ _LOGS_ROLLUP_DDL = [
     )
     """,
     """
-    CREATE TABLE IF NOT EXISTS endpoint_latency_1h (
-        project_id  BIGINT NOT NULL,
-        route       TEXT NOT NULL,
-        bucket      TIMESTAMPTZ NOT NULL,
-        count       BIGINT NOT NULL DEFAULT 0,
-        p50_ms      DOUBLE PRECISION,
-        p95_ms      DOUBLE PRECISION,
-        p99_ms      DOUBLE PRECISION,
-        PRIMARY KEY (project_id, route, bucket)
-    )
-    """,
-    """
     CREATE TABLE IF NOT EXISTS span_latency_1h (
         project_id   BIGINT NOT NULL,
         service_name TEXT NOT NULL,
@@ -236,7 +224,6 @@ class AnalyticsTestDatabases:
                 for table in (
                     "metric_points_1h",
                     "span_latency_1h",
-                    "endpoint_latency_1h",
                     "error_rate_5m",
                     "log_volume_1d",
                     "log_volume_1h",
@@ -264,7 +251,6 @@ class AnalyticsTestDatabases:
                 "log_volume_1h",
                 "log_volume_1d",
                 "error_rate_5m",
-                "endpoint_latency_1h",
                 "span_latency_1h",
                 "metric_points_1h",
             ]

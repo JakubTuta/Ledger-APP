@@ -64,16 +64,16 @@ async def _get_all_route_metrics(
             WITH endpoint_data AS (
                 SELECT
                     project_id,
-                    ((attributes->'endpoint'->>'method') || ' ' || (attributes->'endpoint'->>'path'))::VARCHAR AS route,
-                    (attributes->'endpoint'->>'duration_ms')::FLOAT AS duration_ms
+                    (method || ' ' || path)::VARCHAR AS route,
+                    duration_ms::FLOAT AS duration_ms
                 FROM logs
                 WHERE
                     log_type = 'endpoint'
                     AND timestamp >= :start_time
                     AND timestamp < :end_time
-                    AND attributes->'endpoint'->>'path' IS NOT NULL
-                    AND attributes->'endpoint'->>'method' IS NOT NULL
-                    AND attributes->'endpoint'->>'duration_ms' IS NOT NULL
+                    AND method IS NOT NULL
+                    AND path IS NOT NULL
+                    AND duration_ms IS NOT NULL
             )
             SELECT
                 project_id,

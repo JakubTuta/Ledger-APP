@@ -90,18 +90,17 @@ class TestEnforceRetention:
         auth_session = _session_cm(auth_session)
 
         call_log = []
+        trim_marker = "DELETE FROM logs target"
 
         async def logs_execute(query, params=None):
             sql = str(getattr(query, "text", query))
             call_log.append((sql, params))
             if "pg_tables" in sql:
                 return _FakeResult(fetchall_value=[])
-            if "DELETE FROM logs WHERE ctid IN" in sql and params.get("pid") == 2:
+            if trim_marker in sql and params.get("pid") == 2:
                 # first call deletes a full batch, second call returns fewer than batch size
                 deletes_so_far = sum(
-                    1
-                    for s, p in call_log
-                    if "DELETE FROM logs WHERE ctid IN" in s and p.get("pid") == 2
+                    1 for s, p in call_log if trim_marker in s and p.get("pid") == 2
                 )
                 return _FakeResult(
                     rowcount=retention._DELETE_BATCH_SIZE if deletes_so_far == 1 else 10
@@ -116,14 +115,42 @@ class TestEnforceRetention:
             with patch("analytics_workers.database.get_logs_session", return_value=logs_session):
                 await retention.enforce_retention()
 
-        trim_calls_pid2 = [
-            p for s, p in call_log if "DELETE FROM logs WHERE ctid IN" in s and p.get("pid") == 2
-        ]
-        trim_calls_pid1 = [
-            p for s, p in call_log if "DELETE FROM logs WHERE ctid IN" in s and p.get("pid") == 1
-        ]
+        trim_calls_pid2 = [p for s, p in call_log if trim_marker in s and p.get("pid") == 2]
+        trim_calls_pid1 = [p for s, p in call_log if trim_marker in s and p.get("pid") == 1]
         assert len(trim_calls_pid2) == 2
         assert trim_calls_pid1 == []
+
+    async def test_trim_batches_on_tableoid_and_ctid(self):
+        """
+        ctid alone is not unique across a partitioned table's partitions, so
+        batching on it can delete a live row belonging to another partition
+        (and another project).
+        """
+        auth_session = AsyncMock()
+        auth_session.execute = AsyncMock(return_value=_FakeResult(fetchall_value=[(1, 90), (2, 7)]))
+        auth_session = _session_cm(auth_session)
+
+        logs_session = AsyncMock()
+        logs_session.execute = AsyncMock(
+            side_effect=lambda query, params=None: _FakeResult(
+                fetchall_value=[] if "pg_tables" in str(getattr(query, "text", query)) else None
+            )
+        )
+        logs_session = _session_cm(logs_session)
+
+        with patch("analytics_workers.database.get_auth_session", return_value=auth_session):
+            with patch("analytics_workers.database.get_logs_session", return_value=logs_session):
+                await retention.enforce_retention()
+
+        trim_sqls = [
+            str(getattr(c.args[0], "text", c.args[0]))
+            for c in logs_session.execute.call_args_list
+            if "DELETE FROM logs target" in str(getattr(c.args[0], "text", c.args[0]))
+        ]
+        assert trim_sqls
+        for sql in trim_sqls:
+            assert "(target.tableoid, target.ctid)" in sql
+            assert "source.tableoid, source.ctid" in sql
 
     async def test_prunes_error_groups_per_project_cutoff(self):
         auth_session = AsyncMock()
@@ -165,23 +192,22 @@ class TestEnforceRetention:
 
 class TestPartitionRangeEnd:
     def test_logs_partition_month_rollover(self):
-        assert retention._partition_range_end("logs", "logs_2026_12") == datetime.date(2027, 1, 1)
-        assert retention._partition_range_end("logs", "logs_2026_06") == datetime.date(2026, 7, 1)
+        assert retention._partition_range_end("logs_2026_12") == datetime.date(2027, 1, 1)
+        assert retention._partition_range_end("logs_2026_06") == datetime.date(2026, 7, 1)
 
-    def test_spans_partition_day(self):
-        assert retention._partition_range_end("spans", "spans_2026_06_15") == datetime.date(
-            2026, 6, 16
-        )
+    def test_spans_partition_is_monthly(self):
+        # partition_manager creates spans partitions monthly, like logs; the
+        # retention job used to expect a daily spans_YYYY_MM_DD name and so
+        # never matched (and never dropped) a single spans partition.
+        assert retention._partition_range_end("spans_2026_06") == datetime.date(2026, 7, 1)
+        assert retention._partition_range_end("spans_2026_12") == datetime.date(2027, 1, 1)
 
     def test_metric_points_partition_month_rollover(self):
-        assert retention._partition_range_end(
-            "metric_points", "metric_points_2026_12"
-        ) == datetime.date(2027, 1, 1)
-        assert retention._partition_range_end(
-            "metric_points", "metric_points_2026_06"
-        ) == datetime.date(2026, 7, 1)
+        assert retention._partition_range_end("metric_points_2026_12") == datetime.date(2027, 1, 1)
+        assert retention._partition_range_end("metric_points_2026_06") == datetime.date(2026, 7, 1)
 
     def test_non_matching_name_returns_none(self):
-        assert retention._partition_range_end("logs", "logs_backup") is None
-        assert retention._partition_range_end("spans", "spans_2026_06") is None
-        assert retention._partition_range_end("metric_points", "metric_points_backup") is None
+        assert retention._partition_range_end("logs_backup") is None
+        assert retention._partition_range_end("spans_2026_06_15") is None
+        assert retention._partition_range_end("metric_points_backup") is None
+        assert retention._partition_range_end("logs_staging") is None

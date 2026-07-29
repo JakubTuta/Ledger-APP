@@ -13,9 +13,7 @@ class Log(Base):
     id: orm.Mapped[int] = orm.mapped_column(
         sqlalchemy.BigInteger, primary_key=True, autoincrement=True
     )
-    project_id: orm.Mapped[int] = orm.mapped_column(
-        sqlalchemy.BigInteger, nullable=False, index=True
-    )
+    project_id: orm.Mapped[int] = orm.mapped_column(sqlalchemy.BigInteger, nullable=False)
 
     timestamp: orm.Mapped[datetime.datetime] = orm.mapped_column(
         sqlalchemy.DateTime(timezone=True),
@@ -64,7 +62,13 @@ class Log(Base):
     )
 
     __table_args__ = (
-        sqlalchemy.Index("idx_logs_project_timestamp", "project_id", "timestamp"),
+        sqlalchemy.Index(
+            "idx_logs_project_timestamp",
+            "project_id",
+            "timestamp",
+            "id",
+            postgresql_ops={"timestamp": "DESC", "id": "DESC"},
+        ),
         sqlalchemy.Index(
             "idx_logs_project_level",
             "project_id",
@@ -79,18 +83,27 @@ class Log(Base):
             "timestamp",
             postgresql_where=sqlalchemy.text("error_fingerprint IS NOT NULL"),
         ),
+        # One partial index covers every HTTP-shaped read (status_class filter
+        # and facet, the error list's status_code >= 400 arm, the alert
+        # evaluator's error-rate window). Leading with timestamp keeps
+        # query_logs()'s ORDER BY satisfied by the index itself.
         sqlalchemy.Index(
-            "idx_logs_error_list_covering",
+            "idx_logs_project_http",
             "project_id",
             "timestamp",
-            "level",
-            "log_type",
-            "error_type",
-            "message",
-            "error_fingerprint",
-            "sdk_version",
-            "platform",
-            postgresql_where=sqlalchemy.text("level IN ('error', 'critical')"),
+            "status_code",
+            postgresql_ops={"timestamp": "DESC"},
+            postgresql_where=sqlalchemy.text("status_code IS NOT NULL"),
+        ),
+        # Analytics scans a time window across all projects. Without this the
+        # planner falls back to a full index-only scan of
+        # idx_logs_project_timestamp with timestamp as a non-boundary qual,
+        # i.e. work proportional to the partition rather than the window.
+        # BRIN, not btree: this is the ingestion hot path.
+        sqlalchemy.Index(
+            "brin_logs_timestamp",
+            "timestamp",
+            postgresql_using="brin",
         ),
         sqlalchemy.CheckConstraint(
             "level IN ('debug', 'info', 'warning', 'error', 'critical')",
@@ -118,11 +131,9 @@ class ErrorGroup(Base):
     __tablename__ = "error_groups"
 
     id: orm.Mapped[int] = orm.mapped_column(
-        sqlalchemy.BigInteger, primary_key=True, index=True, autoincrement=True
+        sqlalchemy.BigInteger, primary_key=True, autoincrement=True
     )
-    project_id: orm.Mapped[int] = orm.mapped_column(
-        sqlalchemy.BigInteger, nullable=False, index=True
-    )
+    project_id: orm.Mapped[int] = orm.mapped_column(sqlalchemy.BigInteger, nullable=False)
 
     fingerprint: orm.Mapped[str] = orm.mapped_column(sqlalchemy.CHAR(64), nullable=False)
     error_type: orm.Mapped[str] = orm.mapped_column(sqlalchemy.VARCHAR(255), nullable=False)
@@ -175,7 +186,24 @@ class ErrorGroup(Base):
             unique=True,
         ),
         sqlalchemy.Index("idx_error_groups_status", "project_id", "status", "last_seen"),
-        sqlalchemy.Index("idx_error_groups_type", "project_id", "error_type", "last_seen"),
+        sqlalchemy.Index(
+            "idx_error_groups_last_seen",
+            "project_id",
+            "last_seen",
+            postgresql_ops={"last_seen": "DESC"},
+        ),
+        sqlalchemy.Index(
+            "idx_error_groups_first_seen",
+            "project_id",
+            "first_seen",
+            postgresql_ops={"first_seen": "DESC"},
+        ),
+        sqlalchemy.Index(
+            "idx_error_groups_resolved",
+            "project_id",
+            "resolved_at",
+            postgresql_where=sqlalchemy.text("status = 'resolved' AND resolved_at IS NOT NULL"),
+        ),
         sqlalchemy.CheckConstraint(
             "status IN ('unresolved', 'resolved', 'ignored', 'muted')",
             name="check_error_status",
@@ -195,9 +223,7 @@ class AggregatedMetric(Base):
     id: orm.Mapped[int] = orm.mapped_column(
         sqlalchemy.BigInteger, primary_key=True, autoincrement=True
     )
-    project_id: orm.Mapped[int] = orm.mapped_column(
-        sqlalchemy.BigInteger, nullable=False, index=True
-    )
+    project_id: orm.Mapped[int] = orm.mapped_column(sqlalchemy.BigInteger, nullable=False)
 
     date: orm.Mapped[str] = orm.mapped_column(sqlalchemy.VARCHAR(8), nullable=False)
     hour: orm.Mapped[int] = orm.mapped_column(sqlalchemy.SmallInteger, nullable=False)
@@ -240,14 +266,14 @@ class AggregatedMetric(Base):
         sqlalchemy.Index(
             "idx_aggregated_metrics_lookup",
             "project_id",
-            "date",
             "metric_type",
+            "date",
         ),
         sqlalchemy.Index(
             "idx_aggregated_metrics_endpoint",
             "project_id",
-            "date",
             "endpoint_path",
+            "date",
             postgresql_where=sqlalchemy.text("metric_type = 'endpoint'"),
         ),
         sqlalchemy.CheckConstraint(
@@ -278,9 +304,7 @@ class BottleneckMetric(Base):
     id: orm.Mapped[int] = orm.mapped_column(
         sqlalchemy.BigInteger, primary_key=True, autoincrement=True
     )
-    project_id: orm.Mapped[int] = orm.mapped_column(
-        sqlalchemy.BigInteger, nullable=False, index=True
-    )
+    project_id: orm.Mapped[int] = orm.mapped_column(sqlalchemy.BigInteger, nullable=False)
 
     date: orm.Mapped[str] = orm.mapped_column(sqlalchemy.VARCHAR(8), nullable=False)
     hour: orm.Mapped[int] = orm.mapped_column(sqlalchemy.SmallInteger, nullable=False)
@@ -315,17 +339,15 @@ class BottleneckMetric(Base):
     )
 
     __table_args__ = (
+        # Reads go through uq_bottleneck_metrics (project_id, date, hour, route),
+        # whose leading prefix already covers the only filter shape in use.
         sqlalchemy.Index(
-            "idx_bottleneck_metrics_lookup",
+            "uq_bottleneck_metrics",
             "project_id",
             "date",
             "hour",
-        ),
-        sqlalchemy.Index(
-            "idx_bottleneck_metrics_route",
-            "project_id",
-            "date",
             "route",
+            unique=True,
         ),
         sqlalchemy.CheckConstraint("hour >= 0 AND hour <= 23", name="check_bottleneck_hour_range"),
     )

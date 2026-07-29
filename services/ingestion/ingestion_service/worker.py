@@ -75,10 +75,11 @@ _LOGS_STAGING_DDL = """
         platform_version VARCHAR(50),
         error_fingerprint CHAR(64),
         log_id VARCHAR(64)
-    ) ON COMMIT DROP
+    ) ON COMMIT DELETE ROWS
 """
 
 _LOGS_COPY_COLUMNS_SQL = ", ".join(_LOG_COPY_COLUMNS)
+_LOG_JSON_COLUMNS = frozenset({"attributes"})
 
 _SPAN_COPY_COLUMNS = [
     "span_id",
@@ -113,10 +114,11 @@ _SPANS_STAGING_DDL = """
         attributes        JSONB,
         events            JSONB,
         error_fingerprint CHAR(64)
-    ) ON COMMIT DROP
+    ) ON COMMIT DELETE ROWS
 """
 
 _SPANS_COPY_COLUMNS_SQL = ", ".join(_SPAN_COPY_COLUMNS)
+_SPAN_JSON_COLUMNS = frozenset({"attributes", "events"})
 
 _METRIC_POINT_COPY_COLUMNS = [
     "project_id",
@@ -147,19 +149,11 @@ _METRIC_POINTS_STAGING_DDL = """
         tags            JSONB,
         tags_hash       CHAR(16),
         service_name    TEXT
-    ) ON COMMIT DROP
+    ) ON COMMIT DELETE ROWS
 """
 
 _METRIC_POINTS_COPY_COLUMNS_SQL = ", ".join(_METRIC_POINT_COPY_COLUMNS)
-
-
-def _encode_jsonb(value: object) -> bytes:
-    text = value if isinstance(value, str) else json.dumps(value)
-    return b"\x01" + text.encode("utf-8")
-
-
-def _decode_jsonb(data: bytes) -> object:
-    return json.loads(data[1:].decode("utf-8"))
+_METRIC_POINT_JSON_COLUMNS = frozenset({"bucket_counts", "explicit_bounds", "tags"})
 
 
 def _fallback_log_id(record: dict) -> str:
@@ -172,100 +166,101 @@ def _fallback_log_id(record: dict) -> str:
     return hashlib.sha256(source.encode()).hexdigest()
 
 
-async def _copy_log_records(session, log_records: list[dict]) -> None:
+def _copy_value(value: object, is_json: bool) -> object:
+    # SQLAlchemy's asyncpg dialect installs its own jsonb codec on every
+    # connection, and that codec expects an already-serialized str (it just
+    # prefixes the jsonb version byte). Serialize here rather than re-binding a
+    # dict-aware codec per batch: asyncpg's set_type_codec introspects pg_type
+    # on each call, which is a round trip on the hottest path in the system.
+    if is_json and value is not None and not isinstance(value, str):
+        return json.dumps(value)
+    return value
+
+
+async def _copy_via_staging(
+    session,
+    records: list[dict],
+    staging_table: str,
+    staging_ddl: str,
+    target_table: str,
+    columns: list[str],
+    json_columns: frozenset[str],
+    columns_sql: str,
+    conflict_clause: str,
+) -> None:
+    """
+    Bulk-load `records` through a session-local staging table using asyncpg's
+    binary COPY, then move them into `target_table` with the caller's
+    ON CONFLICT clause.
+
+    The staging tables are declared ON COMMIT DELETE ROWS rather than
+    ON COMMIT DROP, so a pooled connection creates each one at most once and
+    every later batch reuses it - repeatedly creating and dropping a temp table
+    at ingestion rates bloats pg_class/pg_attribute.
+    """
     conn = await session.connection()
     raw_conn = await conn.get_raw_connection()
     asyncpg_conn = raw_conn.driver_connection
 
-    await asyncpg_conn.set_type_codec(
-        "jsonb",
-        encoder=_encode_jsonb,
-        decoder=_decode_jsonb,
-        schema="pg_catalog",
-        format="binary",
-    )
-
-    rows = [tuple(record[column] for column in _LOG_COPY_COLUMNS) for record in log_records]
+    rows = [
+        tuple(_copy_value(record[column], column in json_columns) for column in columns)
+        for record in records
+    ]
 
     # A single explicit transaction is required here: each raw statement on this
-    # connection auto-commits on its own otherwise, which would trigger the staging
-    # table's ON COMMIT DROP right after CREATE, before TRUNCATE/COPY/INSERT can run.
+    # connection would otherwise commit on its own, emptying the staging table
+    # between the COPY and the INSERT ... SELECT that drains it.
     async with asyncpg_conn.transaction():
-        await asyncpg_conn.execute(_LOGS_STAGING_DDL)
-        await asyncpg_conn.execute("TRUNCATE logs_staging")
-        await asyncpg_conn.copy_records_to_table(
-            "logs_staging", records=rows, columns=_LOG_COPY_COLUMNS
-        )
+        await asyncpg_conn.execute(staging_ddl)
+        await asyncpg_conn.copy_records_to_table(staging_table, records=rows, columns=columns)
         await asyncpg_conn.execute(
-            f"INSERT INTO logs ({_LOGS_COPY_COLUMNS_SQL}) "
-            f"SELECT {_LOGS_COPY_COLUMNS_SQL} FROM logs_staging "
-            f"ON CONFLICT (project_id, log_id, timestamp) WHERE log_id IS NOT NULL DO NOTHING"
+            f"INSERT INTO {target_table} ({columns_sql}) "
+            f"SELECT {columns_sql} FROM {staging_table} {conflict_clause}"
         )
+
+
+async def _copy_log_records(session, log_records: list[dict]) -> None:
+    await _copy_via_staging(
+        session,
+        log_records,
+        staging_table="logs_staging",
+        staging_ddl=_LOGS_STAGING_DDL,
+        target_table="logs",
+        columns=_LOG_COPY_COLUMNS,
+        json_columns=_LOG_JSON_COLUMNS,
+        columns_sql=_LOGS_COPY_COLUMNS_SQL,
+        conflict_clause=(
+            "ON CONFLICT (project_id, log_id, timestamp) WHERE log_id IS NOT NULL DO NOTHING"
+        ),
+    )
 
 
 async def _copy_span_records(session, span_records: list[dict]) -> None:
-    conn = await session.connection()
-    raw_conn = await conn.get_raw_connection()
-    asyncpg_conn = raw_conn.driver_connection
-
-    await asyncpg_conn.set_type_codec(
-        "jsonb",
-        encoder=_encode_jsonb,
-        decoder=_decode_jsonb,
-        schema="pg_catalog",
-        format="binary",
+    await _copy_via_staging(
+        session,
+        span_records,
+        staging_table="spans_staging",
+        staging_ddl=_SPANS_STAGING_DDL,
+        target_table="spans",
+        columns=_SPAN_COPY_COLUMNS,
+        json_columns=_SPAN_JSON_COLUMNS,
+        columns_sql=_SPANS_COPY_COLUMNS_SQL,
+        conflict_clause="ON CONFLICT (span_id, start_time) DO NOTHING",
     )
-
-    rows = [tuple(record[column] for column in _SPAN_COPY_COLUMNS) for record in span_records]
-
-    # Same explicit-transaction requirement as _copy_log_records: without it each
-    # raw statement auto-commits on its own, which fires the staging table's
-    # ON COMMIT DROP before TRUNCATE/COPY/INSERT get a chance to run.
-    async with asyncpg_conn.transaction():
-        await asyncpg_conn.execute(_SPANS_STAGING_DDL)
-        await asyncpg_conn.execute("TRUNCATE spans_staging")
-        await asyncpg_conn.copy_records_to_table(
-            "spans_staging", records=rows, columns=_SPAN_COPY_COLUMNS
-        )
-        await asyncpg_conn.execute(
-            f"INSERT INTO spans ({_SPANS_COPY_COLUMNS_SQL}) "
-            f"SELECT {_SPANS_COPY_COLUMNS_SQL} FROM spans_staging "
-            f"ON CONFLICT (span_id, start_time) DO NOTHING"
-        )
 
 
 async def _copy_metric_points(session, metric_point_records: list[dict]) -> None:
-    conn = await session.connection()
-    raw_conn = await conn.get_raw_connection()
-    asyncpg_conn = raw_conn.driver_connection
-
-    await asyncpg_conn.set_type_codec(
-        "jsonb",
-        encoder=_encode_jsonb,
-        decoder=_decode_jsonb,
-        schema="pg_catalog",
-        format="binary",
+    await _copy_via_staging(
+        session,
+        metric_point_records,
+        staging_table="metric_points_staging",
+        staging_ddl=_METRIC_POINTS_STAGING_DDL,
+        target_table="metric_points",
+        columns=_METRIC_POINT_COPY_COLUMNS,
+        json_columns=_METRIC_POINT_JSON_COLUMNS,
+        columns_sql=_METRIC_POINTS_COPY_COLUMNS_SQL,
+        conflict_clause="ON CONFLICT (project_id, name, tags_hash, ts) DO NOTHING",
     )
-
-    rows = [
-        tuple(record[column] for column in _METRIC_POINT_COPY_COLUMNS)
-        for record in metric_point_records
-    ]
-
-    # Same explicit-transaction requirement as _copy_log_records/_copy_span_records:
-    # without it each raw statement auto-commits on its own, which fires the
-    # staging table's ON COMMIT DROP before TRUNCATE/COPY/INSERT get a chance to run.
-    async with asyncpg_conn.transaction():
-        await asyncpg_conn.execute(_METRIC_POINTS_STAGING_DDL)
-        await asyncpg_conn.execute("TRUNCATE metric_points_staging")
-        await asyncpg_conn.copy_records_to_table(
-            "metric_points_staging", records=rows, columns=_METRIC_POINT_COPY_COLUMNS
-        )
-        await asyncpg_conn.execute(
-            f"INSERT INTO metric_points ({_METRIC_POINTS_COPY_COLUMNS_SQL}) "
-            f"SELECT {_METRIC_POINTS_COPY_COLUMNS_SQL} FROM metric_points_staging "
-            f"ON CONFLICT (project_id, name, tags_hash, ts) DO NOTHING"
-        )
 
 
 class StorageWorker:

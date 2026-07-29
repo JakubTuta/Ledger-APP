@@ -1,3 +1,16 @@
+-- Logs DB bootstrap. Kept in sync with services/ingestion/alembic/versions/*
+-- (current head: 016) and with the ORM models in
+-- services/ingestion/ingestion_service/models.py and
+-- services/query/query_service/models.py.
+--
+-- Index policy for this database: `logs`, `spans` and `metric_points` are on the
+-- ingestion hot path, so every index here has to be justified by a query that
+-- actually exists. See revision 015 for the list of indexes that were removed
+-- and why, and revision 016 for the BRIN additions.
+--
+-- Constraint names are written to match what Alembic actually produced
+-- (verified against a fresh `alembic upgrade head`).
+
 -- ============================================
 -- 1. LOGS TABLE (Partitioned by Month)
 -- ============================================
@@ -26,8 +39,6 @@ CREATE TABLE IF NOT EXISTS logs (
     platform_version VARCHAR(50),
     processing_time_ms SMALLINT,
     error_fingerprint CHAR(64),
-    trace_id CHAR(32),
-    span_id CHAR(16),
     log_id VARCHAR(64),
     PRIMARY KEY (id, timestamp)
 ) PARTITION BY RANGE (timestamp);
@@ -37,7 +48,10 @@ CREATE TABLE IF NOT EXISTS logs (
 -- ============================================
 
 DO $$ BEGIN
-    ALTER TABLE logs ADD CONSTRAINT check_log_level
+    -- Named check_level, not check_log_level: it was defined inline on the
+    -- CREATE TABLE in the initial migration and never renamed, unlike the
+    -- same-shaped constraint on aggregated_metrics.log_level.
+    ALTER TABLE logs ADD CONSTRAINT check_level
         CHECK (level IN ('debug', 'info', 'warning', 'error', 'critical'));
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
@@ -58,46 +72,44 @@ END $$;
 -- PERFORMANCE INDEXES
 -- ============================================
 
-CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs USING BRIN (timestamp);
+-- Log list / keyset pagination: ORDER BY (timestamp DESC, id DESC).
+CREATE INDEX IF NOT EXISTS idx_logs_project_timestamp ON logs (project_id, timestamp DESC, id DESC);
 
-CREATE INDEX IF NOT EXISTS idx_logs_project_timestamp ON logs (project_id, timestamp DESC);
-
+-- Error-level slices of the log list and of get_error_list().
 CREATE INDEX IF NOT EXISTS idx_logs_project_level ON logs (project_id, level, timestamp DESC)
 WHERE level IN ('error', 'critical');
 
-CREATE INDEX IF NOT EXISTS idx_logs_attributes ON logs USING GIN (attributes);
-
+-- Occurrence sparkline for one error group.
 CREATE INDEX IF NOT EXISTS idx_logs_error_fingerprint ON logs (project_id, error_fingerprint, timestamp DESC)
 WHERE error_fingerprint IS NOT NULL;
 
-CREATE INDEX IF NOT EXISTS idx_logs_dashboard ON logs (project_id, timestamp DESC, level, message)
-WHERE importance IN ('critical', 'high');
+-- Every HTTP-shaped read: the status_class filter and facet, the
+-- status_code >= 400 arm of get_error_list(), and the alert evaluator's
+-- error_rate_4xx / error_rate_5xx window.
+CREATE INDEX IF NOT EXISTS idx_logs_project_http ON logs (project_id, timestamp DESC, status_code)
+WHERE status_code IS NOT NULL;
 
-CREATE INDEX IF NOT EXISTS idx_logs_endpoint_monitoring ON logs (project_id, timestamp DESC, level)
-WHERE log_type = 'endpoint';
+-- Analytics aggregates a time window across all projects. Without this the
+-- planner falls back to a full index-only scan of idx_logs_project_timestamp
+-- with timestamp as a non-boundary qual - work proportional to the partition
+-- rather than to the window. BRIN rather than btree because this is the
+-- ingestion hot path and log rows arrive in near-timestamp order.
+-- NOTE: earlier revisions of this file declared this index as
+-- `idx_logs_timestamp`, but no Alembic migration ever created it, so no
+-- alembic-provisioned database actually had it. Revision 016 creates it.
+CREATE INDEX IF NOT EXISTS brin_logs_timestamp ON logs USING BRIN (timestamp);
 
-CREATE INDEX IF NOT EXISTS idx_logs_endpoint_duration
-ON logs (
-    project_id,
-    timestamp DESC,
-    ((attributes->'endpoint'->>'duration_ms')::float)
-)
-WHERE log_type = 'endpoint'
-  AND attributes->'endpoint'->>'duration_ms' IS NOT NULL;
-
-CREATE INDEX IF NOT EXISTS idx_logs_error_list_covering ON logs (project_id, timestamp DESC, level, log_type, error_type, message, error_fingerprint, sdk_version, platform)
-WHERE level IN ('error', 'critical');
-
-CREATE INDEX IF NOT EXISTS idx_log_trace ON logs (trace_id) WHERE trace_id IS NOT NULL;
-
+-- Conflict target for the ingestion worker's idempotent COPY insert.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_logs_dedup ON logs (project_id, log_id, timestamp)
 WHERE log_id IS NOT NULL;
 
 -- ============================================
 -- PARTITIONS (Monthly - Auto-created)
 -- ============================================
--- Note: Partitions are auto-created by ingestion service on startup
--- Old partitions should be dropped based on retention_days from projects table
+-- Note: Partitions are auto-created by ingestion service on startup for logs,
+-- spans and metric_points alike, all with the {table}_{YYYY}_{MM} name shape.
+-- Old partitions are detached and dropped by the analytics retention job based
+-- on retention_days from the projects table.
 
 CREATE TABLE IF NOT EXISTS logs_2025_01 PARTITION OF logs FOR VALUES FROM ('2025-01-01') TO ('2025-02-01');
 CREATE TABLE IF NOT EXISTS logs_2025_02 PARTITION OF logs FOR VALUES FROM ('2025-02-01') TO ('2025-03-01');
@@ -125,18 +137,23 @@ CREATE TABLE IF NOT EXISTS error_groups (
     error_message TEXT,
     first_seen TIMESTAMPTZ NOT NULL,
     last_seen TIMESTAMPTZ NOT NULL,
-    occurrence_count BIGINT DEFAULT 1,
-    status VARCHAR(20) DEFAULT 'unresolved',
+    occurrence_count BIGINT DEFAULT 1 NOT NULL,
+    status VARCHAR(20) DEFAULT 'unresolved' NOT NULL,
     assigned_to BIGINT,
     sample_log_id BIGINT,
     sample_stack_trace TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+    resolved_at TIMESTAMPTZ,
+    resolved_in_release VARCHAR(100),
+    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_error_groups_fingerprint ON error_groups (project_id, fingerprint);
-CREATE INDEX IF NOT EXISTS idx_error_groups_status ON error_groups (project_id, status, last_seen DESC);
-CREATE INDEX IF NOT EXISTS idx_error_groups_type ON error_groups (project_id, error_type, last_seen DESC);
+CREATE INDEX IF NOT EXISTS idx_error_groups_status ON error_groups (project_id, status, last_seen);
+CREATE INDEX IF NOT EXISTS idx_error_groups_last_seen ON error_groups (project_id, last_seen DESC);
+CREATE INDEX IF NOT EXISTS idx_error_groups_first_seen ON error_groups (project_id, first_seen DESC);
+CREATE INDEX IF NOT EXISTS idx_error_groups_resolved ON error_groups (project_id, resolved_at)
+WHERE status = 'resolved' AND resolved_at IS NOT NULL;
 
 DO $$ BEGIN
     ALTER TABLE error_groups ADD CONSTRAINT check_error_status
@@ -170,8 +187,10 @@ CREATE TABLE IF NOT EXISTS aggregated_metrics (
     updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_aggregated_metrics_lookup ON aggregated_metrics (project_id, date, metric_type);
-CREATE INDEX IF NOT EXISTS idx_aggregated_metrics_endpoint ON aggregated_metrics (project_id, date, endpoint_path) WHERE metric_type = 'endpoint';
+-- `date` trails the equality columns: readers filter project_id/metric_type by
+-- equality and `date` as a range.
+CREATE INDEX IF NOT EXISTS idx_aggregated_metrics_lookup ON aggregated_metrics (project_id, metric_type, date);
+CREATE INDEX IF NOT EXISTS idx_aggregated_metrics_endpoint ON aggregated_metrics (project_id, endpoint_path, date) WHERE metric_type = 'endpoint';
 CREATE UNIQUE INDEX IF NOT EXISTS uq_aggregated_metrics ON aggregated_metrics (
     project_id, date, hour, metric_type,
     COALESCE(endpoint_method, ''), COALESCE(endpoint_path, ''),
@@ -221,8 +240,8 @@ CREATE TABLE IF NOT EXISTS bottleneck_metrics (
     updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_bottleneck_metrics_lookup ON bottleneck_metrics (project_id, date, hour);
-CREATE INDEX IF NOT EXISTS idx_bottleneck_metrics_route ON bottleneck_metrics (project_id, date, route);
+-- The unique index doubles as the read index: get_bottleneck_list() filters
+-- project_id by equality and `date` as a range, which its leading prefix serves.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_bottleneck_metrics ON bottleneck_metrics (project_id, date, hour, route);
 
 DO $$ BEGIN
@@ -272,18 +291,6 @@ CREATE TABLE IF NOT EXISTS error_rate_5m (
 );
 CREATE INDEX IF NOT EXISTS idx_er5m_project_bucket ON error_rate_5m (project_id, bucket DESC);
 
-CREATE TABLE IF NOT EXISTS endpoint_latency_1h (
-    project_id  BIGINT NOT NULL,
-    route       TEXT NOT NULL,
-    bucket      TIMESTAMPTZ NOT NULL,
-    count       BIGINT NOT NULL DEFAULT 0,
-    p50_ms      DOUBLE PRECISION,
-    p95_ms      DOUBLE PRECISION,
-    p99_ms      DOUBLE PRECISION,
-    PRIMARY KEY (project_id, route, bucket)
-);
-CREATE INDEX IF NOT EXISTS idx_el1h_project_bucket ON endpoint_latency_1h (project_id, bucket DESC);
-
 CREATE TABLE IF NOT EXISTS rollup_job_state (
     job_name    TEXT NOT NULL PRIMARY KEY,
     last_bucket TIMESTAMPTZ NOT NULL
@@ -312,9 +319,11 @@ CREATE TABLE IF NOT EXISTS spans (
 ) PARTITION BY RANGE (start_time);
 
 CREATE INDEX IF NOT EXISTS brin_spans_project_time ON spans USING BRIN (project_id, start_time);
-CREATE INDEX IF NOT EXISTS idx_spans_trace ON spans (trace_id);
+-- get_trace() and the per-row span_count subquery in list_traces().
+CREATE INDEX IF NOT EXISTS idx_spans_project_trace ON spans (project_id, trace_id);
+-- list_traces() returns root spans only, newest first.
+CREATE INDEX IF NOT EXISTS idx_spans_roots ON spans (project_id, start_time DESC) WHERE parent_span_id IS NULL;
 CREATE INDEX IF NOT EXISTS idx_spans_op ON spans (project_id, service_name, name, start_time DESC);
-CREATE INDEX IF NOT EXISTS idx_spans_errors ON spans (project_id, start_time DESC) WHERE status_code = 2;
 
 CREATE TABLE IF NOT EXISTS span_latency_1h (
     project_id   BIGINT NOT NULL,
@@ -329,3 +338,46 @@ CREATE TABLE IF NOT EXISTS span_latency_1h (
     PRIMARY KEY (project_id, service_name, name, bucket)
 );
 CREATE INDEX IF NOT EXISTS idx_sl1h_project_bucket ON span_latency_1h (project_id, bucket DESC);
+
+-- ============================================
+-- 7. METRIC POINTS (OTLP metrics) + hourly rollup
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS metric_points (
+    project_id      BIGINT NOT NULL,
+    name            TEXT NOT NULL,
+    type            SMALLINT NOT NULL,
+    ts              TIMESTAMPTZ NOT NULL,
+    value           DOUBLE PRECISION,
+    count           BIGINT,
+    sum             DOUBLE PRECISION,
+    bucket_counts   JSONB,
+    explicit_bounds JSONB,
+    tags            JSONB NOT NULL DEFAULT '{}'::jsonb,
+    tags_hash       CHAR(16) NOT NULL,
+    service_name    TEXT,
+    PRIMARY KEY (project_id, name, tags_hash, ts)
+) PARTITION BY RANGE (ts);
+
+CREATE INDEX IF NOT EXISTS idx_metric_points_lookup ON metric_points (project_id, name, ts DESC);
+-- query_metrics() filters raw points with `tags @> '{...}'::jsonb`.
+CREATE INDEX IF NOT EXISTS idx_metric_points_tags ON metric_points USING GIN (tags);
+-- usage_stats and the 1h rollup scan `ts` across all projects (see the BRIN on
+-- logs.timestamp for the same reasoning).
+CREATE INDEX IF NOT EXISTS brin_metric_points_ts ON metric_points USING BRIN (ts);
+
+CREATE TABLE IF NOT EXISTS metric_points_1h (
+    project_id   BIGINT NOT NULL,
+    name         TEXT NOT NULL,
+    type         SMALLINT NOT NULL,
+    tags_hash    CHAR(16) NOT NULL,
+    tags         JSONB NOT NULL DEFAULT '{}'::jsonb,
+    bucket       TIMESTAMPTZ NOT NULL,
+    count        BIGINT NOT NULL DEFAULT 0,
+    sum_v        DOUBLE PRECISION NOT NULL DEFAULT 0,
+    min_v        DOUBLE PRECISION,
+    max_v        DOUBLE PRECISION,
+    avg_v        DOUBLE PRECISION,
+    PRIMARY KEY (project_id, name, tags_hash, bucket)
+);
+CREATE INDEX IF NOT EXISTS idx_metric_points_1h_lookup ON metric_points_1h (project_id, name, bucket DESC);

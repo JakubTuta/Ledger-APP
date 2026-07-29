@@ -12,22 +12,44 @@ def _empty_result() -> MagicMock:
     return result
 
 
+def _result(rows) -> MagicMock:
+    result = MagicMock()
+    result.fetchall.return_value = list(rows)
+    return result
+
+
+def _auth_session(project_rows, persisted_rows=()) -> AsyncMock:
+    """
+    Auth-session mock that dispatches on the statement text rather than on call
+    order: the job reads `projects` for quotas and `daily_usage` for the counts
+    a previous run persisted, then upserts back into `daily_usage`.
+    """
+    session = AsyncMock()
+
+    async def execute(query, params=None):
+        sql = str(getattr(query, "text", query))
+        if "FROM projects" in sql:
+            return _result(project_rows)
+        if "FROM daily_usage" in sql:
+            return _result(persisted_rows)
+        return _empty_result()
+
+    session.execute = AsyncMock(side_effect=execute)
+    session.__aenter__ = AsyncMock(return_value=session)
+    session.__aexit__ = AsyncMock(return_value=False)
+    return session
+
+
 @pytest.mark.asyncio
 async def test_generate_usage_stats_empty_database():
     mock_redis = AsyncMock()
     mock_logs_session = AsyncMock()
-    mock_auth_session = AsyncMock()
-
-    mock_projects_result = MagicMock()
-    mock_projects_result.fetchall.return_value = []
-    mock_auth_session.execute.return_value = mock_projects_result
+    mock_auth_session = _auth_session([])
 
     mock_logs_session.execute.return_value = _empty_result()
 
     mock_logs_session.__aenter__ = AsyncMock(return_value=mock_logs_session)
     mock_logs_session.__aexit__ = AsyncMock()
-    mock_auth_session.__aenter__ = AsyncMock(return_value=mock_auth_session)
-    mock_auth_session.__aexit__ = AsyncMock()
 
     with patch("analytics_workers.redis_client.get_redis", return_value=mock_redis):
         with patch("analytics_workers.database.get_logs_session") as mock_get_logs_session:
@@ -43,14 +65,12 @@ async def test_generate_usage_stats_empty_database():
 async def test_generate_usage_stats_with_data():
     mock_redis = AsyncMock()
     mock_logs_session = AsyncMock()
-    mock_auth_session = AsyncMock()
-
-    mock_projects_result = MagicMock()
-    mock_projects_result.fetchall.return_value = [
-        (1, 1_000_000, 3_000_000, 1_000_000),
-        (2, 500_000, 1_500_000, 500_000),
-    ]
-    mock_auth_session.execute.return_value = mock_projects_result
+    mock_auth_session = _auth_session(
+        [
+            (1, 1_000_000, 3_000_000, 1_000_000),
+            (2, 500_000, 1_500_000, 500_000),
+        ]
+    )
 
     test_date = date(2025, 10, 19)
     mock_logs_result = MagicMock()
@@ -66,8 +86,6 @@ async def test_generate_usage_stats_with_data():
 
     mock_logs_session.__aenter__ = AsyncMock(return_value=mock_logs_session)
     mock_logs_session.__aexit__ = AsyncMock()
-    mock_auth_session.__aenter__ = AsyncMock(return_value=mock_auth_session)
-    mock_auth_session.__aexit__ = AsyncMock()
 
     with patch("analytics_workers.redis_client.get_redis", return_value=mock_redis):
         with patch("analytics_workers.database.get_logs_session") as mock_get_logs_session:
@@ -100,11 +118,7 @@ async def test_generate_usage_stats_with_data():
 async def test_generate_usage_stats_quota_calculations():
     mock_redis = AsyncMock()
     mock_logs_session = AsyncMock()
-    mock_auth_session = AsyncMock()
-
-    mock_projects_result = MagicMock()
-    mock_projects_result.fetchall.return_value = [(1, 1_000_000, 3_000_000, 1_000_000)]
-    mock_auth_session.execute.return_value = mock_projects_result
+    mock_auth_session = _auth_session([(1, 1_000_000, 3_000_000, 1_000_000)])
 
     test_date = date(2025, 10, 19)
     mock_logs_result = MagicMock()
@@ -119,8 +133,6 @@ async def test_generate_usage_stats_quota_calculations():
 
     mock_logs_session.__aenter__ = AsyncMock(return_value=mock_logs_session)
     mock_logs_session.__aexit__ = AsyncMock()
-    mock_auth_session.__aenter__ = AsyncMock(return_value=mock_auth_session)
-    mock_auth_session.__aexit__ = AsyncMock()
 
     with patch("analytics_workers.redis_client.get_redis", return_value=mock_redis):
         with patch("analytics_workers.database.get_logs_session") as mock_get_logs_session:
@@ -137,11 +149,7 @@ async def test_generate_usage_stats_quota_calculations():
 async def test_generate_usage_stats_multiple_days():
     mock_redis = AsyncMock()
     mock_logs_session = AsyncMock()
-    mock_auth_session = AsyncMock()
-
-    mock_projects_result = MagicMock()
-    mock_projects_result.fetchall.return_value = [(1, 1_000_000, 3_000_000, 1_000_000)]
-    mock_auth_session.execute.return_value = mock_projects_result
+    mock_auth_session = _auth_session([(1, 1_000_000, 3_000_000, 1_000_000)])
 
     date1 = date(2025, 10, 19)
     date2 = date(2025, 10, 18)
@@ -161,8 +169,6 @@ async def test_generate_usage_stats_multiple_days():
 
     mock_logs_session.__aenter__ = AsyncMock(return_value=mock_logs_session)
     mock_logs_session.__aexit__ = AsyncMock()
-    mock_auth_session.__aenter__ = AsyncMock(return_value=mock_auth_session)
-    mock_auth_session.__aexit__ = AsyncMock()
 
     with patch("analytics_workers.redis_client.get_redis", return_value=mock_redis):
         with patch("analytics_workers.database.get_logs_session") as mock_get_logs_session:
@@ -182,11 +188,7 @@ async def test_generate_usage_stats_spans_only_day_yields_zero_log_count():
     signals merge logic."""
     mock_redis = AsyncMock()
     mock_logs_session = AsyncMock()
-    mock_auth_session = AsyncMock()
-
-    mock_projects_result = MagicMock()
-    mock_projects_result.fetchall.return_value = [(1, 1_000_000, 3_000_000, 1_000_000)]
-    mock_auth_session.execute.return_value = mock_projects_result
+    mock_auth_session = _auth_session([(1, 1_000_000, 3_000_000, 1_000_000)])
 
     test_date = date(2025, 10, 19)
 
@@ -201,8 +203,6 @@ async def test_generate_usage_stats_spans_only_day_yields_zero_log_count():
 
     mock_logs_session.__aenter__ = AsyncMock(return_value=mock_logs_session)
     mock_logs_session.__aexit__ = AsyncMock()
-    mock_auth_session.__aenter__ = AsyncMock(return_value=mock_auth_session)
-    mock_auth_session.__aexit__ = AsyncMock()
 
     with patch("analytics_workers.redis_client.get_redis", return_value=mock_redis):
         with patch("analytics_workers.database.get_logs_session") as mock_get_logs_session:
@@ -215,3 +215,43 @@ async def test_generate_usage_stats_spans_only_day_yields_zero_log_count():
     assert len(cached_data) == 1
     assert cached_data[0]["log_count"] == 0
     assert cached_data[0]["span_count"] == 4_567
+
+
+@pytest.mark.asyncio
+async def test_generate_usage_stats_keeps_persisted_counts_outside_recompute_window():
+    """
+    Spans and metric points are only recomputed for the last couple of days, so
+    an older day's counts must come from what a previous run persisted rather
+    than being reset to 0.
+    """
+    mock_redis = AsyncMock()
+    mock_logs_session = AsyncMock()
+
+    old_date = date(2025, 10, 1)
+    mock_auth_session = _auth_session(
+        [(1, 1_000_000, 3_000_000, 1_000_000)],
+        persisted_rows=[(1, old_date, 500, 4_567, 89)],
+    )
+
+    # log_volume_1d still covers the full 30 days; spans/metric points do not.
+    mock_logs_session.execute.side_effect = [
+        _result([(1, old_date, 500)]),
+        _empty_result(),
+        _empty_result(),
+    ]
+
+    mock_logs_session.__aenter__ = AsyncMock(return_value=mock_logs_session)
+    mock_logs_session.__aexit__ = AsyncMock()
+
+    with patch("analytics_workers.redis_client.get_redis", return_value=mock_redis):
+        with patch("analytics_workers.database.get_logs_session") as mock_get_logs_session:
+            with patch("analytics_workers.database.get_auth_session") as mock_get_auth_session:
+                mock_get_logs_session.return_value = mock_logs_session
+                mock_get_auth_session.return_value = mock_auth_session
+                await usage_stats_job.generate_usage_stats()
+
+    cached_data = json.loads(mock_redis.setex.call_args_list[0][0][2])
+    assert len(cached_data) == 1
+    assert cached_data[0]["log_count"] == 500
+    assert cached_data[0]["span_count"] == 4_567
+    assert cached_data[0]["metric_point_count"] == 89

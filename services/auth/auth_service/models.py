@@ -31,9 +31,9 @@ class Account(database.Base):
 
     __tablename__ = "accounts"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
 
-    email: Mapped[str] = mapped_column(VARCHAR(255), unique=True, nullable=False, index=True)
+    email: Mapped[str] = mapped_column(VARCHAR(255), unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(CHAR(60), nullable=False)
     name: Mapped[str] = mapped_column(VARCHAR(255), nullable=False)
 
@@ -90,13 +90,7 @@ class Account(database.Base):
     )
 
     __table_args__ = (
-        Index("idx_accounts_email", "email"),
         Index("idx_accounts_status", "status", postgresql_where=(status == "active")),
-        Index(
-            "idx_accounts_notification_prefs",
-            "notification_preferences",
-            postgresql_using="gin",
-        ),
         CheckConstraint(
             "plan IN ('free', 'pro', 'enterprise')",
             name="check_account_plan",
@@ -127,16 +121,15 @@ class RefreshToken(database.Base):
 
     __tablename__ = "refresh_tokens"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
 
     account_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("accounts.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
 
-    token_hash: Mapped[str] = mapped_column(CHAR(64), unique=True, nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(CHAR(64), unique=True, nullable=False)
 
     device_info: Mapped[str | None] = mapped_column(VARCHAR(255), nullable=True)
 
@@ -164,7 +157,6 @@ class RefreshToken(database.Base):
     account: Mapped["Account"] = relationship("Account", backref="refresh_tokens")
 
     __table_args__ = (
-        Index("idx_refresh_tokens_token_hash", "token_hash"),
         Index("idx_refresh_tokens_account_id", "account_id"),
         Index(
             "idx_refresh_tokens_active",
@@ -196,17 +188,16 @@ class Project(database.Base):
 
     __tablename__ = "projects"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
 
     account_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("accounts.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
 
     name: Mapped[str] = mapped_column(VARCHAR(255), nullable=False)
-    slug: Mapped[str] = mapped_column(VARCHAR(255), unique=True, nullable=False, index=True)
+    slug: Mapped[str] = mapped_column(VARCHAR(255), unique=True, nullable=False)
     environment: Mapped[str] = mapped_column(VARCHAR(20), default="production", nullable=False)
 
     retention_days: Mapped[int] = mapped_column(SmallInteger, default=30, nullable=False)
@@ -254,7 +245,6 @@ class Project(database.Base):
 
     __table_args__ = (
         Index("idx_projects_account_id", "account_id"),
-        Index("idx_projects_slug", "slug"),
         CheckConstraint(
             "environment IN ('production', 'staging', 'dev')",
             name="check_project_environment",
@@ -294,17 +284,16 @@ class ApiKey(database.Base):
 
     __tablename__ = "api_keys"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
 
     project_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
 
     key_prefix: Mapped[str] = mapped_column(VARCHAR(20), nullable=False)
-    key_hash: Mapped[str] = mapped_column(CHAR(64), unique=True, nullable=False, index=True)
+    key_hash: Mapped[str] = mapped_column(CHAR(64), unique=True, nullable=False)
 
     name: Mapped[str | None] = mapped_column(VARCHAR(255), nullable=True)
     last_used_at: Mapped[datetime.datetime | None] = mapped_column(
@@ -330,7 +319,6 @@ class ApiKey(database.Base):
     project: Mapped["Project"] = relationship("Project", back_populates="api_keys")
 
     __table_args__ = (
-        Index("idx_api_keys_key_hash", "key_hash"),
         Index("idx_api_keys_project_id", "project_id"),
         Index(
             "idx_api_keys_validation",
@@ -365,18 +353,18 @@ class DailyUsage(database.Base):
     Performance notes:
     - Composite unique index on (project_id, date)
     - UPSERT pattern for atomic increments
-    - Descending date index for recent queries
+    - The unique (project_id, date) index serves both the upsert conflict target
+      and every read; Postgres scans it backwards for date-descending queries.
     """
 
     __tablename__ = "daily_usage"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
 
     project_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
 
     date: Mapped[datetime.datetime] = mapped_column(
@@ -385,8 +373,6 @@ class DailyUsage(database.Base):
     )
 
     logs_ingested: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
-    logs_queried: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
-    storage_bytes: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
     spans_ingested: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
     metric_points_ingested: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
 
@@ -405,20 +391,10 @@ class DailyUsage(database.Base):
     project: Mapped["Project"] = relationship("Project", back_populates="daily_usage")
 
     __table_args__ = (
-        Index(
-            "idx_daily_usage_project_date",
-            "project_id",
-            "date",
-            postgresql_ops={"date": "DESC"},
-        ),
         Index("uq_daily_usage_project_date", "project_id", "date", unique=True),
         CheckConstraint(
             "logs_ingested >= 0",
             name="check_logs_ingested",
-        ),
-        CheckConstraint(
-            "logs_queried >= 0",
-            name="check_logs_queried",
         ),
     )
 
@@ -429,19 +405,17 @@ class DailyUsage(database.Base):
 class ProjectMember(database.Base):
     __tablename__ = "project_members"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
 
     project_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     account_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("accounts.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     role: Mapped[str] = mapped_column(VARCHAR(20), default="member", nullable=False)
 
@@ -456,7 +430,6 @@ class ProjectMember(database.Base):
 
     __table_args__ = (
         Index("idx_project_members_account_id", "account_id"),
-        Index("idx_project_members_project_id", "project_id"),
         Index("uq_project_members", "project_id", "account_id", unique=True),
         CheckConstraint(
             "role IN ('owner', 'member')",
@@ -471,13 +444,12 @@ class ProjectMember(database.Base):
 class ProjectInviteCode(database.Base):
     __tablename__ = "project_invite_codes"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
 
     project_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     code_hash: Mapped[str] = mapped_column(CHAR(64), unique=True, nullable=False)
     created_by: Mapped[int] = mapped_column(
@@ -527,21 +499,20 @@ class UserDashboard(database.Base):
     Each user has one dashboard with multiple customizable panels.
 
     Performance notes:
-    - JSONB for flexible panel storage with indexing support
-    - One-to-one relationship with Account (unique user_id)
-    - GIN index on panels for fast JSON queries
+    - JSONB for flexible panel storage
+    - One-to-one relationship with Account; the unique user_id index is the only
+      access path (panels are always fetched whole, never queried into)
     """
 
     __tablename__ = "user_dashboards"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
 
     user_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("accounts.id", ondelete="CASCADE"),
         unique=True,
         nullable=False,
-        index=True,
     )
 
     panels: Mapped[list] = mapped_column(
@@ -576,10 +547,7 @@ class UserDashboard(database.Base):
 
     account: Mapped["Account"] = relationship("Account", backref="dashboard")
 
-    __table_args__ = (
-        Index("idx_user_dashboards_user_id", "user_id"),
-        Index("idx_user_dashboards_panels", "panels", postgresql_using="gin"),
-    )
+    __table_args__ = ()
 
     def __repr__(self) -> str:
         return f"<UserDashboard(id={self.id}, user_id={self.user_id}, panels={len(self.panels)})>"
@@ -588,15 +556,14 @@ class UserDashboard(database.Base):
 class Notification(database.Base):
     __tablename__ = "notifications"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
 
     user_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("accounts.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
-    project_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     kind: Mapped[str] = mapped_column(VARCHAR(30), nullable=False)
     severity: Mapped[str] = mapped_column(VARCHAR(20), default="info", nullable=False)
     payload: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
@@ -636,13 +603,12 @@ class Notification(database.Base):
 class AlertRule(database.Base):
     __tablename__ = "alert_rules"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
 
     project_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     name: Mapped[str] = mapped_column(VARCHAR(255), nullable=False)
     metric_type: Mapped[str] = mapped_column(VARCHAR(50), nullable=False)
@@ -695,13 +661,11 @@ class AlertRule(database.Base):
     )
 
     __table_args__ = (
+        # No index on `enabled`: the evaluator's scan is
+        # `WHERE enabled = TRUE` across all projects, which a project-leading
+        # index cannot serve, and every per-project listing goes through
+        # idx_alert_rules_project_id.
         Index("idx_alert_rules_project_id", "project_id"),
-        Index(
-            "idx_alert_rules_enabled",
-            "project_id",
-            "enabled",
-            postgresql_where=(enabled == True),  # noqa: E712
-        ),
         CheckConstraint(
             "comparator IN ('>', '<', '>=', '<=')",
             name="check_alert_comparator",
@@ -727,13 +691,12 @@ class AlertRule(database.Base):
 class Connector(database.Base):
     __tablename__ = "connectors"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
 
     account_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("accounts.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     kind: Mapped[str] = mapped_column(VARCHAR(20), nullable=False)
     name: Mapped[str] = mapped_column(VARCHAR(255), nullable=False)
@@ -787,15 +750,14 @@ class AlertRuleConnector(database.Base):
 class AlertEvent(database.Base):
     __tablename__ = "alert_events"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
 
     rule_id: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("alert_rules.id", ondelete="SET NULL"),
         nullable=True,
-        index=True,
     )
-    project_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     rule_name: Mapped[str] = mapped_column(VARCHAR(255), nullable=False)
     metric_type: Mapped[str] = mapped_column(VARCHAR(50), nullable=False)
     comparator: Mapped[str] = mapped_column(VARCHAR(4), nullable=False)
@@ -810,7 +772,6 @@ class AlertEvent(database.Base):
         DateTime(timezone=True),
         default=datetime.datetime.now(datetime.timezone.utc),
         nullable=False,
-        index=True,
     )
 
     acked_by: Mapped[int | None] = mapped_column(
@@ -827,6 +788,9 @@ class AlertEvent(database.Base):
 
     __table_args__ = (
         Index("idx_alert_events_project_fired", "project_id", "fired_at"),
+        # The evaluator looks up the current firing episode and the latest snooze
+        # by rule_id.
+        Index("idx_alert_events_rule_id", "rule_id"),
         CheckConstraint(
             "state IN ('firing', 'resolved')",
             name="check_alert_event_state",
@@ -846,13 +810,12 @@ class MaintenanceWindow(database.Base):
 
     __tablename__ = "maintenance_windows"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
 
     project_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     name: Mapped[str] = mapped_column(VARCHAR(255), nullable=False)
     starts_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -896,20 +859,21 @@ class Monitor(database.Base):
 
     __tablename__ = "monitors"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
 
     project_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
 
     kind: Mapped[str] = mapped_column(VARCHAR(20), nullable=False)
     name: Mapped[str] = mapped_column(VARCHAR(255), nullable=False)
 
     target_url: Mapped[str | None] = mapped_column(VARCHAR(2048), nullable=True)
-    token: Mapped[str | None] = mapped_column(VARCHAR(64), unique=True, nullable=True)
+    # Uniqueness comes from the partial idx_monitors_token below, matching the
+    # c7d8e9f0a1b2 migration; a column-level UNIQUE would be a second index.
+    token: Mapped[str | None] = mapped_column(VARCHAR(64), nullable=True)
 
     interval_s: Mapped[int] = mapped_column(Integer, default=60, nullable=False)
     timeout_s: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
@@ -968,20 +932,18 @@ class Monitor(database.Base):
 class MonitorCheck(database.Base):
     __tablename__ = "monitor_checks"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
 
     monitor_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("monitors.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
 
     checked_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         default=datetime.datetime.now(datetime.timezone.utc),
         nullable=False,
-        index=True,
     )
     ok: Mapped[bool] = mapped_column(Boolean, nullable=False)
     latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -1002,20 +964,18 @@ class MonitorCheck(database.Base):
 class NotificationPreference(database.Base):
     __tablename__ = "notification_preferences"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
 
     user_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("accounts.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
-    project_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     rule_id: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("alert_rules.id", ondelete="CASCADE"),
         nullable=True,
-        index=True,
     )
     severity: Mapped[str | None] = mapped_column(VARCHAR(20), nullable=True)
     muted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

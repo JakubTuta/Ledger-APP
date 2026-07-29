@@ -11,19 +11,20 @@ logger = logging.get_logger("jobs.retention")
 _DELETE_BATCH_SIZE = 5000
 _ROLLUP_RETENTION_DAYS = 90
 
-_LOGS_PARTITION_RE = re.compile(r"^logs_(\d{4})_(\d{2})$")
-_SPANS_PARTITION_RE = re.compile(r"^spans_(\d{4})_(\d{2})_(\d{2})$")
-_METRIC_POINTS_PARTITION_RE = re.compile(r"^metric_points_(\d{4})_(\d{2})$")
+# partition_manager creates one partition per calendar month for all three
+# partitioned tables, so they share a single naming pattern.
+_MONTHLY_PARTITION_RE = re.compile(r"^(?:logs|spans|metric_points)_(\d{4})_(\d{2})$")
 
 _ROLLUP_TABLES = (
     ("log_volume_5m", "bucket"),
     ("log_volume_1h", "bucket"),
     ("log_volume_1d", "bucket"),
     ("error_rate_5m", "bucket"),
-    ("endpoint_latency_1h", "bucket"),
     ("span_latency_1h", "bucket"),
     ("metric_points_1h", "bucket"),
 )
+
+_MONITOR_CHECK_RETENTION_DAYS = 90
 
 
 async def enforce_retention() -> None:
@@ -57,6 +58,9 @@ async def enforce_retention() -> None:
             await _prune_error_groups(logs_session, project_retention, now)
             await _prune_rollups(logs_session, now)
 
+        async with database.get_auth_session() as auth_session:
+            await _prune_monitor_checks(auth_session, now)
+
         elapsed = time.perf_counter() - start
         logger.info(f"Retention enforcement done in {elapsed:.2f}s")
 
@@ -65,25 +69,15 @@ async def enforce_retention() -> None:
         raise
 
 
-def _partition_range_end(table: str, name: str) -> datetime.date | None:
-    if table == "logs" or table == "metric_points":
-        pattern = _LOGS_PARTITION_RE if table == "logs" else _METRIC_POINTS_PARTITION_RE
-        m = pattern.match(name)
-        if not m:
-            return None
-        year, month = int(m.group(1)), int(m.group(2))
-        if month == 12:
-            return datetime.date(year + 1, 1, 1)
-        return datetime.date(year, month + 1, 1)
+def _partition_range_end(name: str) -> datetime.date | None:
+    m = _MONTHLY_PARTITION_RE.match(name)
+    if not m:
+        return None
 
-    if table == "spans":
-        m = _SPANS_PARTITION_RE.match(name)
-        if not m:
-            return None
-        year, month, day = int(m.group(1)), int(m.group(2)), int(m.group(3))
-        return datetime.date(year, month, day) + datetime.timedelta(days=1)
-
-    return None
+    year, month = int(m.group(1)), int(m.group(2))
+    if month == 12:
+        return datetime.date(year + 1, 1, 1)
+    return datetime.date(year, month + 1, 1)
 
 
 async def _drop_expired_partitions(
@@ -103,7 +97,7 @@ async def _drop_expired_partitions(
     partition_names = [row[0] for row in result.fetchall()]
 
     for name in partition_names:
-        range_end = _partition_range_end(table, name)
+        range_end = _partition_range_end(name)
         if range_end is None or range_end > cutoff_date:
             continue
 
@@ -131,13 +125,20 @@ async def _trim_short_retention_projects(
 
         cutoff = now - datetime.timedelta(days=retention_days)
 
+        # Batch on (tableoid, ctid), not ctid alone: ctid is only unique within
+        # one physical table, so on a partitioned parent a ctid collected from
+        # one partition also matches a live - unrelated - row in another,
+        # which the outer DELETE would then remove. tableoid disambiguates.
         while True:
             result = await session.execute(
                 sa.text(
                     f"""
-                    DELETE FROM {table} WHERE ctid IN (
-                        SELECT ctid FROM {table}
-                        WHERE project_id = :pid AND {timestamp_column} < :cutoff
+                    DELETE FROM {table} target
+                    WHERE (target.tableoid, target.ctid) IN (
+                        SELECT source.tableoid, source.ctid
+                        FROM {table} source
+                        WHERE source.project_id = :pid
+                          AND source.{timestamp_column} < :cutoff
                         LIMIT :limit
                     )
                     """
@@ -161,6 +162,21 @@ async def _prune_error_groups(
             sa.text("DELETE FROM error_groups WHERE project_id = :pid AND last_seen < :cutoff"),
             {"pid": project_id, "cutoff": cutoff},
         )
+    await session.commit()
+
+
+async def _prune_monitor_checks(
+    session: sa.ext.asyncio.AsyncSession, now: datetime.datetime
+) -> None:
+    """
+    monitor_checks gets one append-only row per enabled monitor per interval
+    (a minute, by default) and had no expiry, so it grew without bound.
+    """
+    cutoff = now - datetime.timedelta(days=_MONITOR_CHECK_RETENTION_DAYS)
+    await session.execute(
+        sa.text("DELETE FROM monitor_checks WHERE checked_at < :cutoff"),
+        {"cutoff": cutoff},
+    )
     await session.commit()
 
 

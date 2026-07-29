@@ -7,9 +7,15 @@ import sqlalchemy as sa
 
 logger = logging.get_logger("jobs.partition_manager")
 
-_DAILY_TABLES = ("spans",)
-_DAYS_AHEAD = 7
-_LOGS_MONTHS_AHEAD = 3
+# All three partitioned tables are range-partitioned by calendar month, matching
+# ingestion_service.services.partition_manager (which creates them on the write
+# path) and the retention job (which drops them by the same name shape). This
+# job used to create daily `spans_YYYY_MM_DD` partitions instead, which can
+# never coexist with the monthly ones the ingestion worker creates: whichever
+# ran first won and the other side failed with an overlap error on every pass.
+# metric_points was not covered here at all.
+_PARTITIONED_TABLES = ("logs", "spans", "metric_points")
+_MONTHS_AHEAD = 3
 
 
 async def manage_partitions() -> None:
@@ -17,8 +23,8 @@ async def manage_partitions() -> None:
 
     try:
         async with database.get_logs_session() as session:
-            await _ensure_daily_partitions(session)
-            await _ensure_logs_partitions(session)
+            for table in _PARTITIONED_TABLES:
+                await _ensure_monthly_partitions(session, table)
 
         elapsed = time.perf_counter() - start
         logger.info(f"Partition management done in {elapsed:.2f}s")
@@ -28,57 +34,22 @@ async def manage_partitions() -> None:
         raise
 
 
-async def _ensure_daily_partitions(session: sa.ext.asyncio.AsyncSession) -> None:
-    today = datetime.date.today()
+def _month_range(base: datetime.date, offset: int) -> tuple[datetime.date, datetime.date]:
+    month_index = base.year * 12 + (base.month - 1) + offset
+    year, month_zero_based = divmod(month_index, 12)
+    range_start = datetime.date(year, month_zero_based + 1, 1)
 
-    for table in _DAILY_TABLES:
-        for offset in range(_DAYS_AHEAD):
-            d = today + datetime.timedelta(days=offset)
-            partition_name = f"{table}_{d.strftime('%Y_%m_%d')}"
-            range_start = d
-            range_end = d + datetime.timedelta(days=1)
-
-            exists_result = await session.execute(
-                sa.text(
-                    "SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = :name"
-                ),
-                {"name": partition_name},
-            )
-            if exists_result.scalar():
-                continue
-
-            try:
-                await session.execute(
-                    sa.text(
-                        f"CREATE TABLE IF NOT EXISTS {partition_name} "
-                        f"PARTITION OF {table} "
-                        f"FOR VALUES FROM ('{range_start}') TO ('{range_end}')"
-                    )
-                )
-                await session.commit()
-                logger.info(f"Created partition {partition_name}")
-            except Exception as e:
-                await session.rollback()
-                logger.warning(f"Failed to create partition {partition_name}: {e}")
+    if range_start.month == 12:
+        return range_start, datetime.date(range_start.year + 1, 1, 1)
+    return range_start, datetime.date(range_start.year, range_start.month + 1, 1)
 
 
-async def _ensure_logs_partitions(session: sa.ext.asyncio.AsyncSession) -> None:
-    today = datetime.date.today()
-    first_of_month = today.replace(day=1)
+async def _ensure_monthly_partitions(session: sa.ext.asyncio.AsyncSession, table: str) -> None:
+    first_of_month = datetime.date.today().replace(day=1)
 
-    for month_offset in range(_LOGS_MONTHS_AHEAD + 1):
-        year = first_of_month.year
-        month = first_of_month.month + month_offset
-        if month > 12:
-            year += (month - 1) // 12
-            month = ((month - 1) % 12) + 1
-
-        partition_name = f"logs_{year}_{month:02d}"
-        range_start = datetime.date(year, month, 1)
-        if month == 12:
-            range_end = datetime.date(year + 1, 1, 1)
-        else:
-            range_end = datetime.date(year, month + 1, 1)
+    for month_offset in range(_MONTHS_AHEAD + 1):
+        range_start, range_end = _month_range(first_of_month, month_offset)
+        partition_name = f"{table}_{range_start.year}_{range_start.month:02d}"
 
         exists_result = await session.execute(
             sa.text("SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = :name"),
@@ -91,7 +62,7 @@ async def _ensure_logs_partitions(session: sa.ext.asyncio.AsyncSession) -> None:
             await session.execute(
                 sa.text(
                     f"CREATE TABLE IF NOT EXISTS {partition_name} "
-                    f"PARTITION OF logs "
+                    f"PARTITION OF {table} "
                     f"FOR VALUES FROM ('{range_start}') TO ('{range_end}')"
                 )
             )

@@ -4,6 +4,7 @@ import secrets
 
 import grpc
 import sqlalchemy as sa
+import sqlalchemy.dialects.postgresql as sa_postgresql
 from auth_service import config, database
 from auth_service import models
 from auth_service.proto import auth_pb2, auth_pb2_grpc
@@ -2119,12 +2120,11 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                 )
                 monitors = result.scalars().all()
 
-                proto_monitors = []
-                for m in monitors:
-                    status = await _monitor_status(session, m.id)
-                    proto_monitors.append(_monitor_to_proto(m, status))
+                statuses = await _monitor_statuses(session, [m.id for m in monitors])
 
-                return auth_pb2.ListMonitorsResponse(monitors=proto_monitors)
+                return auth_pb2.ListMonitorsResponse(
+                    monitors=[_monitor_to_proto(m, statuses.get(m.id)) for m in monitors]
+                )
 
         except Exception as e:
             context.set_code(grpc.StatusCode.INTERNAL)
@@ -2434,43 +2434,73 @@ def _monitor_to_proto(m: models.Monitor, status: dict | None = None) -> auth_pb2
     return monitor
 
 
-async def _monitor_status(session: "sa.ext.asyncio.AsyncSession", monitor_id: int) -> dict:
-    """Latest check + 24h uptime % for a monitor, computed from monitor_checks."""
-    latest_result = await session.execute(
-        sa.text(
-            """
-            SELECT checked_at, ok, latency_ms
-            FROM monitor_checks
-            WHERE monitor_id = :mid
-            ORDER BY checked_at DESC
-            LIMIT 1
-            """
-        ),
-        {"mid": monitor_id},
-    )
-    latest = latest_result.fetchone()
+# Latest check + 24h uptime % for a set of monitors. Both halves read
+# monitor_checks through idx_monitor_checks_monitor_checked; the LATERAL keeps
+# "newest row per monitor" a one-row index lookup rather than an aggregate over
+# the monitor's whole history.
+_MONITOR_STATUS_SQL = sa.text(
+    """
+    SELECT
+        m.id AS monitor_id,
+        latest.checked_at,
+        latest.ok,
+        latest.latency_ms,
+        COALESCE(uptime.ok_count, 0) AS ok_count,
+        COALESCE(uptime.total_count, 0) AS total_count
+    FROM UNNEST(:monitor_ids) AS m(id)
+    LEFT JOIN LATERAL (
+        SELECT checked_at, ok, latency_ms
+        FROM monitor_checks mc
+        WHERE mc.monitor_id = m.id
+        ORDER BY mc.checked_at DESC
+        LIMIT 1
+    ) latest ON TRUE
+    LEFT JOIN LATERAL (
+        SELECT COUNT(*) FILTER (WHERE mc.ok) AS ok_count, COUNT(*) AS total_count
+        FROM monitor_checks mc
+        WHERE mc.monitor_id = m.id AND mc.checked_at >= :since
+    ) uptime ON TRUE
+    """
+).bindparams(
+    sa.bindparam("monitor_ids", type_=sa_postgresql.ARRAY(sa.BigInteger)),
+)
+
+
+async def _monitor_statuses(
+    session: "sa.ext.asyncio.AsyncSession", monitor_ids: list[int]
+) -> dict[int, dict]:
+    """Latest check + 24h uptime % for each of `monitor_ids`, in one round trip."""
+    if not monitor_ids:
+        return {}
 
     since = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=24)
-    uptime_result = await session.execute(
-        sa.text(
-            """
-            SELECT
-                COUNT(*) FILTER (WHERE ok) AS ok_count,
-                COUNT(*) AS total_count
-            FROM monitor_checks
-            WHERE monitor_id = :mid AND checked_at >= :since
-            """
-        ),
-        {"mid": monitor_id, "since": since},
+    result = await session.execute(
+        _MONITOR_STATUS_SQL,
+        {"monitor_ids": monitor_ids, "since": since},
     )
-    row = uptime_result.fetchone()
-    ok_count = (row[0] or 0) if row else 0
-    total_count = (row[1] or 0) if row else 0
-    uptime_pct = (100.0 * ok_count / total_count) if total_count > 0 else 0.0
 
     return {
-        "last_checked_at": latest[0].isoformat() if latest else None,
-        "last_ok": bool(latest[1]) if latest else None,
-        "last_latency_ms": latest[2] if latest and latest[2] is not None else None,
-        "uptime_pct_24h": uptime_pct,
+        row.monitor_id: {
+            "last_checked_at": row.checked_at.isoformat() if row.checked_at else None,
+            "last_ok": bool(row.ok) if row.ok is not None else None,
+            "last_latency_ms": row.latency_ms,
+            "uptime_pct_24h": (
+                (100.0 * row.ok_count / row.total_count) if row.total_count > 0 else 0.0
+            ),
+        }
+        for row in result.fetchall()
     }
+
+
+async def _monitor_status(session: "sa.ext.asyncio.AsyncSession", monitor_id: int) -> dict:
+    """Latest check + 24h uptime % for a monitor, computed from monitor_checks."""
+    statuses = await _monitor_statuses(session, [monitor_id])
+    return statuses.get(
+        monitor_id,
+        {
+            "last_checked_at": None,
+            "last_ok": None,
+            "last_latency_ms": None,
+            "uptime_pct_24h": 0.0,
+        },
+    )

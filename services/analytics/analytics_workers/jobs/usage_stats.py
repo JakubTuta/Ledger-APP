@@ -24,7 +24,12 @@ async def generate_usage_stats() -> None:
         # Union of (project_id, date) keys across all three signals - a
         # spans-only day (no logs that day) must still produce an entry with
         # log_count: 0, not be silently dropped.
-        counts: dict[tuple[int, object], dict[str, int]] = {}
+        #
+        # Spans and metric points are only recomputed for the last couple of
+        # days (see _fetch_span_counts), so days older than that are seeded from
+        # what a previous run already persisted; otherwise this job would
+        # overwrite their historical counts with 0.
+        counts: dict[tuple[int, object], dict[str, int]] = await _fetch_persisted_counts()
         for project_id, date, log_count in log_rows:
             counts.setdefault((project_id, date), {})["log_count"] = log_count
         for project_id, date, span_count in span_rows:
@@ -116,17 +121,45 @@ async def _fetch_projects() -> dict[int, dict[str, int]]:
         }
 
 
+async def _fetch_persisted_counts() -> dict[tuple[int, object], dict[str, int]]:
+    """Counts a previous run already wrote, for the days no longer recomputed."""
+    async with database.get_auth_session() as session:
+        result = await session.execute(
+            sa.text(
+                """
+                SELECT project_id, date, logs_ingested, spans_ingested,
+                       metric_points_ingested
+                FROM daily_usage
+                WHERE date > (NOW() - INTERVAL '30 days')::date
+                """
+            )
+        )
+        return {
+            (row[0], row[1].date() if hasattr(row[1], "date") else row[1]): {
+                "log_count": row[2],
+                "span_count": row[3],
+                "metric_point_count": row[4],
+            }
+            for row in result.fetchall()
+        }
+
+
 async def _fetch_log_counts() -> list[tuple]:
+    """
+    Per-project daily log counts over the retained window, read from the
+    log_volume_1d rollup rather than re-aggregating 30 days of raw `logs` on
+    every run (this job runs every 10 minutes).
+    """
     async with database.get_logs_session() as session:
         query = sa.text(
             """
             SELECT
                 project_id,
-                DATE(timestamp) as date,
-                COUNT(*) as log_count
-            FROM logs
-            WHERE timestamp > NOW() - INTERVAL '30 days'
-            GROUP BY project_id, DATE(timestamp)
+                bucket AS date,
+                SUM(count) AS log_count
+            FROM log_volume_1d
+            WHERE bucket > (NOW() - INTERVAL '30 days')::date
+            GROUP BY project_id, bucket
             ORDER BY project_id, date DESC
         """
         )
@@ -135,6 +168,11 @@ async def _fetch_log_counts() -> list[tuple]:
 
 
 async def _fetch_span_counts() -> list[tuple]:
+    """
+    Spans have no daily rollup, so this still aggregates the raw partitions -
+    but only over today and yesterday. Older days were already written to
+    daily_usage by an earlier run and never change.
+    """
     async with database.get_logs_session() as session:
         query = sa.text(
             """
@@ -143,7 +181,7 @@ async def _fetch_span_counts() -> list[tuple]:
                 DATE(start_time) as date,
                 COUNT(*) as span_count
             FROM spans
-            WHERE start_time > NOW() - INTERVAL '30 days'
+            WHERE start_time > NOW() - INTERVAL '2 days'
             GROUP BY project_id, DATE(start_time)
             ORDER BY project_id, date DESC
         """
@@ -153,6 +191,7 @@ async def _fetch_span_counts() -> list[tuple]:
 
 
 async def _fetch_metric_point_counts() -> list[tuple]:
+    """Same bounded-window reasoning as _fetch_span_counts()."""
     async with database.get_logs_session() as session:
         query = sa.text(
             """
@@ -161,7 +200,7 @@ async def _fetch_metric_point_counts() -> list[tuple]:
                 DATE(ts) as date,
                 COUNT(*) as metric_point_count
             FROM metric_points
-            WHERE ts > NOW() - INTERVAL '30 days'
+            WHERE ts > NOW() - INTERVAL '2 days'
             GROUP BY project_id, DATE(ts)
             ORDER BY project_id, date DESC
         """
@@ -174,11 +213,11 @@ async def _batch_upsert_daily_usage(params: list[dict]) -> None:
     upsert_query = sa.text(
         """
         INSERT INTO daily_usage (
-            project_id, date, logs_ingested, logs_queried, storage_bytes,
+            project_id, date, logs_ingested,
             spans_ingested, metric_points_ingested, created_at, updated_at
         )
         VALUES (
-            :project_id, :date, :log_count, 0, 0,
+            :project_id, :date, :log_count,
             :span_count, :metric_point_count, NOW(), NOW()
         )
         ON CONFLICT (project_id, date)

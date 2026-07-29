@@ -50,17 +50,17 @@ async def _aggregate_endpoint_metrics(
             WITH endpoint_data AS (
                 SELECT
                     project_id,
-                    (attributes->'endpoint'->>'method')::VARCHAR AS method,
-                    (attributes->'endpoint'->>'path')::VARCHAR AS path,
-                    (attributes->'endpoint'->>'status_code')::INTEGER AS status_code,
-                    (attributes->'endpoint'->>'duration_ms')::FLOAT AS duration_ms
+                    method,
+                    path,
+                    status_code,
+                    duration_ms::FLOAT AS duration_ms
                 FROM logs
                 WHERE
                     log_type = 'endpoint'
                     AND timestamp >= :start_time
                     AND timestamp < :end_time
-                    AND attributes->'endpoint'->>'method' IS NOT NULL
-                    AND attributes->'endpoint'->>'path' IS NOT NULL
+                    AND method IS NOT NULL
+                    AND path IS NOT NULL
             )
             INSERT INTO aggregated_metrics (
                 project_id,
@@ -149,25 +149,16 @@ async def _aggregate_exception_metrics(
     async with database.get_logs_session() as session:
         query = sa.text(
             """
-            WITH all_logs AS (
-                SELECT project_id, COUNT(*) AS total_count
+            WITH hourly AS (
+                SELECT
+                    project_id,
+                    COUNT(*) AS total_count,
+                    COUNT(*) FILTER (
+                        WHERE log_type = 'exception'
+                           OR (log_type IN ('endpoint', 'network') AND status_code >= 400)
+                    ) AS error_count
                 FROM logs
                 WHERE timestamp >= :start_time AND timestamp < :end_time
-                GROUP BY project_id
-            ),
-            error_logs AS (
-                SELECT project_id, COUNT(*) AS error_count
-                FROM logs
-                WHERE
-                    (
-                        log_type = 'exception'
-                        OR (
-                            log_type IN ('endpoint', 'network')
-                            AND status_code >= 400
-                        )
-                    )
-                    AND timestamp >= :start_time
-                    AND timestamp < :end_time
                 GROUP BY project_id
             )
             INSERT INTO aggregated_metrics (
@@ -183,7 +174,7 @@ async def _aggregate_exception_metrics(
                 error_count
             )
             SELECT
-                a.project_id,
+                project_id,
                 :date_str AS date,
                 :hour AS hour,
                 'exception' AS metric_type,
@@ -191,10 +182,9 @@ async def _aggregate_exception_metrics(
                 NULL AS endpoint_path,
                 NULL AS log_level,
                 NULL AS log_type,
-                a.total_count AS log_count,
-                COALESCE(e.error_count, 0) AS error_count
-            FROM all_logs a
-            LEFT JOIN error_logs e ON a.project_id = e.project_id
+                total_count AS log_count,
+                error_count
+            FROM hourly
             ON CONFLICT (
                 project_id,
                 date,

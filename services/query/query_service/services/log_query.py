@@ -50,9 +50,13 @@ def _apply_log_filters(query: sa.Select, filters: schemas.LogFilters) -> sa.Sele
             query = query.where(sa.or_(*status_conditions))
     if filters.search:
         term = f"%{filters.search}%"
-        # Message/error_message are backed by GIN trigram indexes
-        # (ix_logs_message_trgm / ix_logs_error_message_trgm), so this ILIKE
-        # substring search stays index-assisted even at scale.
+        # This OR spans columns with no per-column index, so no index can serve
+        # it directly - it is evaluated as a filter on top of whatever the
+        # project_id/timestamp predicates already narrowed the scan to. Keep
+        # search requests time-bounded. (Trigram GIN indexes on message and
+        # error_message were dropped in ingestion revision 015: a BitmapOr needs
+        # every arm indexable, so they were never usable here, while costing on
+        # every insert.)
         query = query.where(
             sa.or_(
                 models.Log.method.ilike(term),
@@ -118,6 +122,14 @@ _STATUS_CLASS_EXPR = sa.case(
 )
 
 
+_FACET_DIMENSIONS: tuple[tuple[str, sa.ColumnElement], ...] = (
+    ("level", models.Log.level),
+    ("log_type", models.Log.log_type),
+    ("status_class", _STATUS_CLASS_EXPR),
+    ("environment", models.Log.environment),
+)
+
+
 async def get_log_facets(
     project_id: int,
     filters: schemas.LogFilters,
@@ -127,46 +139,50 @@ async def get_log_facets(
     environment) under the current filter set. Reuses the same
     _apply_log_filters() where-clauses as query_logs() so facet counts always
     match what the log table itself would show.
+
+    All four facets come out of one GROUPING SETS pass. As four separate
+    GROUP BY queries this scanned the same slice of `logs` four times per
+    request, which is the expensive part of the log view's initial load.
     """
     async with database.get_logs_session() as session:
-
-        def _facet_query(column: sa.ColumnElement, label: str) -> sa.Select:
-            value_col = column.label("value")
-            count_col = sa.func.count().label("count")
-            q = sa.select(value_col, count_col).where(models.Log.project_id == project_id)
-            q = _apply_log_filters(q, filters)
-            return q.group_by(value_col).order_by(count_col.desc())
-
-        def _rows_to_values(rows) -> list[schemas.LogFacetValue]:
-            return [
-                schemas.LogFacetValue(value=row.value, count=row.count)
-                for row in rows
-                if row.value is not None
-            ]
-
-        level_result = await session.execute(_facet_query(models.Log.level, "level"))
-        log_type_result = await session.execute(_facet_query(models.Log.log_type, "log_type"))
-        environment_result = await session.execute(
-            _facet_query(models.Log.environment, "environment")
+        dimension_columns = [
+            expression.label(f"dim_{name}") for name, expression in _FACET_DIMENSIONS
+        ]
+        grouping_sets = sa.func.grouping_sets(
+            *[sa.tuple_(expression) for _, expression in _FACET_DIMENSIONS]
         )
-        status_class_query = sa.select(
-            _STATUS_CLASS_EXPR.label("value"), sa.func.count().label("count")
-        ).where(
-            models.Log.project_id == project_id,
-            models.Log.status_code.isnot(None),
+
+        query = sa.select(*dimension_columns, sa.func.count().label("count")).where(
+            models.Log.project_id == project_id
         )
-        status_class_query = _apply_log_filters(status_class_query, filters)
-        status_class_query = status_class_query.group_by(_STATUS_CLASS_EXPR).order_by(
-            sa.func.count().desc()
-        )
-        status_class_result = await session.execute(status_class_query)
+        query = _apply_log_filters(query, filters)
+        query = query.group_by(grouping_sets)
+
+        result = await session.execute(query)
+
+        # Exactly one dimension is non-NULL per row (the one its grouping set
+        # grouped on), except for the all-NULL rows a NULL value in the source
+        # column produces - those are dropped, matching the previous per-facet
+        # `if row.value is not None`.
+        buckets: dict[str, list[schemas.LogFacetValue]] = {
+            name: [] for name, _ in _FACET_DIMENSIONS
+        }
+        for row in result.all():
+            for index, (name, _) in enumerate(_FACET_DIMENSIONS):
+                value = row[index]
+                if value is not None:
+                    buckets[name].append(schemas.LogFacetValue(value=value, count=row.count))
+                    break
+
+        for values in buckets.values():
+            values.sort(key=lambda facet: facet.count, reverse=True)
 
         return schemas.LogFacetsResponse(
             project_id=project_id,
-            level=_rows_to_values(level_result.all()),
-            log_type=_rows_to_values(log_type_result.all()),
-            status_class=_rows_to_values(status_class_result.all()),
-            environment=_rows_to_values(environment_result.all()),
+            level=buckets["level"],
+            log_type=buckets["log_type"],
+            status_class=buckets["status_class"],
+            environment=buckets["environment"],
         )
 
 
@@ -333,6 +349,11 @@ async def get_error_list(
 
         latest_log = models.Log.__table__.alias("latest_log")
 
+        # `logs` is partitioned on timestamp and `id` alone is not part of the
+        # partition key, so joining on id would probe every partition's primary
+        # key. Repeating the caller's window (which every joined row satisfies
+        # by construction - it came out of the same filtered set) and the
+        # project scope lets the planner prune to the partitions in range.
         final_query = (
             sa.select(
                 paged_groups.c.group_key,
@@ -353,7 +374,15 @@ async def get_error_list(
                 latest_log.c.sdk_version,
                 latest_log.c.platform,
             )
-            .join(latest_log, latest_log.c.id == paged_groups.c.latest_log_id)
+            .join(
+                latest_log,
+                sa.and_(
+                    latest_log.c.id == paged_groups.c.latest_log_id,
+                    latest_log.c.project_id == project_id,
+                    latest_log.c.timestamp >= start_time,
+                    latest_log.c.timestamp <= end_time,
+                ),
+            )
             .order_by(paged_groups.c.last_seen.desc())
         )
 

@@ -28,24 +28,24 @@ async def update_available_routes() -> None:
 
 async def _get_project_routes() -> dict[int, list[str]]:
     async with database.get_logs_session() as session:
+        # The hourly endpoint aggregation already derives (method, path) per
+        # project straight from raw logs, so the route list comes from there
+        # rather than re-scanning a week of `logs` on every run. It must not
+        # come from bottleneck_metrics: that job is seeded by the very column
+        # this one writes, so a newly seen route would never be discovered.
         query = sa.text(
             """
             SELECT
                 project_id,
-                (attributes->'endpoint'->>'method') || ' ' || (attributes->'endpoint'->>'path') AS route
-            FROM logs
+                endpoint_method || ' ' || endpoint_path AS route
+            FROM aggregated_metrics
             WHERE
-                log_type = 'endpoint'
-                AND attributes->'endpoint'->>'path' IS NOT NULL
-                AND attributes->'endpoint'->>'method' IS NOT NULL
-                AND timestamp > NOW() - INTERVAL '7 days'
-            GROUP BY
-                project_id,
-                attributes->'endpoint'->>'method',
-                attributes->'endpoint'->>'path'
-            ORDER BY
-                project_id,
-                route
+                metric_type = 'endpoint'
+                AND endpoint_method IS NOT NULL
+                AND endpoint_path IS NOT NULL
+                AND date >= TO_CHAR(NOW() - INTERVAL '7 days', 'YYYYMMDD')
+            GROUP BY project_id, endpoint_method, endpoint_path
+            ORDER BY project_id, route
         """
         )
 
@@ -64,31 +64,19 @@ async def _get_project_routes() -> dict[int, list[str]]:
 
 
 async def _update_project_routes(project_routes: dict[int, list[str]]) -> None:
+    update_query = sa.text(
+        """
+        UPDATE projects
+        SET available_routes = :routes, updated_at = NOW()
+        WHERE id = :project_id
+          AND (available_routes IS NULL OR available_routes != :routes)
+    """
+    )
+    params = [
+        {"project_id": project_id, "routes": routes}
+        for project_id, routes in project_routes.items()
+    ]
+
     async with database.get_auth_session() as session:
-        updated_count = 0
-
-        for project_id, routes in project_routes.items():
-            update_query = sa.text(
-                """
-                UPDATE projects
-                SET available_routes = :routes, updated_at = NOW()
-                WHERE id = :project_id
-                AND (
-                    available_routes IS NULL
-                    OR available_routes != :routes
-                )
-            """
-            )
-
-            result = await session.execute(
-                update_query,
-                {
-                    "routes": routes,
-                    "project_id": project_id,
-                },
-            )
-
-            if result.rowcount > 0:
-                updated_count += 1
-
+        await session.execute(update_query, params)
         await session.commit()

@@ -21,7 +21,7 @@ class Log(database.Base):
     __tablename__ = "logs"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    project_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
     timestamp: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
@@ -64,7 +64,13 @@ class Log(database.Base):
     log_id: Mapped[str | None] = mapped_column(VARCHAR(64), nullable=True)
 
     __table_args__ = (
-        Index("idx_logs_project_timestamp", "project_id", "timestamp"),
+        Index(
+            "idx_logs_project_timestamp",
+            "project_id",
+            "timestamp",
+            "id",
+            postgresql_ops={"timestamp": "DESC", "id": "DESC"},
+        ),
         Index(
             "idx_logs_project_level",
             "project_id",
@@ -79,6 +85,23 @@ class Log(database.Base):
             "timestamp",
             postgresql_where="error_fingerprint IS NOT NULL",
         ),
+        # One partial index covers every HTTP-shaped read (status_class filter
+        # and facet, the error list's status_code >= 400 arm, the alert
+        # evaluator's error-rate window) - see ingestion revision 016.
+        Index(
+            "idx_logs_project_http",
+            "project_id",
+            "timestamp",
+            "status_code",
+            postgresql_ops={"timestamp": "DESC"},
+            postgresql_where="status_code IS NOT NULL",
+        ),
+        # Analytics scans a time window across all projects. Without this the
+        # planner falls back to a full index-only scan of
+        # idx_logs_project_timestamp with timestamp as a non-boundary qual,
+        # i.e. work proportional to the partition rather than the window.
+        # BRIN, not btree: this is the ingestion hot path.
+        Index("brin_logs_timestamp", "timestamp", postgresql_using="brin"),
         Index(
             "idx_logs_dedup",
             "project_id",
@@ -112,8 +135,8 @@ class Log(database.Base):
 class ErrorGroup(database.Base):
     __tablename__ = "error_groups"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, index=True, autoincrement=True)
-    project_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
     fingerprint: Mapped[str] = mapped_column(CHAR(64), nullable=False)
     error_type: Mapped[str] = mapped_column(VARCHAR(255), nullable=False)
@@ -160,7 +183,24 @@ class ErrorGroup(database.Base):
             unique=True,
         ),
         Index("idx_error_groups_status", "project_id", "status", "last_seen"),
-        Index("idx_error_groups_type", "project_id", "error_type", "last_seen"),
+        Index(
+            "idx_error_groups_last_seen",
+            "project_id",
+            "last_seen",
+            postgresql_ops={"last_seen": "DESC"},
+        ),
+        Index(
+            "idx_error_groups_first_seen",
+            "project_id",
+            "first_seen",
+            postgresql_ops={"first_seen": "DESC"},
+        ),
+        Index(
+            "idx_error_groups_resolved",
+            "project_id",
+            "resolved_at",
+            postgresql_where="status = 'resolved' AND resolved_at IS NOT NULL",
+        ),
         CheckConstraint(
             "status IN ('unresolved', 'resolved', 'ignored', 'muted')",
             name="check_error_status",
@@ -178,9 +218,9 @@ class Span(database.Base):
     __tablename__ = "spans"
 
     span_id: Mapped[str] = mapped_column(CHAR(16), primary_key=True, nullable=False)
-    trace_id: Mapped[str] = mapped_column(CHAR(32), nullable=False, index=True)
+    trace_id: Mapped[str] = mapped_column(CHAR(32), nullable=False)
     parent_span_id: Mapped[str | None] = mapped_column(CHAR(16), nullable=True)
-    project_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
     service_name: Mapped[str] = mapped_column(Text, nullable=False)
     name: Mapped[str] = mapped_column(Text, nullable=False)
@@ -202,8 +242,28 @@ class Span(database.Base):
     error_fingerprint: Mapped[str | None] = mapped_column(CHAR(64), nullable=True)
 
     __table_args__ = (
-        Index("brin_spans_project_time", "project_id", "start_time"),
-        Index("idx_spans_op", "project_id", "service_name", "name", "start_time"),
+        Index(
+            "brin_spans_project_time",
+            "project_id",
+            "start_time",
+            postgresql_using="brin",
+        ),
+        Index(
+            "idx_spans_op",
+            "project_id",
+            "service_name",
+            "name",
+            "start_time",
+            postgresql_ops={"start_time": "DESC"},
+        ),
+        Index("idx_spans_project_trace", "project_id", "trace_id"),
+        Index(
+            "idx_spans_roots",
+            "project_id",
+            "start_time",
+            postgresql_ops={"start_time": "DESC"},
+            postgresql_where="parent_span_id IS NULL",
+        ),
         {"postgresql_partition_by": "RANGE (start_time)"},
     )
 
@@ -238,7 +298,16 @@ class MetricPoint(database.Base):
     service_name: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
-        Index("idx_metric_points_lookup", "project_id", "name", "ts"),
+        Index(
+            "idx_metric_points_lookup",
+            "project_id",
+            "name",
+            "ts",
+            postgresql_ops={"ts": "DESC"},
+        ),
+        Index("idx_metric_points_tags", "tags", postgresql_using="gin"),
+        # usage_stats and the 1h rollup scan `ts` across all projects.
+        Index("brin_metric_points_ts", "ts", postgresql_using="brin"),
         {"postgresql_partition_by": "RANGE (ts)"},
     )
 
