@@ -47,7 +47,7 @@ message QueryLogsRequest {
     repeated string status_class = 10;  // "2xx", "4xx", "5xx"
     optional string search = 11;        // substring match on method, path, message, or error_message
     optional string cursor = 12;        // keyset cursor from a prior response's next_cursor; takes precedence over offset
-    optional string client_channel = 13;
+    repeated string client_channel = 13;
 }
 
 message GetLogFacetsRequest {
@@ -60,7 +60,7 @@ message GetLogFacetsRequest {
     optional string error_fingerprint = 7;
     repeated string status_class = 8;   // "2xx", "4xx", "5xx"
     optional string search = 9;         // substring match on method, path, message, or error_message
-    optional string client_channel = 10;
+    repeated string client_channel = 10;
 }
 
 message LogFacetValue {
@@ -87,7 +87,7 @@ message GetCountryBreakdownRequest {
     optional string error_fingerprint = 7;
     repeated string status_class = 8;
     optional string search = 9;
-    optional string client_channel = 10;
+    repeated string client_channel = 10;
     int32 limit = 11;
 }
 
@@ -293,6 +293,7 @@ message GetErrorListRequest {
     int32 limit = 5;
     int32 offset = 6;
     optional string search = 7;
+    repeated string client_channel = 8;
 }
 
 message ErrorListEntry {

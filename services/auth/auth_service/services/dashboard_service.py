@@ -95,7 +95,7 @@ class DashboardService:
 
         if not self._validate_panel_type(panel_type):
             raise ValueError(
-                f"Invalid panel type '{panel_type}'. Must be one of: logs, errors, metrics, error_list, bottleneck, error_heatmap, trace, trace_list, summary, latency_overview"
+                f"Invalid panel type '{panel_type}'. Must be one of: logs, errors, metrics, error_list, bottleneck, error_heatmap, trace, trace_list, summary, latency_overview, country_map"
             )
 
         if panel_type == "metrics":
@@ -194,7 +194,7 @@ class DashboardService:
 
         if not self._validate_panel_type(panel_type):
             raise ValueError(
-                f"Invalid panel type '{panel_type}'. Must be one of: logs, errors, metrics, error_list, bottleneck, error_heatmap, trace, trace_list, summary, latency_overview"
+                f"Invalid panel type '{panel_type}'. Must be one of: logs, errors, metrics, error_list, bottleneck, error_heatmap, trace, trace_list, summary, latency_overview, country_map"
             )
 
         if panel_type == "metrics":
@@ -356,6 +356,7 @@ class DashboardService:
             "trace_list",
             "summary",
             "latency_overview",
+            "country_map",
         }
         return panel_type in valid_types
 

@@ -42,7 +42,7 @@ class PanelRequest(pydantic.BaseModel):
     )
     type: str = pydantic.Field(
         ...,
-        pattern=r"^(logs|errors|metrics|error_list|bottleneck|error_heatmap|trace|trace_list|summary|latency_overview)$",
+        pattern=r"^(logs|errors|metrics|error_list|bottleneck|error_heatmap|trace|trace_list|summary|latency_overview|country_map)$",
         description="Panel type",
         examples=["errors"],
     )
@@ -274,7 +274,7 @@ class UpdatePanelRequest(pydantic.BaseModel):
     )
     type: str = pydantic.Field(
         ...,
-        pattern=r"^(logs|errors|metrics|error_list|bottleneck|error_heatmap|trace|trace_list|summary|latency_overview)$",
+        pattern=r"^(logs|errors|metrics|error_list|bottleneck|error_heatmap|trace|trace_list|summary|latency_overview|country_map)$",
         description="Panel type",
         examples=["errors"],
     )

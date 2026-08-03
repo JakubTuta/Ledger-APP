@@ -38,7 +38,7 @@ def _apply_log_filters(query: sa.Select, filters: schemas.LogFilters) -> sa.Sele
     if filters.error_fingerprint:
         query = query.where(models.Log.error_fingerprint == filters.error_fingerprint)
     if filters.client_channel:
-        query = query.where(models.Log.client_channel == filters.client_channel)
+        query = query.where(models.Log.client_channel.in_(filters.client_channel))
     if filters.status_class:
         status_conditions = []
         for sc in filters.status_class:
@@ -316,6 +316,7 @@ async def get_error_list(
     period_from: datetime.datetime | None = None,
     period_to: datetime.datetime | None = None,
     search: str | None = None,
+    client_channel: list[str] | None = None,
     pagination: schemas.Pagination = schemas.Pagination(),
 ) -> schemas.ErrorListResponse:
     if period:
@@ -355,6 +356,9 @@ async def get_error_list(
                     models.Log.message.ilike(term),
                 )
             )
+
+        if client_channel:
+            base_where_conditions.append(models.Log.client_channel.in_(client_channel))
 
         base_where = sa.and_(*base_where_conditions)
 

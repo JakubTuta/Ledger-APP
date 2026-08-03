@@ -214,9 +214,9 @@ async def get_log_facets(
         description="Substring search on HTTP method, path, message, or error message.",
         max_length=200,
     ),
-    client_channel: str | None = fastapi.Query(
+    client_channel: list[str] | None = fastapi.Query(
         None,
-        description="Filter by caller channel (browser_navigation, browser_xhr, api_client, bot, unknown).",
+        description="Filter by caller channel (browser_navigation, browser_xhr, api_client, bot, unknown). Can be repeated.",
     ),
 ) -> schemas.LogFacetsResponse:
     """
@@ -254,7 +254,7 @@ async def get_log_facets(
         if search:
             grpc_request.search = search
         if client_channel:
-            grpc_request.client_channel = client_channel
+            grpc_request.client_channel.extend(client_channel)
 
         async with grpc_pool.get_query_stub() as stub:
             response = await stub.GetLogFacets(
@@ -386,9 +386,9 @@ async def get_country_breakdown(
         description="Substring search on HTTP method, path, message, or error message.",
         max_length=200,
     ),
-    client_channel: str | None = fastapi.Query(
+    client_channel: list[str] | None = fastapi.Query(
         None,
-        description="Filter by caller channel (browser_navigation, browser_xhr, api_client, bot, unknown).",
+        description="Filter by caller channel (browser_navigation, browser_xhr, api_client, bot, unknown). Can be repeated.",
     ),
     limit: int = fastapi.Query(
         50,
@@ -432,7 +432,7 @@ async def get_country_breakdown(
         if search:
             grpc_request.search = search
         if client_channel:
-            grpc_request.client_channel = client_channel
+            grpc_request.client_channel.extend(client_channel)
 
         async with grpc_pool.get_query_stub() as stub:
             response = await stub.GetCountryBreakdown(
@@ -854,9 +854,9 @@ async def query_logs(
         description="Substring search on HTTP method, path, message, or error message.",
         max_length=200,
     ),
-    client_channel: str | None = fastapi.Query(
+    client_channel: list[str] | None = fastapi.Query(
         None,
-        description="Filter by caller channel (browser_navigation, browser_xhr, api_client, bot, unknown).",
+        description="Filter by caller channel (browser_navigation, browser_xhr, api_client, bot, unknown). Can be repeated.",
     ),
 ) -> schemas.LogsListResponse:
     """
@@ -979,7 +979,7 @@ async def query_logs(
         if cursor:
             grpc_request.cursor = cursor
         if client_channel:
-            grpc_request.client_channel = client_channel
+            grpc_request.client_channel.extend(client_channel)
 
         async with grpc_pool.get_query_stub() as stub:
             response = await stub.QueryLogs(
@@ -1443,6 +1443,10 @@ async def get_error_list(
         description="Substring filter on path or message",
         max_length=200,
     ),
+    client_channel: list[str] | None = fastapi.Query(
+        None,
+        description="Filter by caller channel (browser_navigation, browser_xhr, api_client, bot, unknown). Can be repeated.",
+    ),
     limit: int = fastapi.Query(
         100,
         description="Maximum number of errors to return",
@@ -1471,6 +1475,8 @@ async def get_error_list(
         )
         if search:
             error_list_kwargs["search"] = search
+        if client_channel:
+            error_list_kwargs["client_channel"] = client_channel
 
         async with grpc_pool.get_query_stub() as stub:
             response = await stub.GetErrorList(

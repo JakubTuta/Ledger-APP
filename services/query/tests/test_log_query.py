@@ -364,11 +364,28 @@ class TestLogQuery(_LogFactoryMixin, test_base.BaseQueryTest):
         await self.create_test_log(project_id=1, client_channel="api_client")
         await self.create_test_log(project_id=1, client_channel="api_client")
 
-        request = query_pb2.QueryLogsRequest(project_id=1, client_channel="api_client", limit=10)
+        request = query_pb2.QueryLogsRequest(project_id=1, client_channel=["api_client"], limit=10)
         response = await self.stub.QueryLogs(request)
 
         assert len(response.logs) == 2
         assert all(log.client_channel == "api_client" for log in response.logs)
+
+    @pytest.mark.asyncio
+    async def test_query_logs_with_multiple_client_channel_values_is_or(self):
+        await self.create_test_log(project_id=1, client_channel="browser_navigation")
+        await self.create_test_log(project_id=1, client_channel="browser_xhr")
+        await self.create_test_log(project_id=1, client_channel="bot")
+        await self.create_test_log(project_id=1, client_channel="api_client")
+
+        request = query_pb2.QueryLogsRequest(
+            project_id=1,
+            client_channel=["browser_navigation", "browser_xhr"],
+            limit=10,
+        )
+        response = await self.stub.QueryLogs(request)
+
+        channels = {log.client_channel for log in response.logs}
+        assert channels == {"browser_navigation", "browser_xhr"}
 
     @pytest.mark.asyncio
     async def test_query_logs_returns_client_channel_and_country(self):
@@ -415,6 +432,60 @@ class TestGetLogFacets(_LogFactoryMixin, test_base.BaseQueryTest):
         assert values == {"api_client": 1}
 
 
+class TestGetErrorList(_LogFactoryMixin, test_base.BaseQueryTest):
+    async def create_test_error_log(self, project_id: int, **kwargs) -> models.Log:
+        kwargs.setdefault("level", "error")
+        kwargs.setdefault("error_type", "ValueError")
+        kwargs.setdefault("message", "boom")
+        return await self.create_test_log(project_id=project_id, **kwargs)
+
+    @pytest.mark.asyncio
+    async def test_error_list_with_client_channel_filter(self):
+        await self.create_test_error_log(project_id=1, client_channel="api_client")
+        await self.create_test_error_log(project_id=1, client_channel="bot")
+
+        response = await self.stub.GetErrorList(
+            query_pb2.GetErrorListRequest(project_id=1, period="last7days", client_channel=["bot"])
+        )
+
+        assert len(response.errors) == 1
+
+    @pytest.mark.asyncio
+    async def test_error_list_with_multiple_client_channel_values_is_or(self):
+        await self.create_test_error_log(
+            project_id=1, message="err from api", client_channel="api_client"
+        )
+        await self.create_test_error_log(project_id=1, message="err from bot", client_channel="bot")
+        await self.create_test_error_log(
+            project_id=1, message="err from browser", client_channel="browser_navigation"
+        )
+
+        response = await self.stub.GetErrorList(
+            query_pb2.GetErrorListRequest(
+                project_id=1,
+                period="last7days",
+                client_channel=["api_client", "bot"],
+            )
+        )
+
+        assert len(response.errors) == 2
+
+    @pytest.mark.asyncio
+    async def test_error_list_without_client_channel_filter_returns_all(self):
+        await self.create_test_error_log(
+            project_id=1, message="err from api", client_channel="api_client"
+        )
+        await self.create_test_error_log(
+            project_id=1, message="err with no channel", client_channel=None
+        )
+
+        response = await self.stub.GetErrorList(
+            query_pb2.GetErrorListRequest(project_id=1, period="last7days")
+        )
+
+        assert len(response.errors) == 2
+
+
 class TestGetCountryBreakdown(_LogFactoryMixin, test_base.BaseQueryTest):
     @pytest.mark.asyncio
     async def test_country_breakdown_counts_and_orders_by_count_desc(self):
@@ -442,6 +513,23 @@ class TestGetCountryBreakdown(_LogFactoryMixin, test_base.BaseQueryTest):
 
         assert len(response.countries) == 1
         assert response.countries[0].country == "US"
+
+    @pytest.mark.asyncio
+    async def test_country_breakdown_with_multiple_client_channel_values_is_or(self):
+        await self.create_test_log(project_id=1, client_country="US", client_channel="bot")
+        await self.create_test_log(
+            project_id=1, client_country="DE", client_channel="browser_navigation"
+        )
+        await self.create_test_log(project_id=1, client_country="FR", client_channel="api_client")
+
+        response = await self.stub.GetCountryBreakdown(
+            query_pb2.GetCountryBreakdownRequest(
+                project_id=1, client_channel=["bot", "browser_navigation"]
+            )
+        )
+
+        countries = {c.country for c in response.countries}
+        assert countries == {"US", "DE"}
 
     @pytest.mark.asyncio
     async def test_country_breakdown_respects_limit(self):

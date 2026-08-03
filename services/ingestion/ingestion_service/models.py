@@ -99,6 +99,20 @@ class Log(database.Base):
             postgresql_ops={"timestamp": "DESC"},
             postgresql_where="status_code IS NOT NULL",
         ),
+        # get_country_breakdown() filters project_id + a timestamp window +
+        # client_country IS NOT NULL - a narrow predicate across every log
+        # type (caller info isn't limited to log_type='endpoint'; see
+        # base_middleware.py), so it can't reuse idx_logs_project_http.
+        # Without this, the planner range-scans the whole window and filters
+        # client_country row by row after the heap fetch.
+        Index(
+            "idx_logs_project_country",
+            "project_id",
+            "timestamp",
+            "client_country",
+            postgresql_ops={"timestamp": "DESC"},
+            postgresql_where="client_country IS NOT NULL",
+        ),
         # Analytics scans a time window across all projects. Without this the
         # planner falls back to a full index-only scan of
         # idx_logs_project_timestamp with timestamp as a non-boundary qual,

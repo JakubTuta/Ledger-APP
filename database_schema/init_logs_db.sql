@@ -1,6 +1,6 @@
 -- Logs DB bootstrap. Kept in sync with
 -- services/migrations/migration_service/alembic/logs/versions/*
--- (current head: 017) and with the ORM models in
+-- (current head: 018) and with the ORM models in
 -- services/ingestion/ingestion_service/models.py and
 -- services/query/query_service/models.py.
 --
@@ -91,6 +91,14 @@ WHERE error_fingerprint IS NOT NULL;
 -- error_rate_4xx / error_rate_5xx window.
 CREATE INDEX IF NOT EXISTS idx_logs_project_http ON logs (project_id, timestamp DESC, status_code)
 WHERE status_code IS NOT NULL;
+
+-- get_country_breakdown(): project_id + timestamp window + client_country IS
+-- NOT NULL. Can't reuse idx_logs_project_http - caller info isn't limited to
+-- log_type='endpoint' (it's threaded into log_request/log_exception too when
+-- captured during a request). Without this, the planner scans every log row
+-- in the window and filters client_country row by row after the heap fetch.
+CREATE INDEX IF NOT EXISTS idx_logs_project_country ON logs (project_id, timestamp DESC, client_country)
+WHERE client_country IS NOT NULL;
 
 -- Analytics aggregates a time window across all projects. Without this the
 -- planner falls back to a full index-only scan of idx_logs_project_timestamp

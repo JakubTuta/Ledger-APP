@@ -18,7 +18,7 @@ class LogFilters(pydantic.BaseModel):
     error_fingerprint: str | None = None
     status_class: list[str] | None = None  # ["2xx", "4xx", "5xx"]
     search: str | None = None  # substring match on method or path
-    client_channel: str | None = None
+    client_channel: list[str] | None = None
 
 
 class Pagination(pydantic.BaseModel):

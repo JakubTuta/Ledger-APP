@@ -98,7 +98,7 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
                 ),
                 status_class=list(request.status_class) if request.status_class else None,
                 search=request.search if request.search else None,
-                client_channel=request.client_channel if request.client_channel else None,
+                client_channel=list(request.client_channel) if request.client_channel else None,
             )
 
             pagination = schemas.Pagination(
@@ -146,7 +146,7 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
                 ),
                 status_class=list(request.status_class) if request.status_class else None,
                 search=request.search if request.search else None,
-                client_channel=request.client_channel if request.client_channel else None,
+                client_channel=list(request.client_channel) if request.client_channel else None,
             )
 
             result = await log_query.get_log_facets(project_id=request.project_id, filters=filters)
@@ -189,7 +189,7 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
                 ),
                 status_class=list(request.status_class) if request.status_class else None,
                 search=request.search if request.search else None,
-                client_channel=request.client_channel if request.client_channel else None,
+                client_channel=list(request.client_channel) if request.client_channel else None,
             )
 
             result = await log_query.get_country_breakdown(
@@ -499,6 +499,7 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
                 period_from=period_from,
                 period_to=period_to,
                 search=request.search if request.HasField("search") else None,
+                client_channel=list(request.client_channel) if request.client_channel else None,
                 pagination=pagination,
             )
 

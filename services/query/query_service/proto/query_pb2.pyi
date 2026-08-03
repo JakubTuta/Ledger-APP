@@ -33,8 +33,8 @@ class QueryLogsRequest(_message.Message):
     status_class: _containers.RepeatedScalarFieldContainer[str]
     search: str
     cursor: str
-    client_channel: str
-    def __init__(self, project_id: _Optional[int] = ..., start_time: _Optional[str] = ..., end_time: _Optional[str] = ..., level: _Optional[str] = ..., log_type: _Optional[str] = ..., environment: _Optional[str] = ..., error_fingerprint: _Optional[str] = ..., limit: _Optional[int] = ..., offset: _Optional[int] = ..., status_class: _Optional[_Iterable[str]] = ..., search: _Optional[str] = ..., cursor: _Optional[str] = ..., client_channel: _Optional[str] = ...) -> None: ...
+    client_channel: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, project_id: _Optional[int] = ..., start_time: _Optional[str] = ..., end_time: _Optional[str] = ..., level: _Optional[str] = ..., log_type: _Optional[str] = ..., environment: _Optional[str] = ..., error_fingerprint: _Optional[str] = ..., limit: _Optional[int] = ..., offset: _Optional[int] = ..., status_class: _Optional[_Iterable[str]] = ..., search: _Optional[str] = ..., cursor: _Optional[str] = ..., client_channel: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class GetLogFacetsRequest(_message.Message):
     __slots__ = ("project_id", "start_time", "end_time", "level", "log_type", "environment", "error_fingerprint", "status_class", "search", "client_channel")
@@ -57,8 +57,8 @@ class GetLogFacetsRequest(_message.Message):
     error_fingerprint: str
     status_class: _containers.RepeatedScalarFieldContainer[str]
     search: str
-    client_channel: str
-    def __init__(self, project_id: _Optional[int] = ..., start_time: _Optional[str] = ..., end_time: _Optional[str] = ..., level: _Optional[str] = ..., log_type: _Optional[str] = ..., environment: _Optional[str] = ..., error_fingerprint: _Optional[str] = ..., status_class: _Optional[_Iterable[str]] = ..., search: _Optional[str] = ..., client_channel: _Optional[str] = ...) -> None: ...
+    client_channel: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, project_id: _Optional[int] = ..., start_time: _Optional[str] = ..., end_time: _Optional[str] = ..., level: _Optional[str] = ..., log_type: _Optional[str] = ..., environment: _Optional[str] = ..., error_fingerprint: _Optional[str] = ..., status_class: _Optional[_Iterable[str]] = ..., search: _Optional[str] = ..., client_channel: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class LogFacetValue(_message.Message):
     __slots__ = ("value", "count")
@@ -106,9 +106,9 @@ class GetCountryBreakdownRequest(_message.Message):
     error_fingerprint: str
     status_class: _containers.RepeatedScalarFieldContainer[str]
     search: str
-    client_channel: str
+    client_channel: _containers.RepeatedScalarFieldContainer[str]
     limit: int
-    def __init__(self, project_id: _Optional[int] = ..., start_time: _Optional[str] = ..., end_time: _Optional[str] = ..., level: _Optional[str] = ..., log_type: _Optional[str] = ..., environment: _Optional[str] = ..., error_fingerprint: _Optional[str] = ..., status_class: _Optional[_Iterable[str]] = ..., search: _Optional[str] = ..., client_channel: _Optional[str] = ..., limit: _Optional[int] = ...) -> None: ...
+    def __init__(self, project_id: _Optional[int] = ..., start_time: _Optional[str] = ..., end_time: _Optional[str] = ..., level: _Optional[str] = ..., log_type: _Optional[str] = ..., environment: _Optional[str] = ..., error_fingerprint: _Optional[str] = ..., status_class: _Optional[_Iterable[str]] = ..., search: _Optional[str] = ..., client_channel: _Optional[_Iterable[str]] = ..., limit: _Optional[int] = ...) -> None: ...
 
 class CountryBreakdownEntry(_message.Message):
     __slots__ = ("country", "count")
@@ -453,7 +453,7 @@ class GetAggregatedMetricsResponse(_message.Message):
     def __init__(self, project_id: _Optional[int] = ..., metric_type: _Optional[str] = ..., granularity: _Optional[str] = ..., start_date: _Optional[str] = ..., end_date: _Optional[str] = ..., data: _Optional[_Iterable[_Union[AggregatedMetricData, _Mapping]]] = ...) -> None: ...
 
 class GetErrorListRequest(_message.Message):
-    __slots__ = ("project_id", "period", "period_from", "period_to", "limit", "offset", "search")
+    __slots__ = ("project_id", "period", "period_from", "period_to", "limit", "offset", "search", "client_channel")
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
     PERIOD_FIELD_NUMBER: _ClassVar[int]
     PERIOD_FROM_FIELD_NUMBER: _ClassVar[int]
@@ -461,6 +461,7 @@ class GetErrorListRequest(_message.Message):
     LIMIT_FIELD_NUMBER: _ClassVar[int]
     OFFSET_FIELD_NUMBER: _ClassVar[int]
     SEARCH_FIELD_NUMBER: _ClassVar[int]
+    CLIENT_CHANNEL_FIELD_NUMBER: _ClassVar[int]
     project_id: int
     period: str
     period_from: str
@@ -468,7 +469,8 @@ class GetErrorListRequest(_message.Message):
     limit: int
     offset: int
     search: str
-    def __init__(self, project_id: _Optional[int] = ..., period: _Optional[str] = ..., period_from: _Optional[str] = ..., period_to: _Optional[str] = ..., limit: _Optional[int] = ..., offset: _Optional[int] = ..., search: _Optional[str] = ...) -> None: ...
+    client_channel: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, project_id: _Optional[int] = ..., period: _Optional[str] = ..., period_from: _Optional[str] = ..., period_to: _Optional[str] = ..., limit: _Optional[int] = ..., offset: _Optional[int] = ..., search: _Optional[str] = ..., client_channel: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class ErrorListEntry(_message.Message):
     __slots__ = ("log_id", "project_id", "level", "log_type", "message", "error_type", "timestamp", "error_fingerprint", "attributes", "sdk_version", "platform", "group_key", "occurrence_count", "first_seen", "last_seen", "status_code", "path", "stack_trace", "latest_log_id")
