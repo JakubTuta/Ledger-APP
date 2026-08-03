@@ -378,4 +378,6 @@ def _proto_to_log_entry(proto_log: ingestion_pb2.LogEntry) -> schemas.LogEntry:
         else None,
         attributes=attributes,
         log_id=proto_log.log_id if proto_log.HasField("log_id") else None,
+        client_channel=proto_log.client_channel if proto_log.HasField("client_channel") else None,
+        client_country=proto_log.client_country if proto_log.HasField("client_country") else None,
     )

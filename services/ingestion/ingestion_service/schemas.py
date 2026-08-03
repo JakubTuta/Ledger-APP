@@ -95,6 +95,18 @@ class LogEntry(pydantic.BaseModel):
         description="Client-generated idempotency key, deduplicates redelivered logs",
     )
 
+    client_channel: str | None = pydantic.Field(
+        None,
+        max_length=20,
+        description="Caller classification (browser_navigation, browser_xhr, api_client, bot, unknown)",
+    )
+
+    client_country: str | None = pydantic.Field(
+        None,
+        max_length=2,
+        description="ISO 3166-1 alpha-2 country code resolved from the (truncated) client IP",
+    )
+
     @pydantic.field_validator("timestamp")
     @classmethod
     def validate_timestamp(cls, v: datetime.datetime) -> datetime.datetime:

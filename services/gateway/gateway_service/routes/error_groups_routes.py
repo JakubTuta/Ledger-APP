@@ -1,3 +1,4 @@
+import json
 import logging
 import typing
 
@@ -109,6 +110,13 @@ async def get_error_group(
         sample_log = None
         if response.HasField("sample_log"):
             log = response.sample_log
+            attributes = None
+            if log.attributes:
+                try:
+                    attributes = json.loads(log.attributes)
+                except json.JSONDecodeError:
+                    logger.warning(f"Failed to parse attributes JSON for sample log {log.id}")
+
             sample_log = {
                 "id": log.id,
                 "project_id": log.project_id,
@@ -123,6 +131,7 @@ async def get_error_group(
                 "error_type": log.error_type or None,
                 "error_message": log.error_message or None,
                 "stack_trace": log.stack_trace or None,
+                "attributes": attributes,
                 "sdk_version": log.sdk_version or None,
                 "platform": log.platform or None,
                 "platform_version": log.platform_version or None,
@@ -131,6 +140,8 @@ async def get_error_group(
                 "path": log.path if log.HasField("path") else None,
                 "status_code": log.status_code if log.HasField("status_code") else None,
                 "duration_ms": log.duration_ms if log.HasField("duration_ms") else None,
+                "client_channel": log.client_channel if log.HasField("client_channel") else None,
+                "client_country": log.client_country if log.HasField("client_country") else None,
             }
 
         sparkline = [

@@ -39,7 +39,7 @@ GAUGE: MetricType
 HISTOGRAM: MetricType
 
 class LogEntry(_message.Message):
-    __slots__ = ("timestamp", "level", "log_type", "importance", "message", "error_type", "error_message", "stack_trace", "environment", "release", "sdk_version", "platform", "platform_version", "attributes", "log_id")
+    __slots__ = ("timestamp", "level", "log_type", "importance", "message", "error_type", "error_message", "stack_trace", "environment", "release", "sdk_version", "platform", "platform_version", "attributes", "log_id", "client_channel", "client_country")
     TIMESTAMP_FIELD_NUMBER: _ClassVar[int]
     LEVEL_FIELD_NUMBER: _ClassVar[int]
     LOG_TYPE_FIELD_NUMBER: _ClassVar[int]
@@ -55,6 +55,8 @@ class LogEntry(_message.Message):
     PLATFORM_VERSION_FIELD_NUMBER: _ClassVar[int]
     ATTRIBUTES_FIELD_NUMBER: _ClassVar[int]
     LOG_ID_FIELD_NUMBER: _ClassVar[int]
+    CLIENT_CHANNEL_FIELD_NUMBER: _ClassVar[int]
+    CLIENT_COUNTRY_FIELD_NUMBER: _ClassVar[int]
     timestamp: str
     level: str
     log_type: str
@@ -70,7 +72,9 @@ class LogEntry(_message.Message):
     platform_version: str
     attributes: str
     log_id: str
-    def __init__(self, timestamp: _Optional[str] = ..., level: _Optional[str] = ..., log_type: _Optional[str] = ..., importance: _Optional[str] = ..., message: _Optional[str] = ..., error_type: _Optional[str] = ..., error_message: _Optional[str] = ..., stack_trace: _Optional[str] = ..., environment: _Optional[str] = ..., release: _Optional[str] = ..., sdk_version: _Optional[str] = ..., platform: _Optional[str] = ..., platform_version: _Optional[str] = ..., attributes: _Optional[str] = ..., log_id: _Optional[str] = ...) -> None: ...
+    client_channel: str
+    client_country: str
+    def __init__(self, timestamp: _Optional[str] = ..., level: _Optional[str] = ..., log_type: _Optional[str] = ..., importance: _Optional[str] = ..., message: _Optional[str] = ..., error_type: _Optional[str] = ..., error_message: _Optional[str] = ..., stack_trace: _Optional[str] = ..., environment: _Optional[str] = ..., release: _Optional[str] = ..., sdk_version: _Optional[str] = ..., platform: _Optional[str] = ..., platform_version: _Optional[str] = ..., attributes: _Optional[str] = ..., log_id: _Optional[str] = ..., client_channel: _Optional[str] = ..., client_country: _Optional[str] = ...) -> None: ...
 
 class IngestLogRequest(_message.Message):
     __slots__ = ("project_id", "log")

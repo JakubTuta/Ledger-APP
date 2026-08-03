@@ -108,6 +108,9 @@ except Exception as e:
     ledger.log_exception(e, message="Payment processing failed")
 ```
 
+Behind a reverse proxy or load balancer? See [Capturing the visitor's IP behind a proxy](https://github.com/JakubTuta/Ledger-SDK/blob/main/python/README.md#capturing-the-visitors-ip-behind-a-proxy)
+in the SDK docs — endpoint logs show the proxy's address instead of the visitor's until `trusted_proxies` is configured.
+
 **Option 2: Any OpenTelemetry SDK**
 
 Not using Python? Ledger accepts standard OTLP/HTTP, so any language's stock OTel SDK works —

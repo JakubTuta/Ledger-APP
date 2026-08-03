@@ -11,6 +11,7 @@ from analytics_workers.jobs.monitor_checks import check_monitors
 from analytics_workers.jobs.notification_cleanup import cleanup_expired_notifications
 from analytics_workers.jobs.partition_manager import manage_partitions
 from analytics_workers.jobs.retention import enforce_retention
+from analytics_workers.jobs.rir_refresh import refresh_ip_country_ranges
 from analytics_workers.jobs.span_latency_1h import rollup_span_latency_1h
 from analytics_workers.jobs.top_errors import compute_top_errors
 from analytics_workers.jobs.usage_stats import generate_usage_stats
@@ -32,4 +33,5 @@ __all__ = [
     "enforce_retention",
     "check_monitors",
     "detect_error_regressions",
+    "refresh_ip_country_ranges",
 ]

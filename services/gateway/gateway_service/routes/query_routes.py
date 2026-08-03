@@ -214,11 +214,15 @@ async def get_log_facets(
         description="Substring search on HTTP method, path, message, or error message.",
         max_length=200,
     ),
+    client_channel: str | None = fastapi.Query(
+        None,
+        description="Filter by caller channel (browser_navigation, browser_xhr, api_client, bot, unknown).",
+    ),
 ) -> schemas.LogFacetsResponse:
     """
-    Get facet counts (level, log_type, status_class, environment) for the
-    Explore page's filter sidebar, computed under the same filters as
-    `GET /logs`.
+    Get facet counts (level, log_type, status_class, environment,
+    client_channel) for the Explore page's filter sidebar, computed under
+    the same filters as `GET /logs`.
     """
     grpc_pool = request.app.state.grpc_pool
 
@@ -249,6 +253,8 @@ async def get_log_facets(
             grpc_request.status_class.extend(status_class)
         if search:
             grpc_request.search = search
+        if client_channel:
+            grpc_request.client_channel = client_channel
 
         async with grpc_pool.get_query_stub() as stub:
             response = await stub.GetLogFacets(
@@ -273,6 +279,10 @@ async def get_log_facets(
                 schemas.LogFacetValueResponse(value=v.value, count=v.count)
                 for v in response.environment
             ],
+            client_channel=[
+                schemas.LogFacetValueResponse(value=v.value, count=v.count)
+                for v in response.client_channel
+            ],
         )
 
     except grpc.RpcError as e:
@@ -296,6 +306,169 @@ async def get_log_facets(
         raise fastapi.HTTPException(
             status_code=500,
             detail="Failed to retrieve log facets",
+        )
+
+
+@router.get(
+    "/logs/country-breakdown",
+    status_code=200,
+    summary="Get top countries by log count for the request map",
+    description="Retrieve top-N (country, count) pairs under the current filter set. Not part of "
+    "GET /logs/facets: country has far higher cardinality (~250 possible values) than the other "
+    "facets, so it gets its own capped, purpose-shaped query instead of bloating the facet response.",
+    response_description="Top countries by log count",
+    response_model=schemas.CountryBreakdownResponse,
+    responses={
+        400: {
+            "description": "Invalid parameters",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Either 'period' or both 'periodFrom' and 'periodTo' must be provided"
+                    }
+                }
+            },
+        },
+        500: {
+            "description": "Server error",
+            "content": {
+                "application/json": {"example": {"detail": "Failed to retrieve country breakdown"}}
+            },
+        },
+    },
+)
+async def get_country_breakdown(
+    request: fastapi.Request,
+    project_id: int = fastapi.Depends(dependencies.require_project_member),
+    period: typing.Literal[
+        "today",
+        "last7days",
+        "last30days",
+        "currentWeek",
+        "currentMonth",
+        "currentYear",
+    ]
+    | None = fastapi.Query(
+        None,
+        description="Predefined time period. Mutually exclusive with periodFrom/periodTo.",
+    ),
+    periodFrom: str | None = fastapi.Query(
+        None,
+        description="Start date in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ). Must be used with periodTo.",
+    ),
+    periodTo: str | None = fastapi.Query(
+        None,
+        description="End date in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ). Must be used with periodFrom.",
+    ),
+    level: typing.Literal["debug", "info", "warning", "error", "critical"] | None = fastapi.Query(
+        None,
+        description="Filter by log level. If not specified, returns all levels.",
+    ),
+    log_type: typing.Literal[
+        "console",
+        "logger",
+        "exception",
+        "network",
+        "database",
+        "endpoint",
+        "custom",
+    ]
+    | None = fastapi.Query(
+        None,
+        description="Filter by log type. If not specified, returns all types.",
+    ),
+    status_class: list[typing.Literal["2xx", "4xx", "5xx"]] | None = fastapi.Query(
+        None,
+        description="Filter by HTTP status class (2xx, 4xx, 5xx). Can be repeated.",
+    ),
+    search: str | None = fastapi.Query(
+        None,
+        description="Substring search on HTTP method, path, message, or error message.",
+        max_length=200,
+    ),
+    client_channel: str | None = fastapi.Query(
+        None,
+        description="Filter by caller channel (browser_navigation, browser_xhr, api_client, bot, unknown).",
+    ),
+    limit: int = fastapi.Query(
+        50,
+        description="Maximum number of countries to return",
+        ge=1,
+        le=250,
+    ),
+) -> schemas.CountryBreakdownResponse:
+    """
+    Get top countries by log count for the Explore page's request map, computed
+    under the same filters as `GET /logs`.
+    """
+    grpc_pool = request.app.state.grpc_pool
+
+    _require_period_params(period, periodFrom, periodTo)
+    _reject_conflicting_period_params(period, periodFrom, periodTo)
+
+    try:
+        if period:
+            start_time, end_time = _calculate_time_range_for_period(period)
+        else:
+            try:
+                start_time = datetime.datetime.fromisoformat(periodFrom.replace("Z", "+00:00"))
+                end_time = datetime.datetime.fromisoformat(periodTo.replace("Z", "+00:00"))
+            except (ValueError, AttributeError) as e:
+                raise fastapi.HTTPException(
+                    status_code=400,
+                    detail=f"Invalid date format. Use ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ): {str(e)}",
+                )
+
+        grpc_request = query_pb2.GetCountryBreakdownRequest(
+            project_id=project_id,
+            start_time=start_time.isoformat(),
+            end_time=end_time.isoformat(),
+            level=level if level else "",
+            log_type=log_type if log_type else "",
+            limit=limit,
+        )
+        if status_class:
+            grpc_request.status_class.extend(status_class)
+        if search:
+            grpc_request.search = search
+        if client_channel:
+            grpc_request.client_channel = client_channel
+
+        async with grpc_pool.get_query_stub() as stub:
+            response = await stub.GetCountryBreakdown(
+                grpc_request,
+                timeout=10.0,
+            )
+
+        return schemas.CountryBreakdownResponse(
+            project_id=response.project_id,
+            countries=[
+                schemas.CountryBreakdownEntryResponse(country=c.country, count=c.count)
+                for c in response.countries
+            ],
+        )
+
+    except grpc.RpcError as e:
+        if e.code() == grpc.StatusCode.INVALID_ARGUMENT:
+            raise fastapi.HTTPException(
+                status_code=400,
+                detail=e.details(),
+            )
+        else:
+            logger.error(f"gRPC error retrieving country breakdown: {e.code()} - {e.details()}")
+            raise fastapi.HTTPException(
+                status_code=500,
+                detail="Failed to retrieve country breakdown",
+            )
+
+    except fastapi.HTTPException:
+        raise
+
+    except Exception as e:
+        logger.error(f"Failed to retrieve country breakdown: {e}", exc_info=True)
+        raise fastapi.HTTPException(
+            status_code=500,
+            detail="Failed to retrieve country breakdown",
         )
 
 
@@ -681,6 +854,10 @@ async def query_logs(
         description="Substring search on HTTP method, path, message, or error message.",
         max_length=200,
     ),
+    client_channel: str | None = fastapi.Query(
+        None,
+        description="Filter by caller channel (browser_navigation, browser_xhr, api_client, bot, unknown).",
+    ),
 ) -> schemas.LogsListResponse:
     """
     Query logs for dashboard panels.
@@ -801,6 +978,8 @@ async def query_logs(
             grpc_request.search = search
         if cursor:
             grpc_request.cursor = cursor
+        if client_channel:
+            grpc_request.client_channel = client_channel
 
         async with grpc_pool.get_query_stub() as stub:
             response = await stub.QueryLogs(
@@ -1510,6 +1689,8 @@ def _proto_to_pydantic_log(proto_log: query_pb2.LogEntry) -> schemas.LogEntryRes
         path=proto_log.path if proto_log.HasField("path") else None,
         status_code=proto_log.status_code if proto_log.HasField("status_code") else None,
         duration_ms=proto_log.duration_ms if proto_log.HasField("duration_ms") else None,
+        client_channel=proto_log.client_channel if proto_log.HasField("client_channel") else None,
+        client_country=proto_log.client_country if proto_log.HasField("client_country") else None,
     )
 
 

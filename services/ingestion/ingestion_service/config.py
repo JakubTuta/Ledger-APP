@@ -114,6 +114,12 @@ class Settings(pydantic_settings.BaseSettings):
         description="Enable automatic partition creation scheduler",
     )
 
+    # The RIR delegated-extended files this table is built from are only
+    # published daily, so an hourly worker-side reload is already well ahead
+    # of anything new landing - this just picks up whatever the weekly
+    # analytics `rir_refresh` job last wrote.
+    IP_COUNTRY_REFRESH_INTERVAL_SECONDS: typing.ClassVar[int] = 3600
+
     MAX_LOG_MESSAGE_LENGTH: typing.ClassVar[int] = 10_000
     MAX_ERROR_MESSAGE_LENGTH: typing.ClassVar[int] = 5_000
     MAX_STACK_TRACE_LENGTH: typing.ClassVar[int] = 50_000

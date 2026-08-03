@@ -1,6 +1,7 @@
 import base64
 import binascii
 import datetime
+import ipaddress
 import json
 import typing
 
@@ -47,6 +48,72 @@ _VALID_IMPORTANCE = {"critical", "high", "standard", "low"}
 _HTTP_METHOD_KEYS = ("http.request.method", "http.method")
 _HTTP_ROUTE_KEYS = ("http.route", "url.path")
 _HTTP_STATUS_KEYS = ("http.response.status_code", "http.status_code")
+
+# Any attribute key that might carry a client IP, from any SDK version. Every
+# one of these is defensively re-truncated (or dropped) here regardless of
+# what the SDK already did -- the gateway is the last point before storage,
+# so it is the one place a raw address is guaranteed not to slip through.
+_RAW_IP_ATTR_KEYS = ("client.address", "http.client_ip", "ledger.client.ip_prefix")
+
+_CLIENT_ATTR_PREFIX = "ledger.client."
+
+
+def _truncate_ip_value(value: str) -> str | None:
+    """Truncate an IP (raw, or already a CIDR prefix) to /24 (IPv4) / /48 (IPv6).
+
+    Accepts an already-truncated `"1.2.3.0/24"`-shaped value too (re-truncating
+    it is a no-op) so this is safe to apply unconditionally to any attribute
+    that might hold either raw or pre-truncated client IP data. Returns None
+    for anything that isn't a parseable address, so the caller can drop the
+    attribute rather than store unrecognized garbage.
+    """
+    address_part = value.split("/", 1)[0]
+    try:
+        addr = ipaddress.ip_address(address_part)
+    except ValueError:
+        return None
+    prefix_len = 24 if isinstance(addr, ipaddress.IPv4Address) else 48
+    network = ipaddress.ip_network(f"{addr}/{prefix_len}", strict=False)
+    return str(network)
+
+
+def _sanitize_client_ip_attrs(attrs: dict[str, typing.Any]) -> None:
+    for key in _RAW_IP_ATTR_KEYS:
+        value = attrs.get(key)
+        if not isinstance(value, str):
+            continue
+        truncated = _truncate_ip_value(value)
+        if truncated is None:
+            del attrs[key]
+        else:
+            attrs[key] = truncated
+
+
+def _extract_client_data(
+    attrs: dict[str, typing.Any],
+) -> tuple[dict[str, typing.Any], str | None, str | None]:
+    """Pop every `ledger.client.*` key out of `attrs` (mutating it) and split
+    them into (nested client dict, channel, country). `channel`/`country` are
+    promoted to typed `LogEntry` fields by the caller; everything else stays
+    JSONB-only, nested under `attributes["client"]`.
+    """
+    client: dict[str, typing.Any] = {}
+    channel: str | None = None
+    country: str | None = None
+
+    for key in list(attrs.keys()):
+        if not key.startswith(_CLIENT_ATTR_PREFIX):
+            continue
+        value = attrs.pop(key)
+        suffix = key[len(_CLIENT_ATTR_PREFIX) :]
+        if suffix == "channel":
+            channel = value if isinstance(value, str) else None
+        elif suffix == "country":
+            country = value if isinstance(value, str) else None
+        else:
+            client[suffix] = value
+
+    return client, channel, country
 
 
 class TranslationError(Exception):
@@ -217,6 +284,13 @@ def _translate_span(span, service_name: str) -> ingestion_pb2.Span:
     for key, value in attrs.items():
         proto_attrs[_SPAN_ATTRIBUTE_KEY_MAP.get(key, key)] = _stringify(value)
 
+    if "http.client_ip" in proto_attrs:
+        truncated = _truncate_ip_value(proto_attrs["http.client_ip"])
+        if truncated is None:
+            del proto_attrs["http.client_ip"]
+        else:
+            proto_attrs["http.client_ip"] = truncated
+
     events = [
         ingestion_pb2.SpanEvent(
             name=event.name,
@@ -354,6 +428,7 @@ def _translate_log_record(
     log_record, resource_attrs: dict[str, typing.Any]
 ) -> ingestion_pb2.LogEntry:
     merged_attrs = {**resource_attrs, **_attributes_to_dict(log_record.attributes)}
+    _sanitize_client_ip_attrs(merged_attrs)
 
     time_unix_nano = (
         log_record.time_unix_nano
@@ -382,6 +457,8 @@ def _translate_log_record(
         if not error_type or not error_message:
             log_type = "custom"
 
+    client_data, client_channel, client_country = _extract_client_data(merged_attrs)
+
     attrs_out = dict(merged_attrs)
 
     if log_type == "endpoint":
@@ -390,6 +467,9 @@ def _translate_log_record(
             log_type = "custom"
         else:
             attrs_out["endpoint"] = endpoint
+
+    if client_data:
+        attrs_out["client"] = client_data
 
     if log_record.trace_id:
         attrs_out["trace_id"] = log_record.trace_id.hex()
@@ -447,6 +527,10 @@ def _translate_log_record(
         log_entry.platform_version = platform_version
     if log_id is not None:
         log_entry.log_id = log_id
+    if client_channel is not None:
+        log_entry.client_channel = client_channel
+    if client_country is not None:
+        log_entry.client_country = client_country
     if attrs_out:
         log_entry.attributes = json.dumps(attrs_out)
 

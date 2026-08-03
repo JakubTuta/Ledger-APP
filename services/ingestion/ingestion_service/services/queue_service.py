@@ -35,6 +35,8 @@ def _build_log_dict(log: schemas.EnrichedLogEntry) -> dict:
         "platform_version": log.log_entry.platform_version,
         "error_fingerprint": log.error_fingerprint,
         "log_id": log.log_entry.log_id,
+        "client_channel": log.log_entry.client_channel,
+        "client_country": log.log_entry.client_country,
     }
 
 

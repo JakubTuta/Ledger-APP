@@ -61,6 +61,11 @@ class Log(Base):
         sqlalchemy.CHAR(64), nullable=True
     )
 
+    client_channel: orm.Mapped[str | None] = orm.mapped_column(
+        sqlalchemy.VARCHAR(20), nullable=True
+    )
+    client_country: orm.Mapped[str | None] = orm.mapped_column(sqlalchemy.CHAR(2), nullable=True)
+
     __table_args__ = (
         sqlalchemy.Index(
             "idx_logs_project_timestamp",

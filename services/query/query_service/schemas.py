@@ -18,6 +18,7 @@ class LogFilters(pydantic.BaseModel):
     error_fingerprint: str | None = None
     status_class: list[str] | None = None  # ["2xx", "4xx", "5xx"]
     search: str | None = None  # substring match on method or path
+    client_channel: str | None = None
 
 
 class Pagination(pydantic.BaseModel):
@@ -50,6 +51,8 @@ class LogResponse(pydantic.BaseModel):
     path: str | None = None
     status_code: int | None = None
     duration_ms: int | None = None
+    client_channel: str | None = None
+    client_country: str | None = None
 
     model_config = pydantic.ConfigDict(from_attributes=True)
 
@@ -79,6 +82,17 @@ class LogFacetsResponse(pydantic.BaseModel):
     log_type: list[LogFacetValue]
     status_class: list[LogFacetValue]
     environment: list[LogFacetValue]
+    client_channel: list[LogFacetValue]
+
+
+class CountryBreakdownEntry(pydantic.BaseModel):
+    country: str
+    count: int
+
+
+class CountryBreakdownResponse(pydantic.BaseModel):
+    project_id: int
+    countries: list[CountryBreakdownEntry]
 
 
 class ErrorGroupResponse(pydantic.BaseModel):

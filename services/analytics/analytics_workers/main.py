@@ -63,6 +63,7 @@ def setup_jobs() -> None:
     retention_cron = _parse_cron_expression(settings.ANALYTICS_RETENTION_CRON)
     monitor_check_cron = _parse_cron_expression(settings.ANALYTICS_MONITOR_CHECK_CRON)
     error_regression_cron = _parse_cron_expression(settings.ANALYTICS_ERROR_REGRESSION_CRON)
+    rir_refresh_cron = _parse_cron_expression(settings.ANALYTICS_RIR_REFRESH_CRON)
 
     scheduler.add_job(
         jobs.aggregate_log_metrics,
@@ -192,6 +193,14 @@ def setup_jobs() -> None:
         replace_existing=True,
     )
 
+    scheduler.add_job(
+        jobs.refresh_ip_country_ranges,
+        trigger=cron_trigger.CronTrigger(**rir_refresh_cron),
+        id="refresh_ip_country_ranges",
+        name="Refresh RIR IP-to-Country Ranges",
+        replace_existing=True,
+    )
+
     logger.info("Scheduled jobs with cron expressions:")
     logger.info(f"  - Aggregate Log Metrics: {settings.ANALYTICS_LOG_METRICS_CRON}")
     logger.info(f"  - Compute Top Errors: {settings.ANALYTICS_TOP_ERRORS_CRON}")
@@ -211,6 +220,7 @@ def setup_jobs() -> None:
     logger.info(f"  - Enforce Data Retention: {settings.ANALYTICS_RETENTION_CRON}")
     logger.info(f"  - Check Monitors: {settings.ANALYTICS_MONITOR_CHECK_CRON}")
     logger.info(f"  - Error Regression Detection: {settings.ANALYTICS_ERROR_REGRESSION_CRON}")
+    logger.info(f"  - Refresh RIR IP-to-Country Ranges: {settings.ANALYTICS_RIR_REFRESH_CRON}")
 
 
 def _parse_cron_expression(cron_expr: str) -> dict:

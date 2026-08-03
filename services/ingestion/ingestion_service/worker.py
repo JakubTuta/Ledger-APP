@@ -14,6 +14,7 @@ import ingestion_service.config as config
 import ingestion_service.database as database
 import ingestion_service.models as models
 import ingestion_service.notifications as notifications
+import ingestion_service.services.ip_country as ip_country
 import ingestion_service.services.partition_manager as partition_manager
 import ingestion_service.services.partition_scheduler as partition_scheduler
 import ingestion_service.services.rabbitmq_client as rabbitmq_client
@@ -49,6 +50,8 @@ _LOG_COPY_COLUMNS = [
     "platform_version",
     "error_fingerprint",
     "log_id",
+    "client_channel",
+    "client_country",
 ]
 
 _LOGS_STAGING_DDL = """
@@ -74,7 +77,9 @@ _LOGS_STAGING_DDL = """
         platform VARCHAR(50),
         platform_version VARCHAR(50),
         error_fingerprint CHAR(64),
-        log_id VARCHAR(64)
+        log_id VARCHAR(64),
+        client_channel VARCHAR(20),
+        client_country CHAR(2)
     ) ON COMMIT DELETE ROWS
 """
 
@@ -299,6 +304,12 @@ class StorageWorker:
                 except (TypeError, ValueError):
                     pass
 
+        client_country = log_data.get("client_country")
+        if client_country is None and attributes:
+            ip_prefix = (attributes.get("client") or {}).get("ip_prefix")
+            if ip_prefix:
+                client_country = ip_country.get_lookup().lookup(ip_prefix)
+
         record = {
             "project_id": log_data["project_id"],
             "timestamp": timestamp,
@@ -321,6 +332,8 @@ class StorageWorker:
             "path": path,
             "status_code": status_code,
             "duration_ms": duration_ms,
+            "client_channel": log_data.get("client_channel"),
+            "client_country": client_country,
         }
         record["log_id"] = log_data.get("log_id") or _fallback_log_id(record)
         return record, timestamp.date()
@@ -882,6 +895,16 @@ class WorkerManager:
         await asyncio.gather(*self.tasks, return_exceptions=True)
 
 
+async def _refresh_ip_country_loop() -> None:
+    while True:
+        await asyncio.sleep(config.settings.IP_COUNTRY_REFRESH_INTERVAL_SECONDS)
+        try:
+            async with database.get_session() as session:
+                await ip_country.reload_from_db(session)
+        except Exception as e:
+            logger.error(f"Failed to refresh ip_country table: {e}", exc_info=True)
+
+
 async def main():
     database.get_engine()
 
@@ -894,6 +917,15 @@ async def main():
     except Exception as e:
         logger.error(f"Failed to ensure partitions exist: {e}", exc_info=True)
         logger.warning("Worker will continue, but may fail if partitions are missing")
+
+    try:
+        async with database.get_session() as session:
+            await ip_country.reload_from_db(session)
+    except Exception as e:
+        logger.error(f"Failed to load ip_country table: {e}", exc_info=True)
+        logger.warning("Worker will continue; country resolution will yield NULL until it loads")
+
+    asyncio.create_task(_refresh_ip_country_loop())
 
     if config.settings.ENABLE_PARTITION_SCHEDULER:
         scheduler = partition_scheduler.get_partition_scheduler()

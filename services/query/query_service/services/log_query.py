@@ -37,6 +37,8 @@ def _apply_log_filters(query: sa.Select, filters: schemas.LogFilters) -> sa.Sele
         query = query.where(models.Log.environment == filters.environment)
     if filters.error_fingerprint:
         query = query.where(models.Log.error_fingerprint == filters.error_fingerprint)
+    if filters.client_channel:
+        query = query.where(models.Log.client_channel == filters.client_channel)
     if filters.status_class:
         status_conditions = []
         for sc in filters.status_class:
@@ -127,6 +129,7 @@ _FACET_DIMENSIONS: tuple[tuple[str, sa.ColumnElement], ...] = (
     ("log_type", models.Log.log_type),
     ("status_class", _STATUS_CLASS_EXPR),
     ("environment", models.Log.environment),
+    ("client_channel", models.Log.client_channel),
 )
 
 
@@ -183,6 +186,42 @@ async def get_log_facets(
             log_type=buckets["log_type"],
             status_class=buckets["status_class"],
             environment=buckets["environment"],
+            client_channel=buckets["client_channel"],
+        )
+
+
+_DEFAULT_COUNTRY_BREAKDOWN_LIMIT = 50
+
+
+async def get_country_breakdown(
+    project_id: int,
+    filters: schemas.LogFilters,
+    limit: int = _DEFAULT_COUNTRY_BREAKDOWN_LIMIT,
+) -> schemas.CountryBreakdownResponse:
+    """
+    Top-N country counts under the current filter set, for the request map.
+
+    Deliberately not one of the GROUPING SETS facets in get_log_facets():
+    country has ~250 possible values (vs. single digits for the other
+    facets), which would both bloat that response and not fit a filter
+    sidebar. This is its own query, capped with LIMIT, shaped as the
+    (country, count) pairs a map needs directly.
+    """
+    async with database.get_logs_session() as session:
+        query = sa.select(models.Log.client_country, sa.func.count().label("count")).where(
+            models.Log.project_id == project_id, models.Log.client_country.is_not(None)
+        )
+        query = _apply_log_filters(query, filters)
+        query = query.group_by(models.Log.client_country).order_by(sa.desc("count")).limit(limit)
+
+        result = await session.execute(query)
+
+        return schemas.CountryBreakdownResponse(
+            project_id=project_id,
+            countries=[
+                schemas.CountryBreakdownEntry(country=row.client_country, count=row.count)
+                for row in result.all()
+            ],
         )
 
 

@@ -63,6 +63,9 @@ class Log(database.Base):
 
     log_id: Mapped[str | None] = mapped_column(VARCHAR(64), nullable=True)
 
+    client_channel: Mapped[str | None] = mapped_column(VARCHAR(20), nullable=True)
+    client_country: Mapped[str | None] = mapped_column(CHAR(2), nullable=True)
+
     __table_args__ = (
         Index(
             "idx_logs_project_timestamp",

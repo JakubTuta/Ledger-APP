@@ -69,6 +69,10 @@ def _log_to_proto(log: schemas.LogResponse) -> "query_pb2.LogEntry":
         entry.status_code = log.status_code
     if log.duration_ms is not None:
         entry.duration_ms = log.duration_ms
+    if log.client_channel is not None:
+        entry.client_channel = log.client_channel
+    if log.client_country is not None:
+        entry.client_country = log.client_country
     return entry
 
 
@@ -94,6 +98,7 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
                 ),
                 status_class=list(request.status_class) if request.status_class else None,
                 search=request.search if request.search else None,
+                client_channel=request.client_channel if request.client_channel else None,
             )
 
             pagination = schemas.Pagination(
@@ -141,6 +146,7 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
                 ),
                 status_class=list(request.status_class) if request.status_class else None,
                 search=request.search if request.search else None,
+                client_channel=request.client_channel if request.client_channel else None,
             )
 
             result = await log_query.get_log_facets(project_id=request.project_id, filters=filters)
@@ -154,10 +160,54 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
                 log_type=_to_proto(result.log_type),
                 status_class=_to_proto(result.status_class),
                 environment=_to_proto(result.environment),
+                client_channel=_to_proto(result.client_channel),
             )
 
         except Exception as e:
             await context.abort(grpc.StatusCode.INTERNAL, f"Get log facets failed: {str(e)}")
+
+    async def GetCountryBreakdown(
+        self,
+        request: query_pb2.GetCountryBreakdownRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> query_pb2.GetCountryBreakdownResponse:
+        try:
+            filters = schemas.LogFilters(
+                start_time=(
+                    datetime.datetime.fromisoformat(request.start_time)
+                    if request.start_time
+                    else None
+                ),
+                end_time=(
+                    datetime.datetime.fromisoformat(request.end_time) if request.end_time else None
+                ),
+                level=request.level if request.level else None,
+                log_type=request.log_type if request.log_type else None,
+                environment=request.environment if request.environment else None,
+                error_fingerprint=(
+                    request.error_fingerprint if request.error_fingerprint else None
+                ),
+                status_class=list(request.status_class) if request.status_class else None,
+                search=request.search if request.search else None,
+                client_channel=request.client_channel if request.client_channel else None,
+            )
+
+            result = await log_query.get_country_breakdown(
+                project_id=request.project_id,
+                filters=filters,
+                limit=request.limit if request.limit > 0 else 50,
+            )
+
+            return query_pb2.GetCountryBreakdownResponse(
+                project_id=result.project_id,
+                countries=[
+                    query_pb2.CountryBreakdownEntry(country=c.country, count=c.count)
+                    for c in result.countries
+                ],
+            )
+
+        except Exception as e:
+            await context.abort(grpc.StatusCode.INTERNAL, f"Get country breakdown failed: {str(e)}")
 
     async def SearchLogs(
         self, request: query_pb2.SearchLogsRequest, context: grpc.aio.ServicerContext

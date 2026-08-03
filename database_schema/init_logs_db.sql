@@ -1,6 +1,6 @@
 -- Logs DB bootstrap. Kept in sync with
 -- services/migrations/migration_service/alembic/logs/versions/*
--- (current head: 016) and with the ORM models in
+-- (current head: 017) and with the ORM models in
 -- services/ingestion/ingestion_service/models.py and
 -- services/query/query_service/models.py.
 --
@@ -41,6 +41,8 @@ CREATE TABLE IF NOT EXISTS logs (
     processing_time_ms SMALLINT,
     error_fingerprint CHAR(64),
     log_id VARCHAR(64),
+    client_channel VARCHAR(20),
+    client_country CHAR(2),
     PRIMARY KEY (id, timestamp)
 ) PARTITION BY RANGE (timestamp);
 
@@ -381,4 +383,36 @@ CREATE TABLE IF NOT EXISTS metric_points_1h (
     avg_v        DOUBLE PRECISION,
     PRIMARY KEY (project_id, name, tags_hash, bucket)
 );
+
+-- ============================================
+-- 8. IP COUNTRY RANGES (client IP -> country lookup source)
+-- ============================================
+-- Source of truth for the ingestion worker's in-memory bisect table (see
+-- services/ingestion/ingestion_service/services/ip_country.py). Populated
+-- and refreshed weekly by the analytics `rir_refresh` job from the five
+-- RIRs' public delegated-extended statistics files, not a per-request table
+-- - occasional full-table reads only.
+--
+-- family: 4 or 6. range_start/range_end: the IPv4 address as a 32-bit
+-- integer, or the top 48 bits of an IPv6 address as an integer (matching
+-- the SDK's own /48 IPv6 truncation granularity) - both fit comfortably in
+-- BIGINT.
+
+CREATE TABLE IF NOT EXISTS ip_country_ranges (
+    id BIGSERIAL PRIMARY KEY,
+    family SMALLINT NOT NULL,
+    range_start BIGINT NOT NULL,
+    range_end BIGINT NOT NULL,
+    country_code CHAR(2) NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+DO $$ BEGIN
+    ALTER TABLE ip_country_ranges ADD CONSTRAINT check_ip_country_family
+        CHECK (family IN (4, 6));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_ip_country_ranges_family_start
+    ON ip_country_ranges (family, range_start);
 CREATE INDEX IF NOT EXISTS idx_metric_points_1h_lookup ON metric_points_1h (project_id, name, bucket DESC);

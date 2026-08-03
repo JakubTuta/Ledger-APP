@@ -99,6 +99,11 @@ class QueryServiceStub(object):
                 request_serializer=query__pb2.GetHealthSummaryRequest.SerializeToString,
                 response_deserializer=query__pb2.GetHealthSummaryResponse.FromString,
                 _registered_method=True)
+        self.GetCountryBreakdown = channel.unary_unary(
+                '/query.QueryService/GetCountryBreakdown',
+                request_serializer=query__pb2.GetCountryBreakdownRequest.SerializeToString,
+                response_deserializer=query__pb2.GetCountryBreakdownResponse.FromString,
+                _registered_method=True)
         self.ListErrorGroups = channel.unary_unary(
                 '/query.QueryService/ListErrorGroups',
                 request_serializer=query__pb2.ListErrorGroupsRequest.SerializeToString,
@@ -222,6 +227,12 @@ class QueryServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def GetHealthSummary(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetCountryBreakdown(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -351,6 +362,11 @@ def add_QueryServiceServicer_to_server(servicer, server):
                     servicer.GetHealthSummary,
                     request_deserializer=query__pb2.GetHealthSummaryRequest.FromString,
                     response_serializer=query__pb2.GetHealthSummaryResponse.SerializeToString,
+            ),
+            'GetCountryBreakdown': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetCountryBreakdown,
+                    request_deserializer=query__pb2.GetCountryBreakdownRequest.FromString,
+                    response_serializer=query__pb2.GetCountryBreakdownResponse.SerializeToString,
             ),
             'ListErrorGroups': grpc.unary_unary_rpc_method_handler(
                     servicer.ListErrorGroups,
@@ -749,6 +765,33 @@ class QueryService(object):
             '/query.QueryService/GetHealthSummary',
             query__pb2.GetHealthSummaryRequest.SerializeToString,
             query__pb2.GetHealthSummaryResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetCountryBreakdown(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/query.QueryService/GetCountryBreakdown',
+            query__pb2.GetCountryBreakdownRequest.SerializeToString,
+            query__pb2.GetCountryBreakdownResponse.FromString,
             options,
             channel_credentials,
             insecure,

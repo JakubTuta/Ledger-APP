@@ -232,6 +232,14 @@ class Settings(pydantic_settings.BaseSettings):
         description="Data retention enforcement cron schedule (daily at 03:00)",
     )
 
+    ANALYTICS_RIR_REFRESH_CRON: str = pydantic.Field(
+        default="0 4 * * 0",
+        description=(
+            "RIR delegated-extended IP-to-country refresh cron schedule "
+            "(weekly, Sunday 04:00 - the source files are only published daily)"
+        ),
+    )
+
     ANALYTICS_MAX_SERIES_PER_PROJECT: typing.ClassVar[int] = 500
     ANALYTICS_ERROR_RATE_TTL: typing.ClassVar[int] = 600
     ANALYTICS_LOG_VOLUME_TTL: typing.ClassVar[int] = 600

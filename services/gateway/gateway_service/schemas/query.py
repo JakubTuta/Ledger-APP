@@ -52,6 +52,15 @@ class LogEntryResponse(pydantic.BaseModel):
     duration_ms: int | None = pydantic.Field(
         default=None, description="Request duration in milliseconds"
     )
+    client_channel: str | None = pydantic.Field(
+        default=None,
+        description=(
+            "Caller classification: browser_navigation, browser_xhr, api_client, bot, unknown"
+        ),
+    )
+    client_country: str | None = pydantic.Field(
+        default=None, description="ISO 3166-1 alpha-2 country code resolved from the client IP"
+    )
 
     model_config = pydantic.ConfigDict(from_attributes=True)
 
@@ -172,6 +181,23 @@ class LogFacetsResponse(pydantic.BaseModel):
         description="Counts by HTTP status class (2xx/3xx/4xx/5xx)"
     )
     environment: list[LogFacetValueResponse] = pydantic.Field(description="Counts by environment")
+    client_channel: list[LogFacetValueResponse] = pydantic.Field(
+        description="Counts by caller channel (browser_navigation, browser_xhr, api_client, bot)"
+    )
+
+
+class CountryBreakdownEntryResponse(pydantic.BaseModel):
+    country: str = pydantic.Field(description="ISO 3166-1 alpha-2 country code")
+    count: int = pydantic.Field(
+        description="Number of logs from this country under the current filters"
+    )
+
+
+class CountryBreakdownResponse(pydantic.BaseModel):
+    project_id: int = pydantic.Field(description="Project ID")
+    countries: list[CountryBreakdownEntryResponse] = pydantic.Field(
+        description="Top countries by log count, under the current filters"
+    )
 
 
 class BottleneckListEntryResponse(pydantic.BaseModel):

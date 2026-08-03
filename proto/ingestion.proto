@@ -50,6 +50,11 @@ message LogEntry {
 
     // Client-generated idempotency key (uuid7), used to dedupe redelivered logs
     optional string log_id = 15;
+
+    // Caller classification (browser_navigation, browser_xhr, api_client, bot, unknown)
+    optional string client_channel = 16;
+    // ISO 3166-1 alpha-2 country code resolved from the (truncated) client IP
+    optional string client_country = 17;
 }
 
 message IngestLogRequest {

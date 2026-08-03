@@ -8,7 +8,14 @@ import query_service.proto.query_pb2 as query_pb2
 import tests.test_base as test_base
 
 
-class TestLogQuery(test_base.BaseQueryTest):
+class _LogFactoryMixin:
+    """Shared `create_test_log` helper for test classes that need to seed
+    rows directly via the ORM. Not itself a test class -- classes needing
+    this mix it in alongside `test_base.BaseQueryTest`, so its `test_*`
+    methods (there are none) never get collected on their own and its
+    helper isn't duplicated across classes that do have tests.
+    """
+
     async def create_test_log(
         self,
         project_id: int,
@@ -38,6 +45,8 @@ class TestLogQuery(test_base.BaseQueryTest):
             await session.refresh(log)
             return log
 
+
+class TestLogQuery(_LogFactoryMixin, test_base.BaseQueryTest):
     @pytest.mark.asyncio
     async def test_query_logs_basic(self):
         await self.create_test_log(project_id=1, message="Log 1")
@@ -348,3 +357,111 @@ class TestLogQuery(test_base.BaseQueryTest):
         first_ids = {log.id for log in first_page.logs}
         second_ids = {log.id for log in response.logs}
         assert first_ids.isdisjoint(second_ids)
+
+    @pytest.mark.asyncio
+    async def test_query_logs_with_client_channel_filter(self):
+        await self.create_test_log(project_id=1, client_channel="browser_navigation")
+        await self.create_test_log(project_id=1, client_channel="api_client")
+        await self.create_test_log(project_id=1, client_channel="api_client")
+
+        request = query_pb2.QueryLogsRequest(project_id=1, client_channel="api_client", limit=10)
+        response = await self.stub.QueryLogs(request)
+
+        assert len(response.logs) == 2
+        assert all(log.client_channel == "api_client" for log in response.logs)
+
+    @pytest.mark.asyncio
+    async def test_query_logs_returns_client_channel_and_country(self):
+        await self.create_test_log(project_id=1, client_channel="browser_xhr", client_country="DE")
+
+        response = await self.stub.QueryLogs(query_pb2.QueryLogsRequest(project_id=1, limit=10))
+
+        assert response.logs[0].client_channel == "browser_xhr"
+        assert response.logs[0].client_country == "DE"
+
+    @pytest.mark.asyncio
+    async def test_query_logs_client_channel_unset_when_absent(self):
+        await self.create_test_log(project_id=1)
+
+        response = await self.stub.QueryLogs(query_pb2.QueryLogsRequest(project_id=1, limit=10))
+
+        assert not response.logs[0].HasField("client_channel")
+        assert not response.logs[0].HasField("client_country")
+
+
+class TestGetLogFacets(_LogFactoryMixin, test_base.BaseQueryTest):
+    @pytest.mark.asyncio
+    async def test_facets_include_client_channel_bucket(self):
+        await self.create_test_log(project_id=1, client_channel="browser_navigation")
+        await self.create_test_log(project_id=1, client_channel="browser_navigation")
+        await self.create_test_log(project_id=1, client_channel="api_client")
+        await self.create_test_log(project_id=1, client_channel=None)
+
+        response = await self.stub.GetLogFacets(query_pb2.GetLogFacetsRequest(project_id=1))
+
+        values = {v.value: v.count for v in response.client_channel}
+        assert values == {"browser_navigation": 2, "api_client": 1}
+
+    @pytest.mark.asyncio
+    async def test_facets_client_channel_respects_other_filters(self):
+        await self.create_test_log(project_id=1, level="error", client_channel="api_client")
+        await self.create_test_log(project_id=1, level="info", client_channel="api_client")
+
+        response = await self.stub.GetLogFacets(
+            query_pb2.GetLogFacetsRequest(project_id=1, level="error")
+        )
+
+        values = {v.value: v.count for v in response.client_channel}
+        assert values == {"api_client": 1}
+
+
+class TestGetCountryBreakdown(_LogFactoryMixin, test_base.BaseQueryTest):
+    @pytest.mark.asyncio
+    async def test_country_breakdown_counts_and_orders_by_count_desc(self):
+        await self.create_test_log(project_id=1, client_country="US")
+        await self.create_test_log(project_id=1, client_country="US")
+        await self.create_test_log(project_id=1, client_country="US")
+        await self.create_test_log(project_id=1, client_country="DE")
+        await self.create_test_log(project_id=1, client_country="DE")
+
+        response = await self.stub.GetCountryBreakdown(
+            query_pb2.GetCountryBreakdownRequest(project_id=1)
+        )
+
+        countries = [(c.country, c.count) for c in response.countries]
+        assert countries == [("US", 3), ("DE", 2)]
+
+    @pytest.mark.asyncio
+    async def test_country_breakdown_excludes_null_country(self):
+        await self.create_test_log(project_id=1, client_country="US")
+        await self.create_test_log(project_id=1, client_country=None)
+
+        response = await self.stub.GetCountryBreakdown(
+            query_pb2.GetCountryBreakdownRequest(project_id=1)
+        )
+
+        assert len(response.countries) == 1
+        assert response.countries[0].country == "US"
+
+    @pytest.mark.asyncio
+    async def test_country_breakdown_respects_limit(self):
+        for code in ("US", "DE", "FR", "JP"):
+            await self.create_test_log(project_id=1, client_country=code)
+
+        response = await self.stub.GetCountryBreakdown(
+            query_pb2.GetCountryBreakdownRequest(project_id=1, limit=2)
+        )
+
+        assert len(response.countries) == 2
+
+    @pytest.mark.asyncio
+    async def test_country_breakdown_scoped_to_project(self):
+        await self.create_test_log(project_id=1, client_country="US")
+        await self.create_test_log(project_id=2, client_country="DE")
+
+        response = await self.stub.GetCountryBreakdown(
+            query_pb2.GetCountryBreakdownRequest(project_id=1)
+        )
+
+        assert len(response.countries) == 1
+        assert response.countries[0].country == "US"

@@ -72,6 +72,8 @@ from gateway_service.schemas.query import (
     AggregatedMetricsResponse,
     BottleneckListEntryResponse,
     BottleneckListResponse,
+    CountryBreakdownEntryResponse,
+    CountryBreakdownResponse,
     ErrorListEntryResponse,
     ErrorListResponse,
     LogEntryResponse,
@@ -182,6 +184,8 @@ __all__ = [
     "LogsListResponse",
     "LogFacetValueResponse",
     "LogFacetsResponse",
+    "CountryBreakdownEntryResponse",
+    "CountryBreakdownResponse",
     "BottleneckListEntryResponse",
     "BottleneckListResponse",
     # Error group workflow schemas

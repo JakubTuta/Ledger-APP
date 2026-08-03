@@ -136,6 +136,33 @@ class TestSpanTranslation:
         assert spans[0].events[0].name == "exception"
         assert spans[0].events[0].attrs["exception.type"] == "ValueError"
 
+    def test_raw_client_ip_truncated_defensively(self):
+        # Simulates an old/buggy SDK still sending a raw, untruncated address
+        # under the OTel-standard `client.address` key -- the gateway must
+        # never let this reach storage as-is, regardless of SDK version.
+        request = self._build_request(trace_pb2.Span.SPAN_KIND_SERVER)
+        request.resource_spans[0].scope_spans[0].spans[0].attributes.append(
+            _kv("client.address", _sv("203.0.113.42"))
+        )
+        spans = otlp_translator.otlp_spans_to_proto(request)
+        assert spans[0].attributes["http.client_ip"] == "203.0.113.0/24"
+
+    def test_already_truncated_client_ip_left_equivalent(self):
+        request = self._build_request(trace_pb2.Span.SPAN_KIND_SERVER)
+        request.resource_spans[0].scope_spans[0].spans[0].attributes.append(
+            _kv("client.address", _sv("203.0.113.0/24"))
+        )
+        spans = otlp_translator.otlp_spans_to_proto(request)
+        assert spans[0].attributes["http.client_ip"] == "203.0.113.0/24"
+
+    def test_unparseable_client_ip_dropped(self):
+        request = self._build_request(trace_pb2.Span.SPAN_KIND_SERVER)
+        request.resource_spans[0].scope_spans[0].spans[0].attributes.append(
+            _kv("client.address", _sv("not-an-ip"))
+        )
+        spans = otlp_translator.otlp_spans_to_proto(request)
+        assert "http.client_ip" not in spans[0].attributes
+
 
 class TestDecodeTraceRequest:
     def test_protobuf_round_trip(self):
@@ -354,6 +381,56 @@ class TestLogTranslation:
         request = self._build_log_record()
         logs = otlp_translator.otlp_logs_to_proto(request)
         assert not logs[0].HasField("log_id")
+
+    def test_channel_and_country_promoted_to_typed_fields(self):
+        request = self._build_log_record(
+            attrs={"ledger.client.channel": "api_client", "ledger.client.country": "DE"}
+        )
+        logs = otlp_translator.otlp_logs_to_proto(request)
+        assert logs[0].client_channel == "api_client"
+        assert logs[0].client_country == "DE"
+
+    def test_channel_and_country_not_in_json_attributes(self):
+        request = self._build_log_record(
+            attrs={"ledger.client.channel": "api_client", "ledger.client.country": "DE"}
+        )
+        logs = otlp_translator.otlp_logs_to_proto(request)
+        attributes = json.loads(logs[0].attributes)
+        assert "ledger.client.channel" not in attributes
+        assert "ledger.client.country" not in attributes
+
+    def test_other_client_fields_nested_under_client(self):
+        request = self._build_log_record(
+            attrs={
+                "ledger.client.ip_prefix": "203.0.113.0/24",
+                "ledger.client.browser_family": "Chrome",
+            }
+        )
+        logs = otlp_translator.otlp_logs_to_proto(request)
+        attributes = json.loads(logs[0].attributes)
+        assert attributes["client"]["ip_prefix"] == "203.0.113.0/24"
+        assert attributes["client"]["browser_family"] == "Chrome"
+        assert "ledger.client.ip_prefix" not in attributes
+
+    def test_raw_ip_prefix_attribute_defensively_truncated(self):
+        request = self._build_log_record(attrs={"ledger.client.ip_prefix": "203.0.113.42"})
+        logs = otlp_translator.otlp_logs_to_proto(request)
+        attributes = json.loads(logs[0].attributes)
+        assert attributes["client"]["ip_prefix"] == "203.0.113.0/24"
+
+    def test_raw_client_address_attribute_truncated_on_log_path(self):
+        # Old SDK behavior: raw client.address as a flat log attribute (not
+        # under the ledger.client.* namespace at all).
+        request = self._build_log_record(attrs={"client.address": "203.0.113.42"})
+        logs = otlp_translator.otlp_logs_to_proto(request)
+        attributes = json.loads(logs[0].attributes)
+        assert attributes["client.address"] == "203.0.113.0/24"
+
+    def test_no_client_attrs_no_client_key(self):
+        request = self._build_log_record()
+        logs = otlp_translator.otlp_logs_to_proto(request)
+        attributes = json.loads(logs[0].attributes)
+        assert "client" not in attributes
 
 
 class TestDecodeLogsRequest:
