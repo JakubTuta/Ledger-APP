@@ -55,6 +55,7 @@ def setup_jobs() -> None:
     bottleneck_metrics_cron = _parse_cron_expression(settings.ANALYTICS_BOTTLENECK_METRICS_CRON)
     lv1h_rollup_cron = _parse_cron_expression(settings.ANALYTICS_LOG_VOLUME_1H_ROLLUP_CRON)
     lv1d_rollup_cron = _parse_cron_expression(settings.ANALYTICS_LOG_VOLUME_1D_ROLLUP_CRON)
+    log_facets_1h_cron = _parse_cron_expression(settings.ANALYTICS_LOG_FACETS_1H_ROLLUP_CRON)
     partition_cron = _parse_cron_expression(settings.ANALYTICS_PARTITION_MANAGER_CRON)
     span_latency_cron = _parse_cron_expression(settings.ANALYTICS_SPAN_LATENCY_1H_CRON)
     metric_points_1h_cron = _parse_cron_expression(settings.ANALYTICS_METRIC_POINTS_1H_ROLLUP_CRON)
@@ -126,6 +127,14 @@ def setup_jobs() -> None:
         trigger=cron_trigger.CronTrigger(**lv1d_rollup_cron),
         id="rollup_log_volume_1d",
         name="Rollup Log Volume 1d",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        jobs.rollup_log_facets_1h,
+        trigger=cron_trigger.CronTrigger(**log_facets_1h_cron),
+        id="rollup_log_facets_1h",
+        name="Rollup Log Facets 1h",
         replace_existing=True,
     )
 

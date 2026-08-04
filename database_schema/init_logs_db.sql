@@ -302,6 +302,21 @@ CREATE TABLE IF NOT EXISTS error_rate_5m (
 );
 CREATE INDEX IF NOT EXISTS idx_er5m_project_bucket ON error_rate_5m (project_id, bucket DESC);
 
+-- Facet counts for the Explore filter sidebar, one row per distinct
+-- dimension tuple per hour. Nullable source columns collapse to '' so the
+-- primary key can carry them (ON CONFLICT never matches on NULL).
+CREATE TABLE IF NOT EXISTS log_facets_1h (
+    project_id     BIGINT      NOT NULL,
+    bucket         TIMESTAMPTZ NOT NULL,
+    level          VARCHAR(20) NOT NULL,
+    log_type       VARCHAR(30) NOT NULL,
+    status_class   VARCHAR(3)  NOT NULL DEFAULT '',
+    environment    VARCHAR(20) NOT NULL DEFAULT '',
+    client_channel VARCHAR(20) NOT NULL DEFAULT '',
+    count          BIGINT      NOT NULL DEFAULT 0,
+    PRIMARY KEY (project_id, bucket, level, log_type, status_class, environment, client_channel)
+);
+
 CREATE TABLE IF NOT EXISTS rollup_job_state (
     job_name    TEXT NOT NULL PRIMARY KEY,
     last_bucket TIMESTAMPTZ NOT NULL

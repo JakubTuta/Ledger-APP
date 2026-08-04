@@ -187,6 +187,12 @@ class Settings(pydantic_settings.BaseSettings):
         description="log_volume_1d rollup cron schedule (staggered off the hour boundary)",
     )
 
+    ANALYTICS_LOG_FACETS_1H_ROLLUP_CRON: str = pydantic.Field(
+        default="0 * * * *",
+        description="log_facets_1h rollup cron schedule - each run fully recomputes a fixed "
+        "trailing window, so this only needs to fire once an hour",
+    )
+
     ANALYTICS_PARTITION_MANAGER_CRON: str = pydantic.Field(
         default="10 * * * *",
         description="Partition manager cron schedule (staggered off the hour boundary)",

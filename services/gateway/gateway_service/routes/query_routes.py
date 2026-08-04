@@ -205,6 +205,11 @@ async def get_log_facets(
         None,
         description="Filter by log type. If not specified, returns all types.",
     ),
+    environment: str | None = fastapi.Query(
+        None,
+        description="Filter by environment (e.g. production, staging). If not specified, returns all environments.",
+        max_length=20,
+    ),
     status_class: list[typing.Literal["2xx", "4xx", "5xx"]] | None = fastapi.Query(
         None,
         description="Filter by HTTP status class (2xx, 4xx, 5xx). Can be repeated.",
@@ -248,6 +253,7 @@ async def get_log_facets(
             end_time=end_time.isoformat(),
             level=level if level else "",
             log_type=log_type if log_type else "",
+            environment=environment if environment else "",
         )
         if status_class:
             grpc_request.status_class.extend(status_class)

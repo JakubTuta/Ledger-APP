@@ -1,4 +1,5 @@
 import base64
+import collections
 import datetime
 
 import sqlalchemy as sa
@@ -19,16 +20,13 @@ def _decode_cursor(cursor: str) -> tuple[datetime.datetime, int]:
     return datetime.datetime.fromisoformat(ts_str), int(id_str)
 
 
-def _apply_log_filters(query: sa.Select, filters: schemas.LogFilters) -> sa.Select:
+def _apply_log_dimension_filters(query: sa.Select, filters: schemas.LogFilters) -> sa.Select:
     """
-    Apply the shared LogFilters where-clauses to a select() that already
-    filters on project_id. Used by query_logs() and get_log_facets() so both
-    stay in sync.
+    Apply every LogFilters where-clause except the time window, to a select()
+    that already filters on project_id. Split out from _apply_log_filters() so
+    the facet path can drive its own time bounds while keeping the dimension
+    predicates identical to what the log table itself would show.
     """
-    if filters.start_time:
-        query = query.where(models.Log.timestamp >= filters.start_time)
-    if filters.end_time:
-        query = query.where(models.Log.timestamp <= filters.end_time)
     if filters.level:
         query = query.where(models.Log.level == filters.level)
     if filters.log_type:
@@ -68,6 +66,18 @@ def _apply_log_filters(query: sa.Select, filters: schemas.LogFilters) -> sa.Sele
             )
         )
     return query
+
+
+def _apply_log_filters(query: sa.Select, filters: schemas.LogFilters) -> sa.Select:
+    """
+    Apply the shared LogFilters where-clauses to a select() that already
+    filters on project_id.
+    """
+    if filters.start_time:
+        query = query.where(models.Log.timestamp >= filters.start_time)
+    if filters.end_time:
+        query = query.where(models.Log.timestamp <= filters.end_time)
+    return _apply_log_dimension_filters(query, filters)
 
 
 async def query_logs(
@@ -132,6 +142,192 @@ _FACET_DIMENSIONS: tuple[tuple[str, sa.ColumnElement], ...] = (
     ("client_channel", models.Log.client_channel),
 )
 
+_ROLLUP_FACET_DIMENSIONS: tuple[tuple[str, sa.ColumnElement], ...] = (
+    ("level", models.log_facets_1h.c.level),
+    ("log_type", models.log_facets_1h.c.log_type),
+    ("status_class", models.log_facets_1h.c.status_class),
+    ("environment", models.log_facets_1h.c.environment),
+    ("client_channel", models.log_facets_1h.c.client_channel),
+)
+
+# log_facets_1h stores '' where the source column was NULL, so that the whole
+# dimension tuple can be a primary key. Dropped on read, same as a raw NULL.
+_ROLLUP_ABSENT = ""
+
+# Must match analytics_workers.jobs.log_facets_1h._WINDOW_DAYS: how far back
+# the rollup is kept fresh. No watermark table to check - the job recomputes
+# this whole window every run, so trusting a fixed wall-clock boundary here is
+# only wrong if the job itself has been down longer than _ROLLUP_SAFE_LAG.
+_ROLLUP_WINDOW_DAYS = 32
+# Trust the rollup only up to an hour behind wall-clock, giving the top-of-hour
+# job run time to land before a request would otherwise read a stale bucket.
+_ROLLUP_SAFE_LAG = datetime.timedelta(hours=1)
+
+_FacetCounts = dict[str, collections.Counter]
+
+
+def _empty_facet_counts() -> _FacetCounts:
+    return {name: collections.Counter() for name, _ in _FACET_DIMENSIONS}
+
+
+def _merge_facet_counts(into: _FacetCounts, other: _FacetCounts) -> None:
+    for name, counter in other.items():
+        into[name].update(counter)
+
+
+def _collect_grouping_sets_rows(
+    rows: list,
+    dimensions: tuple[tuple[str, sa.ColumnElement], ...],
+    absent: str | None,
+) -> _FacetCounts:
+    """
+    Fan a GROUPING SETS result out into one counter per facet.
+
+    Exactly one dimension is non-NULL per row - the one its grouping set
+    grouped on. Rows whose grouped value is itself absent (a NULL source
+    column, or its '' stand-in in the rollup) carry no facet value and are
+    dropped.
+    """
+    counts = _empty_facet_counts()
+    for row in rows:
+        for index, (name, _) in enumerate(dimensions):
+            value = row[index]
+            if value is None or value == absent:
+                continue
+            counts[name][value] += row.count
+            break
+    return counts
+
+
+async def _facets_from_logs(
+    session: sa.ext.asyncio.AsyncSession,
+    project_id: int,
+    filters: schemas.LogFilters,
+    start_time: datetime.datetime | None,
+    end_time: datetime.datetime | None,
+    end_inclusive: bool,
+) -> _FacetCounts:
+    """Facet counts straight off `logs`, for a window the rollup can't serve."""
+    dimension_columns = [expression.label(f"dim_{name}") for name, expression in _FACET_DIMENSIONS]
+    grouping_sets = sa.func.grouping_sets(
+        *[sa.tuple_(expression) for _, expression in _FACET_DIMENSIONS]
+    )
+
+    query = sa.select(*dimension_columns, sa.func.count().label("count")).where(
+        models.Log.project_id == project_id
+    )
+    query = _apply_log_dimension_filters(query, filters)
+    if start_time:
+        query = query.where(models.Log.timestamp >= start_time)
+    if end_time:
+        query = query.where(
+            models.Log.timestamp <= end_time if end_inclusive else models.Log.timestamp < end_time
+        )
+    query = query.group_by(grouping_sets)
+
+    result = await session.execute(query)
+    return _collect_grouping_sets_rows(result.all(), _FACET_DIMENSIONS, None)
+
+
+async def _facets_from_rollup(
+    session: sa.ext.asyncio.AsyncSession,
+    project_id: int,
+    filters: schemas.LogFilters,
+    start_time: datetime.datetime,
+    end_time: datetime.datetime,
+) -> _FacetCounts:
+    """
+    Facet counts off the pre-aggregated log_facets_1h rollup, over a
+    hour-aligned half-open [start_time, end_time) window.
+    """
+    facets = models.log_facets_1h.c
+    dimension_columns = [
+        expression.label(f"dim_{name}") for name, expression in _ROLLUP_FACET_DIMENSIONS
+    ]
+    grouping_sets = sa.func.grouping_sets(
+        *[sa.tuple_(expression) for _, expression in _ROLLUP_FACET_DIMENSIONS]
+    )
+
+    # SUM() over a BIGINT comes back as numeric; cast so the counter stays int.
+    total = sa.cast(sa.func.sum(facets["count"]), sa.BigInteger).label("count")
+
+    query = sa.select(*dimension_columns, total).where(
+        facets.project_id == project_id,
+        facets.bucket >= start_time,
+        facets.bucket < end_time,
+    )
+    if filters.level:
+        query = query.where(facets.level == filters.level)
+    if filters.log_type:
+        query = query.where(facets.log_type == filters.log_type)
+    if filters.environment:
+        query = query.where(facets.environment == filters.environment)
+    if filters.status_class:
+        query = query.where(facets.status_class.in_(filters.status_class))
+    if filters.client_channel:
+        query = query.where(facets.client_channel.in_(filters.client_channel))
+    query = query.group_by(grouping_sets)
+
+    result = await session.execute(query)
+    return _collect_grouping_sets_rows(result.all(), _ROLLUP_FACET_DIMENSIONS, _ROLLUP_ABSENT)
+
+
+def _floor_hour(moment: datetime.datetime) -> datetime.datetime:
+    return moment.replace(minute=0, second=0, microsecond=0)
+
+
+def _ceil_hour(moment: datetime.datetime) -> datetime.datetime:
+    floored = _floor_hour(moment)
+    if floored == moment:
+        return floored
+    return floored + datetime.timedelta(hours=1)
+
+
+def _split_facet_window(
+    start_time: datetime.datetime,
+    end_time: datetime.datetime,
+    now: datetime.datetime,
+) -> tuple[
+    list[tuple[datetime.datetime, datetime.datetime, bool]],
+    tuple[datetime.datetime, datetime.datetime] | None,
+]:
+    """
+    Decide which part of [start_time, end_time] the rollup can answer.
+
+    Returns (raw_ranges, rollup_range). Each raw range is
+    (start, end, end_inclusive); the rollup range is hour-aligned and
+    half-open, bounded to the fixed trailing window the rollup job maintains
+    (_ROLLUP_WINDOW_DAYS, up to _ROLLUP_SAFE_LAG behind `now`). Everything
+    outside that - older history, and the partial hours at either edge -
+    comes off `logs` directly.
+    """
+    whole_window_raw = ([(start_time, end_time, True)], None)
+
+    rollup_floor = _floor_hour(now) - datetime.timedelta(days=_ROLLUP_WINDOW_DAYS)
+    rollup_ceiling = _floor_hour(now) - _ROLLUP_SAFE_LAG
+
+    rollup_start = max(_ceil_hour(start_time), rollup_floor)
+    rollup_end = min(_floor_hour(end_time), rollup_ceiling)
+    if rollup_end <= rollup_start:
+        return whole_window_raw
+
+    raw_ranges: list[tuple[datetime.datetime, datetime.datetime, bool]] = []
+    if start_time < rollup_start:
+        raw_ranges.append((start_time, rollup_start, False))
+    if rollup_end < end_time:
+        raw_ranges.append((rollup_end, end_time, True))
+
+    return raw_ranges, (rollup_start, rollup_end)
+
+
+def _rollup_can_serve(filters: schemas.LogFilters) -> bool:
+    """
+    log_facets_1h only carries the five facet dimensions. A free-text search
+    or an error_fingerprint filter has to be evaluated against the log rows
+    themselves, so those fall back to a full raw pass.
+    """
+    return not filters.search and not filters.error_fingerprint
+
 
 async def get_log_facets(
     project_id: int,
@@ -139,54 +335,52 @@ async def get_log_facets(
 ) -> schemas.LogFacetsResponse:
     """
     Aggregate counts per facet value (level, log_type, status_class,
-    environment) under the current filter set. Reuses the same
-    _apply_log_filters() where-clauses as query_logs() so facet counts always
-    match what the log table itself would show.
+    environment, client_channel) under the current filter set, using the same
+    dimension predicates as query_logs() so facet counts always match what the
+    log table itself would show.
 
-    All four facets come out of one GROUPING SETS pass. As four separate
-    GROUP BY queries this scanned the same slice of `logs` four times per
-    request, which is the expensive part of the log view's initial load.
+    All facets come out of a single GROUPING SETS pass per source. The bulk of
+    the window is answered from the hourly log_facets_1h rollup - counting
+    every raw row instead put this past the gateway's 10s deadline at a few
+    hundred thousand logs per window, since the facet dimensions live in no
+    index and each row costs a heap fetch. Only the partial hours at the edges
+    and anything outside the rollup's trailing window are read from `logs`.
     """
     async with database.get_logs_session() as session:
-        dimension_columns = [
-            expression.label(f"dim_{name}") for name, expression in _FACET_DIMENSIONS
-        ]
-        grouping_sets = sa.func.grouping_sets(
-            *[sa.tuple_(expression) for _, expression in _FACET_DIMENSIONS]
-        )
+        counts = _empty_facet_counts()
 
-        query = sa.select(*dimension_columns, sa.func.count().label("count")).where(
-            models.Log.project_id == project_id
-        )
-        query = _apply_log_filters(query, filters)
-        query = query.group_by(grouping_sets)
+        if filters.start_time and filters.end_time and _rollup_can_serve(filters):
+            now = datetime.datetime.now(datetime.timezone.utc)
+            raw_ranges, rollup_range = _split_facet_window(
+                filters.start_time, filters.end_time, now
+            )
+        else:
+            raw_ranges = [(filters.start_time, filters.end_time, True)]
+            rollup_range = None
 
-        result = await session.execute(query)
+        if rollup_range:
+            _merge_facet_counts(
+                counts,
+                await _facets_from_rollup(session, project_id, filters, *rollup_range),
+            )
 
-        # Exactly one dimension is non-NULL per row (the one its grouping set
-        # grouped on), except for the all-NULL rows a NULL value in the source
-        # column produces - those are dropped, matching the previous per-facet
-        # `if row.value is not None`.
-        buckets: dict[str, list[schemas.LogFacetValue]] = {
-            name: [] for name, _ in _FACET_DIMENSIONS
-        }
-        for row in result.all():
-            for index, (name, _) in enumerate(_FACET_DIMENSIONS):
-                value = row[index]
-                if value is not None:
-                    buckets[name].append(schemas.LogFacetValue(value=value, count=row.count))
-                    break
-
-        for values in buckets.values():
-            values.sort(key=lambda facet: facet.count, reverse=True)
+        for range_start, range_end, end_inclusive in raw_ranges:
+            _merge_facet_counts(
+                counts,
+                await _facets_from_logs(
+                    session, project_id, filters, range_start, range_end, end_inclusive
+                ),
+            )
 
         return schemas.LogFacetsResponse(
             project_id=project_id,
-            level=buckets["level"],
-            log_type=buckets["log_type"],
-            status_class=buckets["status_class"],
-            environment=buckets["environment"],
-            client_channel=buckets["client_channel"],
+            **{
+                name: [
+                    schemas.LogFacetValue(value=value, count=count)
+                    for value, count in counts[name].most_common()
+                ]
+                for name, _ in _FACET_DIMENSIONS
+            },
         )
 
 

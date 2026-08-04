@@ -132,6 +132,40 @@ class Log(Base):
         )
 
 
+# Analytics rollup feeding the Explore filter sidebar (written by
+# analytics_workers.jobs.log_facets_1h). A Core table rather than a declarative
+# model: it has no identity beyond its composite key and is only ever read as an
+# aggregate. Absent environment/client_channel/status_class are stored as '' so
+# the composite primary key can carry them.
+log_facets_1h = sqlalchemy.Table(
+    "log_facets_1h",
+    Base.metadata,
+    sqlalchemy.Column("project_id", sqlalchemy.BigInteger, primary_key=True),
+    sqlalchemy.Column("bucket", sqlalchemy.DateTime(timezone=True), primary_key=True),
+    sqlalchemy.Column("level", sqlalchemy.VARCHAR(20), primary_key=True),
+    sqlalchemy.Column("log_type", sqlalchemy.VARCHAR(30), primary_key=True),
+    sqlalchemy.Column(
+        "status_class",
+        sqlalchemy.VARCHAR(3),
+        primary_key=True,
+        server_default=sqlalchemy.text("''"),
+    ),
+    sqlalchemy.Column(
+        "environment",
+        sqlalchemy.VARCHAR(20),
+        primary_key=True,
+        server_default=sqlalchemy.text("''"),
+    ),
+    sqlalchemy.Column(
+        "client_channel",
+        sqlalchemy.VARCHAR(20),
+        primary_key=True,
+        server_default=sqlalchemy.text("''"),
+    ),
+    sqlalchemy.Column("count", sqlalchemy.BigInteger, nullable=False),
+)
+
+
 class ErrorGroup(Base):
     __tablename__ = "error_groups"
 

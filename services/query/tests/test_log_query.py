@@ -5,6 +5,7 @@ import pytest
 
 import query_service.models as models
 import query_service.proto.query_pb2 as query_pb2
+import query_service.services.log_query as log_query
 import tests.test_base as test_base
 
 
@@ -406,7 +407,204 @@ class TestLogQuery(_LogFactoryMixin, test_base.BaseQueryTest):
         assert not response.logs[0].HasField("client_country")
 
 
+class TestSplitFacetWindow:
+    """
+    Unit tests for the raw/rollup window split. The rollup job recomputes a
+    fixed _ROLLUP_WINDOW_DAYS trailing window every run and keeps no
+    watermark, so the split is pure wall-clock arithmetic against `now`:
+    anything within the window and older than _ROLLUP_SAFE_LAG is trusted;
+    everything else (partial edge hours, the recent lag buffer, history older
+    than the window) comes off `logs` directly.
+    """
+
+    # NOW sits well clear of both window edges so most tests only have to
+    # reason about the one boundary they're targeting.
+    NOW = datetime.datetime(2026, 6, 15, 14, 27, tzinfo=datetime.timezone.utc)
+    NOW_FLOOR = datetime.datetime(2026, 6, 15, 14, 0, tzinfo=datetime.timezone.utc)
+    CEILING = NOW_FLOOR - datetime.timedelta(hours=1)
+    FLOOR = NOW_FLOOR - datetime.timedelta(days=log_query._ROLLUP_WINDOW_DAYS)
+
+    def test_short_recent_window_is_raw(self):
+        start = self.CEILING - datetime.timedelta(hours=3, minutes=40)
+        end = self.CEILING + datetime.timedelta(minutes=20)
+
+        raw_ranges, rollup_range = log_query._split_facet_window(start, end, self.NOW)
+
+        assert rollup_range == (
+            self.CEILING - datetime.timedelta(hours=3),
+            self.CEILING,
+        )
+        assert raw_ranges == [
+            (start, self.CEILING - datetime.timedelta(hours=3), False),
+            (self.CEILING, end, True),
+        ]
+
+    def test_tail_within_the_safe_lag_stays_raw(self):
+        start = self.CEILING - datetime.timedelta(hours=5)
+        end = self.NOW
+
+        raw_ranges, rollup_range = log_query._split_facet_window(start, end, self.NOW)
+
+        assert rollup_range == (start, self.CEILING)
+        assert raw_ranges == [(self.CEILING, end, True)]
+
+    def test_history_older_than_the_window_stays_raw(self):
+        start = self.FLOOR - datetime.timedelta(days=5)
+        end = self.FLOOR + datetime.timedelta(hours=3)
+
+        raw_ranges, rollup_range = log_query._split_facet_window(start, end, self.NOW)
+
+        assert rollup_range == (self.FLOOR, self.FLOOR + datetime.timedelta(hours=3))
+        assert raw_ranges == [(start, self.FLOOR, False)]
+
+    def test_window_entirely_older_than_the_rollup_is_all_raw(self):
+        start = self.FLOOR - datetime.timedelta(days=10)
+        end = self.FLOOR - datetime.timedelta(days=5)
+
+        raw_ranges, rollup_range = log_query._split_facet_window(start, end, self.NOW)
+
+        assert rollup_range is None
+        assert raw_ranges == [(start, end, True)]
+
+    def test_window_shorter_than_one_bucket_is_raw(self):
+        start = self.CEILING - datetime.timedelta(minutes=50)
+        end = self.CEILING - datetime.timedelta(minutes=10)
+
+        raw_ranges, rollup_range = log_query._split_facet_window(start, end, self.NOW)
+
+        assert rollup_range is None
+        assert raw_ranges == [(start, end, True)]
+
+
 class TestGetLogFacets(_LogFactoryMixin, test_base.BaseQueryTest):
+    async def seed_rollup_bucket(
+        self,
+        project_id: int,
+        bucket: datetime.datetime,
+        count: int,
+        level: str = "info",
+        log_type: str = "logger",
+        status_class: str = "",
+        environment: str = "",
+        client_channel: str = "",
+    ) -> None:
+        async with self.test_db_manager.session_factory() as session:
+            await session.execute(
+                models.log_facets_1h.insert().values(
+                    project_id=project_id,
+                    bucket=bucket,
+                    level=level,
+                    log_type=log_type,
+                    status_class=status_class,
+                    environment=environment,
+                    client_channel=client_channel,
+                    count=count,
+                )
+            )
+            await session.commit()
+
+    @pytest.mark.asyncio
+    async def test_facets_merge_rollup_with_raw_tail(self):
+        # 3h back clears the rollup's 1h safe-lag boundary comfortably, so
+        # this bucket is trusted; the log an hour later falls inside the lag
+        # buffer and has to come from `logs` directly.
+        base = datetime.datetime.now(datetime.timezone.utc).replace(
+            minute=0, second=0, microsecond=0
+        ) - datetime.timedelta(hours=3)
+
+        await self.seed_rollup_bucket(project_id=1, bucket=base, count=5, level="info")
+
+        # Inside the rolled-up hour: the rollup already accounts for it, so
+        # counting the raw row too would double count.
+        await self.create_test_log(
+            project_id=1, level="info", timestamp=base + datetime.timedelta(minutes=30)
+        )
+        # Within the safe-lag buffer: only the raw table knows about this one.
+        await self.create_test_log(
+            project_id=1, level="error", timestamp=base + datetime.timedelta(hours=1, minutes=10)
+        )
+
+        response = await self.stub.GetLogFacets(
+            query_pb2.GetLogFacetsRequest(
+                project_id=1,
+                start_time=base.isoformat(),
+                end_time=(base + datetime.timedelta(hours=1, minutes=30)).isoformat(),
+            )
+        )
+
+        assert {v.value: v.count for v in response.level} == {"info": 5, "error": 1}
+
+    @pytest.mark.asyncio
+    async def test_facets_apply_dimension_filters_to_the_rollup(self):
+        base = datetime.datetime.now(datetime.timezone.utc).replace(
+            minute=0, second=0, microsecond=0
+        ) - datetime.timedelta(hours=3)
+
+        await self.seed_rollup_bucket(
+            project_id=1, bucket=base, count=5, level="info", client_channel="api_client"
+        )
+        await self.seed_rollup_bucket(
+            project_id=1, bucket=base, count=9, level="error", client_channel="bot"
+        )
+
+        response = await self.stub.GetLogFacets(
+            query_pb2.GetLogFacetsRequest(
+                project_id=1,
+                start_time=base.isoformat(),
+                end_time=(base + datetime.timedelta(hours=1)).isoformat(),
+                level="error",
+            )
+        )
+
+        assert {v.value: v.count for v in response.client_channel} == {"bot": 9}
+
+    @pytest.mark.asyncio
+    async def test_facets_drop_the_rollups_absent_value_marker(self):
+        base = datetime.datetime.now(datetime.timezone.utc).replace(
+            minute=0, second=0, microsecond=0
+        ) - datetime.timedelta(hours=3)
+
+        await self.seed_rollup_bucket(
+            project_id=1, bucket=base, count=4, environment="", client_channel=""
+        )
+
+        response = await self.stub.GetLogFacets(
+            query_pb2.GetLogFacetsRequest(
+                project_id=1,
+                start_time=base.isoformat(),
+                end_time=(base + datetime.timedelta(hours=1)).isoformat(),
+            )
+        )
+
+        assert list(response.environment) == []
+        assert list(response.client_channel) == []
+        assert {v.value: v.count for v in response.level} == {"info": 4}
+
+    @pytest.mark.asyncio
+    async def test_search_bypasses_the_rollup_entirely(self):
+        base = datetime.datetime.now(datetime.timezone.utc).replace(
+            minute=0, second=0, microsecond=0
+        ) - datetime.timedelta(hours=3)
+
+        await self.seed_rollup_bucket(project_id=1, bucket=base, count=5, level="info")
+        await self.create_test_log(
+            project_id=1,
+            level="warning",
+            message="disk almost full",
+            timestamp=base + datetime.timedelta(minutes=30),
+        )
+
+        response = await self.stub.GetLogFacets(
+            query_pb2.GetLogFacetsRequest(
+                project_id=1,
+                start_time=base.isoformat(),
+                end_time=(base + datetime.timedelta(hours=1, minutes=30)).isoformat(),
+                search="disk",
+            )
+        )
+
+        assert {v.value: v.count for v in response.level} == {"warning": 1}
+
     @pytest.mark.asyncio
     async def test_facets_include_client_channel_bucket(self):
         await self.create_test_log(project_id=1, client_channel="browser_navigation")
