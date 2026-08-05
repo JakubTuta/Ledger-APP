@@ -32,6 +32,8 @@ class PhaseResult(pydantic.BaseModel):
     latency: LatencyStats
     ingress_rate: float
     started_at: float
+    client_cpu_fraction: float | None = None
+    run_id: str | None = None
 
 
 class DrainResult(pydantic.BaseModel):
@@ -50,6 +52,53 @@ class StageResult(pydantic.BaseModel):
     drain_rate: float
     healthy: bool
     saturation_cause: str | None = None
+    table_growth: "TableGrowthStats | None" = None
+
+
+class TableGrowthStats(pydantic.BaseModel):
+    """
+    pg_statio/pg_stat snapshot for `logs` and its dedup index, taken after a
+    stage completes. Lets a ramp/steady run be read alongside table size rather
+    than mistaking table-growth-driven slowdown for a concurrency effect.
+    """
+
+    total_relation_bytes: int
+    dedup_index_bytes: int
+    dedup_index_hit_ratio: float | None
+    autovacuum_ran_during_stage: bool
+
+
+class SteadyResult(pydantic.BaseModel):
+    """
+    Result of one open-loop steady-state hold at a fixed offered rate. Unlike
+    PhaseResult (closed-loop, N workers hammering as fast as they can),
+    `accepted`/`rejected` here only count the post-warmup hold window, and the
+    verdict is threshold-based rather than inferred from a haircut on ingress.
+    """
+
+    offered_rate: float
+    warmup_seconds: float
+    hold_seconds: float
+    batch_size: int
+    max_inflight: int
+    pacer_stalls: int
+    achieved_ingress_rate: float
+    accepted: int
+    rejected: int
+    total_requests: int
+    errors: ErrorBreakdown
+    latency: LatencyStats
+    client_cpu_fraction: float | None
+    depth_series: list[int] = pydantic.Field(default_factory=list)
+    depth_slope_per_s: float
+    missing_rows: int | None
+    expected_dedupe_collisions: int | None = None
+    post_run_flush_seconds: float
+    table_growth: TableGrowthStats | None = None
+    healthy: bool
+    fail_reasons: list[str] = pydantic.Field(default_factory=list)
+    started_at: float
+    run_id: str | None = None
 
 
 class RunReport(pydantic.BaseModel):
@@ -63,6 +112,8 @@ class RunReport(pydantic.BaseModel):
     single_phase: PhaseResult | None = None
     single_drain: DrainResult | None = None
     single_db_delta: int | None = None
+    steady_runs: list[SteadyResult] = pydantic.Field(default_factory=list)
+    max_sustainable_offered_rate: float | None = None
     headline_logs_per_second: float | None = None
     headline_concurrency: int | None = None
     verdict: str = "UNKNOWN"

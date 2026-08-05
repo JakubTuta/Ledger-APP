@@ -56,14 +56,20 @@ services:
       POSTGRES_DB: ${LOGS_DB_NAME}
       POSTGRES_USER: ${LOGS_DB_USER}
       POSTGRES_PASSWORD: ${LOGS_DB_PASSWORD}
-      # Time-series / bulk write optimizations
-      POSTGRES_SHARED_BUFFERS: 1GB
-      POSTGRES_WORK_MEM: 64MB
-      POSTGRES_MAINTENANCE_WORK_MEM: 512MB
-      POSTGRES_EFFECTIVE_CACHE_SIZE: 4GB
-      POSTGRES_CHECKPOINT_TIMEOUT: 30min
-      POSTGRES_MAX_WAL_SIZE: 4GB
-      POSTGRES_AUTOVACUUM_MAX_WORKERS: 4
+    # The official postgres image only reads POSTGRES_DB/USER/PASSWORD (and a few
+    # INITDB_* vars) from the environment - POSTGRES_SHARED_BUFFERS etc. below were
+    # silently ignored, leaving dev on stock shared_buffers=128MB. Tuning must go
+    # through `-c` flags on the command line, same as docker-compose.prod.yaml.
+    command: >
+      postgres
+      -c shared_buffers=1GB
+      -c work_mem=64MB
+      -c maintenance_work_mem=512MB
+      -c effective_cache_size=4GB
+      -c checkpoint_completion_target=0.9
+      -c max_wal_size=4GB
+      -c autovacuum_max_workers=4
+      -c shared_preload_libraries=pg_stat_statements
     volumes:
       - ledger-postgres-logs-data:/var/lib/postgresql/data
     ports:
@@ -298,6 +304,9 @@ services:
       REDIS_HOST: ledger-redis
       LOGS_DB_HOST: ledger-postgres-logs
       RABBITMQ_HOST: ledger-rabbitmq
+      # Worker-only: see LOGS_ASYNC_COMMIT in ingestion_service/config.py.
+      # ledger-ingestion (the gRPC service) deliberately keeps durable commits.
+      LOGS_ASYNC_COMMIT: "true"
     depends_on:
       ledger-migrations:
         condition: service_completed_successfully

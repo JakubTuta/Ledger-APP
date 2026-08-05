@@ -5,6 +5,7 @@ import json
 import logging
 import signal
 import sys
+import time
 
 import aio_pika
 import aio_pika.abc
@@ -12,14 +13,12 @@ import msgpack
 
 import ingestion_service.config as config
 import ingestion_service.database as database
-import ingestion_service.models as models
 import ingestion_service.notifications as notifications
 import ingestion_service.services.ip_country as ip_country
 import ingestion_service.services.partition_manager as partition_manager
 import ingestion_service.services.partition_scheduler as partition_scheduler
 import ingestion_service.services.rabbitmq_client as rabbitmq_client
 import ingestion_service.services.redis_client as redis_client
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 logging.basicConfig(
     level=getattr(logging, config.settings.LOG_LEVEL),
@@ -85,6 +84,11 @@ _LOGS_STAGING_DDL = """
 
 _LOGS_COPY_COLUMNS_SQL = ", ".join(_LOG_COPY_COLUMNS)
 _LOG_JSON_COLUMNS = frozenset({"attributes"})
+
+# Aggregate phase timing is logged every N flushes rather than per-flush, so it's
+# cheap enough to leave on permanently and still gives an accurate on-CPU-vs-DB-wait
+# breakdown of process_logs_batch under real load.
+_TIMING_LOG_EVERY = 50
 
 _SPAN_COPY_COLUMNS = [
     "span_id",
@@ -160,15 +164,36 @@ _METRIC_POINTS_STAGING_DDL = """
 _METRIC_POINTS_COPY_COLUMNS_SQL = ", ".join(_METRIC_POINT_COPY_COLUMNS)
 _METRIC_POINT_JSON_COLUMNS = frozenset({"bucket_counts", "explicit_bounds", "tags"})
 
+_ERROR_GROUP_UPSERT_SQL = """
+    INSERT INTO error_groups
+        (project_id, fingerprint, error_type, error_message, first_seen, last_seen,
+         occurrence_count, sample_stack_trace, status, created_at, updated_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'unresolved', $9, $9)
+    ON CONFLICT (project_id, fingerprint) DO UPDATE SET
+        last_seen = EXCLUDED.last_seen,
+        occurrence_count = error_groups.occurrence_count + EXCLUDED.occurrence_count,
+        updated_at = $9
+"""
+
 
 def _fallback_log_id(record: dict) -> str:
+    # blake2b/16-hex (64 bits), not sha256/64-hex (256 bits): log_id is
+    # non-NULL for every row that reaches here (this is the fallback path),
+    # which makes idx_logs_dedup's WHERE log_id IS NOT NULL predicate
+    # non-selective - the index is effectively full-width and randomly keyed.
+    # A 64-bit fallback id keeps redelivery dedup working (still astronomically
+    # unlikely to collide for one message) while roughly quartering the index's
+    # per-row key size. No migration needed - log_id is VARCHAR(64), so
+    # existing 64-hex-char sha256 ids stay valid alongside new 16-char ones.
+    # Accepted per this project's tolerance for a rare duplicate/missing row at
+    # log-analytics volumes (see CLAUDE.md's ingestion durability notes).
     attributes = record.get("attributes") or {}
     source = (
         f"{record['project_id']}:{record['timestamp'].isoformat()}:"
         f"{record.get('message') or ''}:"
         f"{attributes.get('trace_id') or ''}:{attributes.get('span_id') or ''}"
     )
-    return hashlib.sha256(source.encode()).hexdigest()
+    return hashlib.blake2b(source.encode(), digest_size=8).hexdigest()
 
 
 def _copy_value(value: object, is_json: bool) -> object:
@@ -192,6 +217,7 @@ async def _copy_via_staging(
     json_columns: frozenset[str],
     columns_sql: str,
     conflict_clause: str,
+    timings: dict[str, float] | None = None,
 ) -> None:
     """
     Bulk-load `records` through a session-local staging table using asyncpg's
@@ -202,6 +228,10 @@ async def _copy_via_staging(
     ON COMMIT DROP, so a pooled connection creates each one at most once and
     every later batch reuses it - repeatedly creating and dropping a temp table
     at ingestion rates bloats pg_class/pg_attribute.
+
+    `timings`, if given, accumulates elapsed seconds under "staging_ddl_ms",
+    "copy_records_ms", "insert_select_ms" - split out so profiling can tell
+    apart the COPY itself from the ON CONFLICT dedup scan that follows it.
     """
     conn = await session.connection()
     raw_conn = await conn.get_raw_connection()
@@ -216,15 +246,26 @@ async def _copy_via_staging(
     # connection would otherwise commit on its own, emptying the staging table
     # between the COPY and the INSERT ... SELECT that drains it.
     async with asyncpg_conn.transaction():
+        t0 = time.perf_counter()
         await asyncpg_conn.execute(staging_ddl)
+        t1 = time.perf_counter()
         await asyncpg_conn.copy_records_to_table(staging_table, records=rows, columns=columns)
+        t2 = time.perf_counter()
         await asyncpg_conn.execute(
             f"INSERT INTO {target_table} ({columns_sql}) "
             f"SELECT {columns_sql} FROM {staging_table} {conflict_clause}"
         )
+        t3 = time.perf_counter()
+
+    if timings is not None:
+        timings["staging_ddl_ms"] = timings.get("staging_ddl_ms", 0.0) + (t1 - t0) * 1000
+        timings["copy_records_ms"] = timings.get("copy_records_ms", 0.0) + (t2 - t1) * 1000
+        timings["insert_select_ms"] = timings.get("insert_select_ms", 0.0) + (t3 - t2) * 1000
 
 
-async def _copy_log_records(session, log_records: list[dict]) -> None:
+async def _copy_log_records(
+    session, log_records: list[dict], timings: dict[str, float] | None = None
+) -> None:
     await _copy_via_staging(
         session,
         log_records,
@@ -237,6 +278,7 @@ async def _copy_log_records(session, log_records: list[dict]) -> None:
         conflict_clause=(
             "ON CONFLICT (project_id, log_id, timestamp) WHERE log_id IS NOT NULL DO NOTHING"
         ),
+        timings=timings,
     )
 
 
@@ -277,6 +319,27 @@ class StorageWorker:
         self.tail_publisher = notifications.TailPublisher(
             redis_client.get_redis_client(), enabled=config.settings.NOTIFICATIONS_ENABLED
         )
+        self._timing_totals: dict[str, float] = {}
+        self._timing_flushes = 0
+        self._timing_logs = 0
+
+    def _record_batch_timing(self, logs_in_batch: int, phase_ms: dict[str, float]) -> None:
+        for key, value in phase_ms.items():
+            self._timing_totals[key] = self._timing_totals.get(key, 0.0) + value
+        self._timing_flushes += 1
+        self._timing_logs += logs_in_batch
+
+        if self._timing_flushes % _TIMING_LOG_EVERY == 0:
+            parts = ", ".join(
+                f"{key}={value:.1f}ms" for key, value in sorted(self._timing_totals.items())
+            )
+            logger.info(
+                f"Worker {self.worker_id}: phase timing over last {self._timing_flushes} "
+                f"flushes ({self._timing_logs} logs): {parts}"
+            )
+            self._timing_totals = {}
+            self._timing_flushes = 0
+            self._timing_logs = 0
 
     @staticmethod
     def _build_log_record(log_data: dict) -> tuple[dict, datetime.date]:
@@ -342,6 +405,9 @@ class StorageWorker:
         if not logs:
             return
 
+        phase_ms: dict[str, float] = {}
+        t_start = time.perf_counter()
+
         log_records: list[dict] = []
         required_partitions: set[datetime.date] = set()
         error_groups: dict[tuple[int, str], dict] = {}
@@ -374,19 +440,38 @@ class StorageWorker:
                     if ts > eg["last_seen"]:
                         eg["last_seen"] = ts
 
+        t_build = time.perf_counter()
+        phase_ms["build_ms"] = (t_build - t_start) * 1000
+
         async with database.get_session() as session:
             for partition_date in required_partitions:
                 await partition_manager.ensure_partition_for_date(session, "logs", partition_date)
 
-            await _copy_log_records(session, log_records)
+            t_partition = time.perf_counter()
+            phase_ms["partition_ms"] = (t_partition - t_build) * 1000
+
+            await _copy_log_records(session, log_records, timings=phase_ms)
+
+            t_copy = time.perf_counter()
 
             if error_groups:
                 await self._upsert_error_groups_batch(session, list(error_groups.values()))
 
+            t_errgroup = time.perf_counter()
+            phase_ms["errgroup_ms"] = (t_errgroup - t_copy) * 1000
+
             await session.commit()
             self.processed_count += len(logs)
 
+            t_commit = time.perf_counter()
+            phase_ms["commit_ms"] = (t_commit - t_errgroup) * 1000
+
         await self._publish_tail(log_records)
+
+        t_tail = time.perf_counter()
+        phase_ms["tail_ms"] = (t_tail - t_commit) * 1000
+
+        self._record_batch_timing(len(logs), phase_ms)
 
     async def _publish_tail(self, log_records: list[dict]) -> None:
         by_project: dict[int, list[dict]] = {}
@@ -400,18 +485,44 @@ class StorageWorker:
         # order; otherwise multi-row upserts touching the same fingerprints from
         # different batches can lock-order deadlock against each other.
         groups = sorted(groups, key=lambda g: (g["project_id"], g["fingerprint"]))
-        stmt = pg_insert(models.ErrorGroup).values(groups)
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["project_id", "fingerprint"],
-            set_={
-                "last_seen": stmt.excluded.last_seen,
-                "occurrence_count": (
-                    models.ErrorGroup.occurrence_count + stmt.excluded.occurrence_count
-                ),
-                "updated_at": datetime.datetime.now(datetime.timezone.utc),
-            },
+
+        # Raw asyncpg with a fixed single-row statement, not SQLAlchemy Core's
+        # pg_insert(...).values(groups): a profile under sustained load showed
+        # 50%+ of the worker's on-CPU time inside the SQL compiler visitor chain
+        # (_compiler_dispatch/visit_bindparam/...) because the ORM statement's
+        # VALUES clause has a different row count on almost every batch (one row
+        # per distinct fingerprint seen), which misses SQLAlchemy's compiled-
+        # statement cache and forces a full recompile every call. A statement
+        # with a fixed shape reuses asyncpg's client-side prepared-statement
+        # cache across calls on the same pooled connection instead.
+        # Set explicitly rather than leaning on either schema's DEFAULT NOW():
+        # the Alembic-migrated DB has one on created_at/updated_at, but the
+        # test DB's ORM-generated schema (metadata.create_all(), no
+        # server_default on these Python-side-default columns) doesn't - so
+        # relying on it would make correctness depend on which of the two
+        # schema-creation paths built the table.
+        now = datetime.datetime.now(datetime.timezone.utc)
+
+        conn = await session.connection()
+        raw_conn = await conn.get_raw_connection()
+        asyncpg_conn = raw_conn.driver_connection
+        await asyncpg_conn.executemany(
+            _ERROR_GROUP_UPSERT_SQL,
+            [
+                (
+                    g["project_id"],
+                    g["fingerprint"],
+                    g["error_type"],
+                    g["error_message"],
+                    g["first_seen"],
+                    g["last_seen"],
+                    g["occurrence_count"],
+                    g["sample_stack_trace"],
+                    now,
+                )
+                for g in groups
+            ],
         )
-        await session.execute(stmt)
 
     @staticmethod
     def _build_span_record(span_data: dict) -> tuple[dict, datetime.date]:

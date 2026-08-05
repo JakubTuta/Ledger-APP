@@ -23,6 +23,10 @@ _session_factory: async_sessionmaker[AsyncSession] | None = None
 def get_engine() -> AsyncEngine:
     global _engine
     if _engine is None:
+        connect_args = {}
+        if config.settings.LOGS_ASYNC_COMMIT:
+            connect_args["server_settings"] = {"synchronous_commit": "off"}
+
         _engine = create_async_engine(
             config.settings.LOGS_DATABASE_URL,
             pool_size=config.settings.DB_POOL_SIZE,
@@ -30,6 +34,7 @@ def get_engine() -> AsyncEngine:
             pool_pre_ping=True,
             pool_recycle=3600,
             echo=config.settings.DEBUG,
+            connect_args=connect_args,
         )
     return _engine
 

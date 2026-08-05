@@ -98,6 +98,14 @@ up:
 down:
 	docker-compose down
 
+.PHONY: bench-up
+bench-up:
+	docker-compose -f docker-compose.yaml -f docker-compose.bench-unlimited.yaml up -d --build
+
+.PHONY: bench-up-prod-parity
+bench-up-prod-parity:
+	docker-compose --compatibility -f docker-compose.yaml -f docker-compose.bench-prod-parity.yaml up -d --build
+
 # ==================== Testing ====================
 
 .PHONY: test

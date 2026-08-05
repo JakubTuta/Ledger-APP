@@ -28,7 +28,7 @@ async def run_ramp(
         initial_depth = await drain_module.get_queue_depth(monitor_client, cfg)
         if initial_depth > 100:
             print(
-                f"[ramp] Initial queue depth {initial_depth} > 100 — waiting for drain...",
+                f"[ramp] Initial queue depth {initial_depth} > 100 - waiting for drain...",
                 flush=True,
             )
             pre_drain = await drain_module.wait_for_drain(
@@ -36,13 +36,18 @@ async def run_ramp(
             )
             if not pre_drain.drained:
                 print(
-                    "[ramp] ABORT: queue will not drain — stack is not idle. "
+                    "[ramp] ABORT: queue will not drain - stack is not idle. "
                     "Run './scripts/Make.ps1 down && ./scripts/Make.ps1 up' and retry.",
                     flush=True,
                 )
                 sys.exit(1)
 
         for concurrency in stage_concurrencies:
+            if cfg.destructive_reset:
+                await drain_module.truncate_project_partitions(
+                    cfg.logs_db_dsn, project_id, cfg.expect_db
+                )
+
             print(
                 f"[ramp] Stage c={concurrency} | {cfg.ramp_stage_seconds}s burst ...",
                 flush=True,
@@ -69,18 +74,38 @@ async def run_ramp(
             )
 
             db_delta: int | None = None
+            table_growth = None
             if not cfg.no_db_verify and drain.drained:
                 try:
-                    db_delta = await drain_module.count_log_rows(
-                        cfg.logs_db_dsn, project_id, phase.started_at
-                    )
+                    if phase.run_id is not None:
+                        db_delta = await drain_module.count_log_rows_by_id_prefix(
+                            cfg.logs_db_dsn, project_id, phase.run_id
+                        )
+                    else:
+                        db_delta = await drain_module.count_log_rows(
+                            cfg.logs_db_dsn, project_id, phase.started_at
+                        )
                 except Exception as e:
                     print(f"[ramp] DB verify error: {e}", flush=True)
+                try:
+                    table_growth = await drain_module.get_table_growth_stats(
+                        cfg.logs_db_dsn, phase.started_at
+                    )
+                except Exception as e:
+                    print(f"[ramp] table growth query error: {e}", flush=True)
 
             total_time = phase.duration_s + drain.drain_seconds
             drain_rate = phase.accepted / total_time if total_time > 0 else 0.0
 
-            db_match = db_delta is None or db_delta >= int(phase.accepted * 0.99)
+            # Exact accounting when the run used client-generated log_ids (default);
+            # otherwise fall back to the old 99% tolerance on the ingested_at window,
+            # which can't tell a genuine drop from clock skew or a fallback-id collision.
+            if db_delta is None:
+                db_match = True
+            elif phase.run_id is not None:
+                db_match = db_delta == phase.accepted
+            else:
+                db_match = db_delta >= int(phase.accepted * 0.99)
             healthy = (
                 phase.errors.total == 0 and drain.drained and drain.max_depth < 90_000 and db_match
             )
@@ -103,6 +128,7 @@ async def run_ramp(
                 phase=phase,
                 drain=drain,
                 db_delta=db_delta,
+                table_growth=table_growth,
                 ingress_rate=phase.ingress_rate,
                 drain_rate=drain_rate,
                 healthy=healthy,

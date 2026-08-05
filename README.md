@@ -41,7 +41,7 @@ ledger.log_info("User signed up", attributes={"user_id": "123"})
 - **Two-factor auth & scoped sessions** — TOTP 2FA, httpOnly refresh cookies, per-device session management
 - **One-line setup** — `pip install ledger-sdk` and a few lines of code (Python), or standard OTel env vars (any other language)
 - **Production ready** — Multi-tenant, rate-limited, horizontally scalable
-- **Fast** — tested sustaining 10,000+ logs/s on a single node with near-zero queue lag
+- **Fast** — <!-- BENCH:README:START -->measured 11,750 logs/s sustained on a single node at full power (unconstrained CPU, p99 ingest latency < 328ms, flat queue depth, protobuf wire). Container resource limits in `docker-compose.prod.yaml` are deliberately conservative and cap this lower. Raw runs: [`benchmark_result/`](benchmark_result/).<!-- BENCH:README:END -->
 
 ## Get Started
 

@@ -180,6 +180,18 @@ class Settings(pydantic_settings.BaseSettings):
     NOTIFICATIONS_PUBLISH_ERRORS: typing.ClassVar[bool] = True
     NOTIFICATIONS_PUBLISH_CRITICAL: typing.ClassVar[bool] = True
 
+    LOGS_ASYNC_COMMIT: bool = pydantic.Field(
+        default=False,
+        description=(
+            "Set synchronous_commit=off on this process's Postgres connections. "
+            "Only meant to be enabled on the storage worker: a commit can be lost "
+            "on an OS/host crash (not a container or Postgres restart) within "
+            "roughly one wal_writer_delay of data, and the pipeline already drops "
+            "a batch after one retry with no DLQ, so this doesn't change the "
+            "product's existing durability posture, only its window."
+        ),
+    )
+
     @property
     def is_production(self) -> bool:
         return self.ENV.lower() == "production"

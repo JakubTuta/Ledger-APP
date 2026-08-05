@@ -1,0 +1,25 @@
+# Bench overlay: unlimited CPU/memory (same shape as base docker-compose.yaml,
+# which already carries no resource caps) plus SYS_PTRACE so py-spy can attach
+# to the gateway/ingestion/worker processes from a sibling container or the
+# host. This is the environment all A/B optimization work in Phase 4/5 runs
+# against - it isolates "does the change help" from "is the container CPU-capped".
+#
+# Usage:
+#   docker compose -f docker-compose.yaml -f docker-compose.bench-unlimited.yaml up -d
+#
+# py-spy record --pid <container-init-pid-on-host> --duration 60 --format speedscope
+# (or `docker exec ledger-<service> py-spy record --pid 1 ...` if py-spy is
+# installed inside the image; SYS_PTRACE is required either way).
+
+services:
+  ledger-gateway:
+    cap_add:
+      - SYS_PTRACE
+
+  ledger-ingestion:
+    cap_add:
+      - SYS_PTRACE
+
+  ledger-ingestion-worker:
+    cap_add:
+      - SYS_PTRACE

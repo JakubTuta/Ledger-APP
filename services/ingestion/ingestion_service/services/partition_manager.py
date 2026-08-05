@@ -75,6 +75,25 @@ async def create_partition(
         )
 
         await session.execute(create_partition_sql)
+
+        # logs/spans/metric_points are append-only (no UPDATEs), so the default
+        # dead-tuple-ratio autovacuum trigger rarely fires here - a partition
+        # can go a long time without an ANALYZE, leaving the planner working
+        # off stale row-count stats as it fills. Insert-count-driven thresholds
+        # (PG13+) trigger on volume instead. This is cliff-prevention, not a
+        # throughput change - a short benchmark run won't show any effect.
+        await session.execute(
+            text(
+                f"""
+                ALTER TABLE {partition_name} SET (
+                    autovacuum_vacuum_insert_threshold = 1000,
+                    autovacuum_vacuum_insert_scale_factor = 0.02,
+                    autovacuum_analyze_scale_factor = 0.02
+                )
+            """
+            )
+        )
+
         await session.commit()
 
         async with _cache_lock:

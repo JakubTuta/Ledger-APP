@@ -1,5 +1,6 @@
 import datetime
 import time
+import unittest.mock
 
 import msgpack
 import pytest
@@ -14,6 +15,20 @@ from .test_base import BaseIngestionTest
 class _FakeMessage:
     def __init__(self, body: bytes):
         self.body = body
+
+
+class _FakeAckableMessage:
+    """Records ack()/nack() calls without touching a real broker connection."""
+
+    def __init__(self) -> None:
+        self.ack_calls: list[bool] = []
+        self.nack_calls: list[bool] = []
+
+    async def ack(self, multiple: bool = False) -> None:
+        self.ack_calls.append(multiple)
+
+    async def nack(self, requeue: bool = True) -> None:
+        self.nack_calls.append(requeue)
 
 
 @pytest.mark.asyncio
@@ -100,7 +115,8 @@ class TestStorageWorker(BaseIngestionTest):
             result = await session.execute(sqlalchemy.select(models.Log))
             stored = result.scalar_one()
             assert stored.log_id is not None
-            assert len(stored.log_id) == 64
+            # blake2b/digest_size=8 -> 16 hex chars (64 bits) - see _fallback_log_id.
+            assert len(stored.log_id) == 16
 
     async def test_worker_processes_single_log(self):
         """Worker inserts a single log payload into the database."""
@@ -379,3 +395,159 @@ class TestStorageWorker(BaseIngestionTest):
             result = await session.execute(sqlalchemy.select(sqlalchemy.func.count(models.Log.id)))
             count = result.scalar()
             assert count == 500
+
+    @pytest.mark.perf
+    async def test_process_logs_batch_perf_tripwire(self):
+        """
+        Regression tripwire, not a benchmark (see scripts/benchmark for that):
+        process_logs_batch(10_000) must stay well under a generous ceiling on
+        local Docker Desktop Postgres. Excluded from the default run (pytest.ini
+        `-m "not perf"`) - a tight threshold here would be a flaky test on a
+        shared/throttled runner, and a flaky perf test gets deleted. Run
+        explicitly with `pytest tests/ -m perf`.
+        """
+        now = datetime.datetime.now(datetime.timezone.utc)
+        payloads = []
+        for i in range(10_000):
+            if i % 7 == 0:
+                payloads.append(
+                    {
+                        "project_id": 1,
+                        "timestamp": now.isoformat(),
+                        "ingested_at": now.isoformat(),
+                        "level": "error",
+                        "log_type": "exception",
+                        "importance": "high",
+                        "message": f"Perf error {i}",
+                        "error_type": "ValueError",
+                        "error_message": "boom",
+                        "stack_trace": "Traceback...",
+                        # A handful of distinct fingerprints so the batch also
+                        # exercises the error-group upsert's multi-row path.
+                        "error_fingerprint": str(i % 20).zfill(64),
+                    }
+                )
+            else:
+                payloads.append(
+                    {
+                        "project_id": 1,
+                        "timestamp": now.isoformat(),
+                        "ingested_at": now.isoformat(),
+                        "level": "info",
+                        "log_type": "console",
+                        "importance": "standard",
+                        "message": f"Perf log {i}",
+                    }
+                )
+
+        worker = StorageWorker(worker_id=1)
+        start = time.time()
+        await worker.process_logs_batch(payloads)
+        duration = time.time() - start
+
+        async with self.test_db_manager.session_factory() as session:
+            result = await session.execute(sqlalchemy.select(sqlalchemy.func.count(models.Log.id)))
+            assert result.scalar() == 10_000
+
+        print(f"process_logs_batch(10,000) took {duration:.2f}s")
+        # Observed ~0.4-0.5s on local Docker Desktop Postgres; 5s is a ~10x
+        # margin, generous enough to absorb host/CI slowness without masking
+        # a real regression.
+        assert duration < 5.0, (
+            f"process_logs_batch(10,000) took {duration:.2f}s - expected well under 5s "
+            f"on local Docker Desktop Postgres, investigate before assuming this is noise"
+        )
+
+
+@pytest.mark.asyncio
+class TestFlushBatch:
+    """
+    `_flush_batch`'s ack/retry/drop logic, exercised against a mocked
+    `process_logs_batch` rather than the real DB - this is pure message-broker
+    bookkeeping and was previously untested end to end.
+    """
+
+    def _worker(self) -> StorageWorker:
+        return StorageWorker(worker_id=1)
+
+    async def test_happy_path_acks_last_message_with_multiple(self):
+        worker = self._worker()
+        messages = [_FakeAckableMessage(), _FakeAckableMessage()]
+        message_logs = [[{"id": 1}], [{"id": 2}]]
+
+        with unittest.mock.patch.object(
+            worker, "process_logs_batch", new=unittest.mock.AsyncMock(return_value=None)
+        ) as mock_process:
+            await worker._flush_batch(messages, message_logs)
+
+        assert mock_process.await_count == 1
+        assert messages[0].ack_calls == []
+        assert messages[1].ack_calls == [True]
+        assert messages[0].nack_calls == []
+        assert messages[1].nack_calls == []
+        assert worker.failed_count == 0
+
+    async def test_batch_failure_falls_back_to_per_message_acks(self):
+        worker = self._worker()
+        messages = [_FakeAckableMessage(), _FakeAckableMessage()]
+        message_logs = [[{"id": 1}], [{"id": 2}]]
+
+        mock_process = unittest.mock.AsyncMock(side_effect=[Exception("batch failed"), None, None])
+        with unittest.mock.patch.object(worker, "process_logs_batch", new=mock_process):
+            await worker._flush_batch(messages, message_logs)
+
+        assert mock_process.await_count == 3
+        assert messages[0].ack_calls == [False]
+        assert messages[1].ack_calls == [False]
+        assert messages[0].nack_calls == []
+        assert messages[1].nack_calls == []
+        assert worker.failed_count == 0
+
+    async def test_message_failing_twice_is_dropped_but_siblings_still_ack(self):
+        worker = self._worker()
+        good_message = _FakeAckableMessage()
+        bad_message = _FakeAckableMessage()
+        messages = [good_message, bad_message]
+        message_logs = [[{"id": 1}], [{"id": 2}, {"id": 3}]]
+
+        # call 1: whole-batch attempt (fails) -> call 2: good_message succeeds
+        # -> call 3: bad_message first per-message try (fails) -> call 4:
+        # bad_message retry (also fails) -> dropped.
+        mock_process = unittest.mock.AsyncMock(
+            side_effect=[
+                Exception("batch failed"),
+                None,
+                Exception("first try failed"),
+                Exception("retry failed"),
+            ]
+        )
+        with unittest.mock.patch.object(worker, "process_logs_batch", new=mock_process):
+            await worker._flush_batch(messages, message_logs)
+
+        assert mock_process.await_count == 4
+        assert good_message.ack_calls == [False]
+        assert good_message.nack_calls == []
+        assert bad_message.ack_calls == []
+        assert bad_message.nack_calls == [False]
+        assert worker.failed_count == 2
+
+    async def test_zip_pairs_each_message_with_its_own_logs(self):
+        """The fallback loop must pair messages[i] with message_logs[i], not
+        with the flattened payload list built for the whole-batch attempt."""
+        worker = self._worker()
+        messages = [_FakeAckableMessage(), _FakeAckableMessage(), _FakeAckableMessage()]
+        message_logs = [[{"id": 1}], [{"id": 2}], [{"id": 3}]]
+        seen_logs: list[list[dict]] = []
+
+        async def fake_process(logs: list[dict]) -> None:
+            if len(logs) == 3:
+                raise Exception("whole-batch attempt fails")
+            seen_logs.append(logs)
+
+        with unittest.mock.patch.object(
+            worker, "process_logs_batch", new=unittest.mock.AsyncMock(side_effect=fake_process)
+        ):
+            await worker._flush_batch(messages, message_logs)
+
+        assert seen_logs == message_logs
+        assert [m.ack_calls for m in messages] == [[False], [False], [False]]

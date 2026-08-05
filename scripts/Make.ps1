@@ -49,7 +49,9 @@ function Show-Help {
     Write-Host "  test-query   - Run query service tests"
     Write-Host "  test-migrations - Run migration service tests"
     Write-Host "  test-e2e     - Run the end-to-end suite against a live stack (requires 'up' first)"
-    Write-Host "  benchmark    - Measure max sustainable ingestion logs/s (auto-ramp, gzip, fresh key, DB verify)"
+    Write-Host "  benchmark    - Measure max sustainable ingestion logs/s (steady-state --find-max, protobuf, exact DB verify)"
+    Write-Host "  bench-up     - Start the stack unlimited (no CPU caps, SYS_PTRACE) - use for all A/B benchmark work"
+    Write-Host "  bench-up-prod-parity - Start the stack capped exactly like docker-compose.prod.yaml"
     Write-Host ""
     Write-Host "Database (migration service, run against the local infra containers):" -ForegroundColor Yellow
     Write-Host "  db-status    - Show schema version, current revision and pending revisions per database"
@@ -153,6 +155,19 @@ function Stop-Services {
     docker-compose down
     if ($LASTEXITCODE -ne 0) { Write-Host "Failed to stop services" -ForegroundColor Red; exit 1 }
     Write-Host "Services stopped" -ForegroundColor Green
+}
+
+function Start-BenchUnlimited {
+    docker-compose -f docker-compose.yaml -f docker-compose.bench-unlimited.yaml up -d --build
+    if ($LASTEXITCODE -ne 0) { Write-Host "Failed to start bench-unlimited stack" -ForegroundColor Red; exit 1 }
+    Write-Host "bench-unlimited stack started (no CPU/memory caps, SYS_PTRACE for py-spy)" -ForegroundColor Green
+}
+
+function Start-BenchProdParity {
+    docker-compose --compatibility -f docker-compose.yaml -f docker-compose.bench-prod-parity.yaml up -d --build
+    if ($LASTEXITCODE -ne 0) { Write-Host "Failed to start bench-prod-parity stack" -ForegroundColor Red; exit 1 }
+    Write-Host "bench-prod-parity stack started - verify limits landed with:" -ForegroundColor Green
+    Write-Host "  docker inspect ledger-ingestion-worker --format '{{.HostConfig.NanoCpus}} {{.HostConfig.Memory}}'" -ForegroundColor Yellow
 }
 
 function Run-Tests {
@@ -261,7 +276,7 @@ function Run-Benchmark {
         exit 1
     }
     $python = Get-VenvPython
-    Write-Host "Starting ingestion benchmark (auto-ramp, gzip, fresh key, DB verify)..." -ForegroundColor Cyan
+    Write-Host "Starting ingestion benchmark (steady-state --find-max, protobuf, exact DB verify)..." -ForegroundColor Cyan
     & $python "scripts\benchmark\__main__.py"
     if ($LASTEXITCODE -ne 0) { Write-Host "Benchmark failed" -ForegroundColor Red; exit 1 }
 }
@@ -345,6 +360,8 @@ switch ($Command.ToLower()) {
     "proto"            { Compile-Proto }
     "up"               { Start-Services }
     "down"             { Stop-Services }
+    "bench-up"              { Start-BenchUnlimited }
+    "bench-up-prod-parity"  { Start-BenchProdParity }
     "test"             { Run-Tests }
     "test-auth"        { Run-Tests -Service "auth" }
     "test-gateway"     { Run-Tests -Service "gateway" }

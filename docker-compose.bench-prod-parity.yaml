@@ -1,0 +1,80 @@
+# Bench overlay: reproduces docker-compose.prod.yaml's exact `deploy.resources.limits`
+# on top of the locally-built dev images, so "does the shipped deployment need
+# more CPU" can be answered without a real prod host. Used only for that one
+# question - all other A/B work runs against docker-compose.bench-unlimited.yaml.
+#
+# Docker Desktop's default (non-swarm) compose engine ignores `deploy.resources`
+# unless invoked with `--compatibility`. Verify the limits actually landed:
+#   docker inspect ledger-ingestion-worker --format '{{.HostConfig.NanoCpus}} {{.HostConfig.Memory}}'
+#
+# Usage:
+#   docker compose --compatibility -f docker-compose.yaml -f docker-compose.bench-prod-parity.yaml up -d
+
+services:
+  ledger-postgres-logs:
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 768M
+        reservations:
+          cpus: "0.1"
+          memory: 256M
+
+  ledger-redis:
+    cap_add:
+      - SYS_PTRACE
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+        reservations:
+          cpus: "0.05"
+          memory: 32M
+
+  ledger-rabbitmq:
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+        reservations:
+          cpus: "0.05"
+          memory: 96M
+
+  ledger-gateway:
+    cap_add:
+      - SYS_PTRACE
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 384M
+        reservations:
+          cpus: "0.15"
+          memory: 192M
+
+  ledger-ingestion:
+    cap_add:
+      - SYS_PTRACE
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 192M
+        reservations:
+          cpus: "0.05"
+          memory: 96M
+
+  ledger-ingestion-worker:
+    cap_add:
+      - SYS_PTRACE
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 192M
+        reservations:
+          cpus: "0.05"
+          memory: 64M
