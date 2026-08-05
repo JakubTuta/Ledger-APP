@@ -590,6 +590,8 @@ message Panel {
   // logs panel filter fields
   optional string status_class = 24;
   optional string logs_search = 25;
+  // caller categories this panel shows (users/bots/servers/unknown); empty means all
+  repeated string traffic_categories = 26;
 }
 
 message GetDashboardPanelsRequest {
@@ -621,6 +623,7 @@ message CreateDashboardPanelRequest {
   optional int32 limit = 18;
   optional string status_class = 24;
   optional string logs_search = 25;
+  repeated string traffic_categories = 26;
 }
 
 message CreateDashboardPanelResponse {
@@ -649,6 +652,7 @@ message UpdateDashboardPanelRequest {
   optional int32 limit = 19;
   optional string status_class = 25;
   optional string logs_search = 26;
+  repeated string traffic_categories = 27;
 }
 
 message UpdateDashboardPanelResponse {

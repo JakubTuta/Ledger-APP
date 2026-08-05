@@ -8,6 +8,8 @@ from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+VALID_TRAFFIC_CATEGORIES = {"users", "bots", "servers", "unknown"}
+
 
 class DashboardService:
     """
@@ -90,6 +92,7 @@ class DashboardService:
         has_error: bool | None = None,
         status_class: str | None = None,
         logs_search: str | None = None,
+        traffic_categories: list[str] | None = None,
     ) -> dict:
         """Create a new dashboard panel."""
 
@@ -110,6 +113,8 @@ class DashboardService:
 
         if has_period and has_dates:
             raise ValueError("Cannot use both 'period' and 'periodFrom'/'periodTo'")
+
+        self._validate_traffic_categories(traffic_categories)
 
         panel_id = self._generate_panel_id()
 
@@ -139,6 +144,7 @@ class DashboardService:
             "has_error": has_error,
             "status_class": status_class,
             "logs_search": logs_search,
+            "traffic_categories": traffic_categories if traffic_categories else [],
         }
 
         result = await session.execute(
@@ -189,6 +195,7 @@ class DashboardService:
         has_error: bool | None = None,
         status_class: str | None = None,
         logs_search: str | None = None,
+        traffic_categories: list[str] | None = None,
     ) -> dict:
         """Update an existing dashboard panel."""
 
@@ -209,6 +216,8 @@ class DashboardService:
 
         if has_period and has_dates:
             raise ValueError("Cannot use both 'period' and 'periodFrom'/'periodTo'")
+
+        self._validate_traffic_categories(traffic_categories)
 
         result = await session.execute(
             select(models.UserDashboard).where(models.UserDashboard.user_id == user_id)
@@ -249,6 +258,7 @@ class DashboardService:
                     "has_error": has_error,
                     "status_class": status_class,
                     "logs_search": logs_search,
+                    "traffic_categories": traffic_categories if traffic_categories else [],
                 }
                 panel_found = True
                 break
@@ -359,6 +369,22 @@ class DashboardService:
             "country_map",
         }
         return panel_type in valid_types
+
+    def _validate_traffic_categories(self, traffic_categories: list[str] | None) -> None:
+        """
+        A panel narrows its raw-log reads to these caller categories. An empty
+        list means "all traffic" - the dashboard never persists the full set,
+        so a saved panel stays on all traffic even if a new category is added.
+        """
+        if not traffic_categories:
+            return
+
+        invalid = set(traffic_categories) - VALID_TRAFFIC_CATEGORIES
+        if invalid:
+            raise ValueError(
+                f"Invalid traffic categories {sorted(invalid)}. Must be a subset of: "
+                f"{sorted(VALID_TRAFFIC_CATEGORIES)}"
+            )
 
     def _generate_panel_id(self) -> str:
         """Generate unique panel ID."""

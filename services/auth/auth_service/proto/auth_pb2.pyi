@@ -728,7 +728,7 @@ class PanelLayout(_message.Message):
     def __init__(self, x: _Optional[int] = ..., y: _Optional[int] = ..., w: _Optional[int] = ..., h: _Optional[int] = ...) -> None: ...
 
 class Panel(_message.Message):
-    __slots__ = ("id", "name", "index", "project_id", "period", "periodFrom", "periodTo", "type", "endpoint", "routes", "statistic", "layout", "trace_id", "service_filter", "operation_filter", "min_duration_ms", "has_error", "limit", "status_class", "logs_search")
+    __slots__ = ("id", "name", "index", "project_id", "period", "periodFrom", "periodTo", "type", "endpoint", "routes", "statistic", "layout", "trace_id", "service_filter", "operation_filter", "min_duration_ms", "has_error", "limit", "status_class", "logs_search", "traffic_categories")
     ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     INDEX_FIELD_NUMBER: _ClassVar[int]
@@ -749,6 +749,7 @@ class Panel(_message.Message):
     LIMIT_FIELD_NUMBER: _ClassVar[int]
     STATUS_CLASS_FIELD_NUMBER: _ClassVar[int]
     LOGS_SEARCH_FIELD_NUMBER: _ClassVar[int]
+    TRAFFIC_CATEGORIES_FIELD_NUMBER: _ClassVar[int]
     id: str
     name: str
     index: int
@@ -769,7 +770,8 @@ class Panel(_message.Message):
     limit: int
     status_class: str
     logs_search: str
-    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., period: _Optional[str] = ..., periodFrom: _Optional[str] = ..., periodTo: _Optional[str] = ..., type: _Optional[str] = ..., endpoint: _Optional[str] = ..., routes: _Optional[_Iterable[str]] = ..., statistic: _Optional[str] = ..., layout: _Optional[_Union[PanelLayout, _Mapping]] = ..., trace_id: _Optional[str] = ..., service_filter: _Optional[str] = ..., operation_filter: _Optional[str] = ..., min_duration_ms: _Optional[int] = ..., has_error: bool = ..., limit: _Optional[int] = ..., status_class: _Optional[str] = ..., logs_search: _Optional[str] = ...) -> None: ...
+    traffic_categories: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., period: _Optional[str] = ..., periodFrom: _Optional[str] = ..., periodTo: _Optional[str] = ..., type: _Optional[str] = ..., endpoint: _Optional[str] = ..., routes: _Optional[_Iterable[str]] = ..., statistic: _Optional[str] = ..., layout: _Optional[_Union[PanelLayout, _Mapping]] = ..., trace_id: _Optional[str] = ..., service_filter: _Optional[str] = ..., operation_filter: _Optional[str] = ..., min_duration_ms: _Optional[int] = ..., has_error: bool = ..., limit: _Optional[int] = ..., status_class: _Optional[str] = ..., logs_search: _Optional[str] = ..., traffic_categories: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class GetDashboardPanelsRequest(_message.Message):
     __slots__ = ("user_id",)
@@ -784,7 +786,7 @@ class GetDashboardPanelsResponse(_message.Message):
     def __init__(self, panels: _Optional[_Iterable[_Union[Panel, _Mapping]]] = ...) -> None: ...
 
 class CreateDashboardPanelRequest(_message.Message):
-    __slots__ = ("user_id", "name", "index", "project_id", "period", "periodFrom", "periodTo", "type", "endpoint", "routes", "statistic", "layout", "trace_id", "service_filter", "operation_filter", "min_duration_ms", "has_error", "limit", "status_class", "logs_search")
+    __slots__ = ("user_id", "name", "index", "project_id", "period", "periodFrom", "periodTo", "type", "endpoint", "routes", "statistic", "layout", "trace_id", "service_filter", "operation_filter", "min_duration_ms", "has_error", "limit", "status_class", "logs_search", "traffic_categories")
     USER_ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     INDEX_FIELD_NUMBER: _ClassVar[int]
@@ -805,6 +807,7 @@ class CreateDashboardPanelRequest(_message.Message):
     LIMIT_FIELD_NUMBER: _ClassVar[int]
     STATUS_CLASS_FIELD_NUMBER: _ClassVar[int]
     LOGS_SEARCH_FIELD_NUMBER: _ClassVar[int]
+    TRAFFIC_CATEGORIES_FIELD_NUMBER: _ClassVar[int]
     user_id: int
     name: str
     index: int
@@ -825,7 +828,8 @@ class CreateDashboardPanelRequest(_message.Message):
     limit: int
     status_class: str
     logs_search: str
-    def __init__(self, user_id: _Optional[int] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., period: _Optional[str] = ..., periodFrom: _Optional[str] = ..., periodTo: _Optional[str] = ..., type: _Optional[str] = ..., endpoint: _Optional[str] = ..., routes: _Optional[_Iterable[str]] = ..., statistic: _Optional[str] = ..., layout: _Optional[_Union[PanelLayout, _Mapping]] = ..., trace_id: _Optional[str] = ..., service_filter: _Optional[str] = ..., operation_filter: _Optional[str] = ..., min_duration_ms: _Optional[int] = ..., has_error: bool = ..., limit: _Optional[int] = ..., status_class: _Optional[str] = ..., logs_search: _Optional[str] = ...) -> None: ...
+    traffic_categories: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, user_id: _Optional[int] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., period: _Optional[str] = ..., periodFrom: _Optional[str] = ..., periodTo: _Optional[str] = ..., type: _Optional[str] = ..., endpoint: _Optional[str] = ..., routes: _Optional[_Iterable[str]] = ..., statistic: _Optional[str] = ..., layout: _Optional[_Union[PanelLayout, _Mapping]] = ..., trace_id: _Optional[str] = ..., service_filter: _Optional[str] = ..., operation_filter: _Optional[str] = ..., min_duration_ms: _Optional[int] = ..., has_error: bool = ..., limit: _Optional[int] = ..., status_class: _Optional[str] = ..., logs_search: _Optional[str] = ..., traffic_categories: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class CreateDashboardPanelResponse(_message.Message):
     __slots__ = ("panel",)
@@ -834,7 +838,7 @@ class CreateDashboardPanelResponse(_message.Message):
     def __init__(self, panel: _Optional[_Union[Panel, _Mapping]] = ...) -> None: ...
 
 class UpdateDashboardPanelRequest(_message.Message):
-    __slots__ = ("user_id", "panel_id", "name", "index", "project_id", "period", "periodFrom", "periodTo", "type", "endpoint", "routes", "statistic", "layout", "trace_id", "service_filter", "operation_filter", "min_duration_ms", "has_error", "limit", "status_class", "logs_search")
+    __slots__ = ("user_id", "panel_id", "name", "index", "project_id", "period", "periodFrom", "periodTo", "type", "endpoint", "routes", "statistic", "layout", "trace_id", "service_filter", "operation_filter", "min_duration_ms", "has_error", "limit", "status_class", "logs_search", "traffic_categories")
     USER_ID_FIELD_NUMBER: _ClassVar[int]
     PANEL_ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
@@ -856,6 +860,7 @@ class UpdateDashboardPanelRequest(_message.Message):
     LIMIT_FIELD_NUMBER: _ClassVar[int]
     STATUS_CLASS_FIELD_NUMBER: _ClassVar[int]
     LOGS_SEARCH_FIELD_NUMBER: _ClassVar[int]
+    TRAFFIC_CATEGORIES_FIELD_NUMBER: _ClassVar[int]
     user_id: int
     panel_id: str
     name: str
@@ -877,7 +882,8 @@ class UpdateDashboardPanelRequest(_message.Message):
     limit: int
     status_class: str
     logs_search: str
-    def __init__(self, user_id: _Optional[int] = ..., panel_id: _Optional[str] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., period: _Optional[str] = ..., periodFrom: _Optional[str] = ..., periodTo: _Optional[str] = ..., type: _Optional[str] = ..., endpoint: _Optional[str] = ..., routes: _Optional[_Iterable[str]] = ..., statistic: _Optional[str] = ..., layout: _Optional[_Union[PanelLayout, _Mapping]] = ..., trace_id: _Optional[str] = ..., service_filter: _Optional[str] = ..., operation_filter: _Optional[str] = ..., min_duration_ms: _Optional[int] = ..., has_error: bool = ..., limit: _Optional[int] = ..., status_class: _Optional[str] = ..., logs_search: _Optional[str] = ...) -> None: ...
+    traffic_categories: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, user_id: _Optional[int] = ..., panel_id: _Optional[str] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., period: _Optional[str] = ..., periodFrom: _Optional[str] = ..., periodTo: _Optional[str] = ..., type: _Optional[str] = ..., endpoint: _Optional[str] = ..., routes: _Optional[_Iterable[str]] = ..., statistic: _Optional[str] = ..., layout: _Optional[_Union[PanelLayout, _Mapping]] = ..., trace_id: _Optional[str] = ..., service_filter: _Optional[str] = ..., operation_filter: _Optional[str] = ..., min_duration_ms: _Optional[int] = ..., has_error: bool = ..., limit: _Optional[int] = ..., status_class: _Optional[str] = ..., logs_search: _Optional[str] = ..., traffic_categories: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class UpdateDashboardPanelResponse(_message.Message):
     __slots__ = ("panel",)

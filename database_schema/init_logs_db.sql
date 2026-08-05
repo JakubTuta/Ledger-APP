@@ -97,7 +97,9 @@ WHERE status_code IS NOT NULL;
 -- log_type='endpoint' (it's threaded into log_request/log_exception too when
 -- captured during a request). Without this, the planner scans every log row
 -- in the window and filters client_country row by row after the heap fetch.
-CREATE INDEX IF NOT EXISTS idx_logs_project_country ON logs (project_id, timestamp DESC, client_country)
+-- client_channel is carried as a fourth column so a panel's traffic filter
+-- stays index-only (measured 25x on a bot-only filter; see revision 020).
+CREATE INDEX IF NOT EXISTS idx_logs_project_country ON logs (project_id, timestamp DESC, client_country, client_channel)
 WHERE client_country IS NOT NULL;
 
 -- Analytics aggregates a time window across all projects. Without this the

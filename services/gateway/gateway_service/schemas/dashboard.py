@@ -1,4 +1,13 @@
+import typing
+
 import pydantic
+
+TrafficCategory = typing.Literal["users", "bots", "servers", "unknown"]
+
+TRAFFIC_CATEGORIES_DESCRIPTION = (
+    "Caller categories this panel shows, for panels reading raw logs "
+    "(logs, error_list, country_map). Omit or send an empty list for all traffic."
+)
 
 
 class PanelLayout(pydantic.BaseModel):
@@ -85,6 +94,9 @@ class PanelRequest(pydantic.BaseModel):
     search: str | None = pydantic.Field(
         None, max_length=200, description="Path/method substring filter (logs panels)"
     )
+    trafficCategories: list[TrafficCategory] | None = pydantic.Field(
+        None, description=TRAFFIC_CATEGORIES_DESCRIPTION, examples=[["users"]]
+    )
 
     @pydantic.model_validator(mode="after")
     def validate_time_range(self):
@@ -163,6 +175,9 @@ class PanelResponse(pydantic.BaseModel):
     has_error: bool | None = pydantic.Field(None)
     statusClass: str | None = pydantic.Field(None)
     search: str | None = pydantic.Field(None)
+    trafficCategories: list[TrafficCategory] = pydantic.Field(
+        default_factory=list, description=TRAFFIC_CATEGORIES_DESCRIPTION
+    )
 
     model_config = pydantic.ConfigDict(
         json_schema_extra={
@@ -316,6 +331,9 @@ class UpdatePanelRequest(pydantic.BaseModel):
     )
     search: str | None = pydantic.Field(
         None, max_length=200, description="Path/method substring filter (logs panels)"
+    )
+    trafficCategories: list[TrafficCategory] | None = pydantic.Field(
+        None, description=TRAFFIC_CATEGORIES_DESCRIPTION, examples=[["users"]]
     )
 
     @pydantic.model_validator(mode="after")

@@ -42,6 +42,7 @@ def _panel_proto_to_response(panel) -> schemas.PanelResponse:
         has_error=panel.has_error if panel.HasField("has_error") else None,
         statusClass=panel.status_class if panel.HasField("status_class") else None,
         search=panel.logs_search if panel.HasField("logs_search") else None,
+        trafficCategories=list(panel.traffic_categories),
     )
 
 
@@ -168,6 +169,8 @@ async def create_dashboard_panel(
             grpc_request_kwargs["status_class"] = request_data.statusClass
         if request_data.search is not None:
             grpc_request_kwargs["logs_search"] = request_data.search
+        if request_data.trafficCategories is not None:
+            grpc_request_kwargs["traffic_categories"] = request_data.trafficCategories
 
         grpc_request = auth_pb2.CreateDashboardPanelRequest(**grpc_request_kwargs)
 
@@ -275,6 +278,8 @@ async def update_dashboard_panel(
             grpc_request_kwargs["status_class"] = request_data.statusClass
         if request_data.search is not None:
             grpc_request_kwargs["logs_search"] = request_data.search
+        if request_data.trafficCategories is not None:
+            grpc_request_kwargs["traffic_categories"] = request_data.trafficCategories
 
         grpc_request = auth_pb2.UpdateDashboardPanelRequest(**grpc_request_kwargs)
 

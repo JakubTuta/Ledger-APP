@@ -105,11 +105,15 @@ class Log(database.Base):
         # base_middleware.py), so it can't reuse idx_logs_project_http.
         # Without this, the planner range-scans the whole window and filters
         # client_country row by row after the heap fetch.
+        # client_channel is the fourth column so a panel's traffic filter
+        # keeps the scan index-only - without it the same query falls back to
+        # a bitmap heap scan, 25x slower; see ingestion revision 020.
         Index(
             "idx_logs_project_country",
             "project_id",
             "timestamp",
             "client_country",
+            "client_channel",
             postgresql_ops={"timestamp": "DESC"},
             postgresql_where="client_country IS NOT NULL",
         ),

@@ -29,6 +29,7 @@ def _panel_dict_to_proto(panel: dict) -> auth_pb2.Panel:
         "routes": panel.get("routes", []),
         "statistic": panel.get("statistic", ""),
         "layout": auth_pb2.PanelLayout(**panel["layout"]) if panel.get("layout") else None,
+        "traffic_categories": panel.get("traffic_categories", []),
     }
     if panel.get("trace_id") is not None:
         kwargs["trace_id"] = panel["trace_id"]
@@ -1212,6 +1213,7 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     has_error=request.has_error if request.HasField("has_error") else None,
                     status_class=request.status_class if request.HasField("status_class") else None,
                     logs_search=request.logs_search if request.HasField("logs_search") else None,
+                    traffic_categories=list(request.traffic_categories),
                 )
 
                 return auth_pb2.CreateDashboardPanelResponse(panel=_panel_dict_to_proto(panel))
@@ -1271,6 +1273,7 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     has_error=request.has_error if request.HasField("has_error") else None,
                     status_class=request.status_class if request.HasField("status_class") else None,
                     logs_search=request.logs_search if request.HasField("logs_search") else None,
+                    traffic_categories=list(request.traffic_categories),
                 )
 
                 return auth_pb2.UpdateDashboardPanelResponse(panel=_panel_dict_to_proto(panel))
