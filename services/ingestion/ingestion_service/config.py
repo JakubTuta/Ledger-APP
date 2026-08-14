@@ -14,9 +14,11 @@ class Settings(pydantic_settings.BaseSettings):
         extra="ignore",
     )
 
-    ENV: typing.Literal["development", "staging", "production", "test"] = pydantic.Field(
-        default="development",
-        description="Application environment",
+    ENV: typing.Literal["development", "staging", "production", "test"] = (
+        pydantic.Field(
+            default="development",
+            description="Application environment",
+        )
     )
 
     DEBUG: bool = pydantic.Field(
@@ -24,9 +26,11 @@ class Settings(pydantic_settings.BaseSettings):
         description="Enable debug mode",
     )
 
-    LOG_LEVEL: typing.Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = pydantic.Field(
-        default="INFO",
-        description="Logging level",
+    LOG_LEVEL: typing.Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = (
+        pydantic.Field(
+            default="INFO",
+            description="Logging level",
+        )
     )
 
     INGESTION_HOST: typing.ClassVar[str] = "0.0.0.0"
@@ -156,7 +160,7 @@ class Settings(pydantic_settings.BaseSettings):
     RABBITMQ_SPANS_QUEUE: typing.ClassVar[str] = "ingestion.spans"
     RABBITMQ_METRICS_QUEUE: typing.ClassVar[str] = "ingestion.metrics"
     RABBITMQ_CHANNEL_POOL_SIZE: typing.ClassVar[int] = 10
-    RABBITMQ_PREFETCH_COUNT: typing.ClassVar[int] = 1000
+    RABBITMQ_PREFETCH_COUNT: typing.ClassVar[int] = 100
     BATCH_FLUSH_INTERVAL: typing.ClassVar[float] = 1.0
     RABBITMQ_ENVELOPE_MAX_LOGS: typing.ClassVar[int] = 200
     RABBITMQ_ENVELOPE_MAX_SPANS: typing.ClassVar[int] = 200
