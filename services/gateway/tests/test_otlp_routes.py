@@ -237,7 +237,53 @@ class TestOtlpTraceRoute(test_base.BaseGatewayTest):
         assert response.status_code == 503
         assert response.headers["retry-after"] == "60"
 
-    async def test_batch_too_large_rejected(self, setup_method):
+    async def test_oversized_batch_is_split_not_rejected(self, setup_method):
+        # OTel exporters treat a 4xx as non-retryable, so rejecting a
+        # large-but-valid export drops the whole payload. The gateway splits it
+        # into batches the ingestion service accepts instead.
+        await self.set_api_key_cache("test_api_key_123", project_id=1)
+
+        span_count = 2500
+        data = {
+            "resourceSpans": [
+                {
+                    "scopeSpans": [
+                        {
+                            "spans": [
+                                {"traceId": "a" * 32, "spanId": "b" * 16, "name": f"op{i}"}
+                                for i in range(span_count)
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+
+        mock_stub = self.mock_grpc_pool.get_stub("ingestion", None)
+        chunk_sizes = []
+        original = mock_stub.IngestSpansBatch
+
+        async def record_chunk(request, timeout=None):
+            chunk_sizes.append(len(request.spans))
+            return await original(request, timeout=timeout)
+
+        mock_stub.IngestSpansBatch = record_chunk
+
+        response = await self.client.post(
+            "/v1/traces",
+            content=json.dumps(data).encode(),
+            headers={
+                "X-API-Key": "test_api_key_123",
+                "Content-Type": "application/json",
+            },
+        )
+
+        assert response.status_code == 200
+        assert chunk_sizes == [1000, 1000, 500]
+        assert sum(chunk_sizes) == span_count
+        assert "partialSuccess" not in json.loads(response.content)
+
+    async def test_absurdly_large_batch_rejected(self, setup_method):
         await self.set_api_key_cache("test_api_key_123", project_id=1)
 
         data = {
@@ -246,8 +292,8 @@ class TestOtlpTraceRoute(test_base.BaseGatewayTest):
                     "scopeSpans": [
                         {
                             "spans": [
-                                {"traceId": "a" * 32, "spanId": "b" * 16, "name": f"op{i}"}
-                                for i in range(1001)
+                                {"traceId": "a" * 32, "spanId": "b" * 16, "name": "op"}
+                                for _ in range(100_001)
                             ]
                         }
                     ]
@@ -264,7 +310,7 @@ class TestOtlpTraceRoute(test_base.BaseGatewayTest):
             },
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 413
 
     async def test_spans_quota_exceeded_rejects_without_forwarding(self, setup_method):
         await self.set_api_key_cache("test_api_key_123", project_id=1, spans_daily_quota=1)

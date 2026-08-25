@@ -114,18 +114,6 @@ class IngestLogBatchResponse(_message.Message):
     error: str
     def __init__(self, success: bool = ..., queued: _Optional[int] = ..., failed: _Optional[int] = ..., error: _Optional[str] = ...) -> None: ...
 
-class QueueDepthRequest(_message.Message):
-    __slots__ = ("project_id",)
-    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
-    project_id: int
-    def __init__(self, project_id: _Optional[int] = ...) -> None: ...
-
-class QueueDepthResponse(_message.Message):
-    __slots__ = ("depth",)
-    DEPTH_FIELD_NUMBER: _ClassVar[int]
-    depth: int
-    def __init__(self, depth: _Optional[int] = ...) -> None: ...
-
 class SpanEvent(_message.Message):
     __slots__ = ("name", "ts_unix_nano", "attrs")
     class AttrsEntry(_message.Message):

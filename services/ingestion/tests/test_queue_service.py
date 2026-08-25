@@ -128,14 +128,6 @@ class TestQueueService(BaseIngestionTest):
         assert "Project 2 log" in messages
         assert {p["project_id"] for p in payloads} == {1, 2}
 
-    async def test_queue_depth(self):
-        """get_queue_depth returns the broker's envelope (message) count, not the log count."""
-        logs = [self._make_log(message=f"Log {i}") for i in range(25)]
-        await queue_service.enqueue_logs_batch(logs)
-
-        depth = await queue_service.get_queue_depth(project_id=1)
-        assert depth == 1
-
     async def test_backpressure_raises_queue_full_error(self):
         """Publishing when queue is at x-max-length raises QueueFullError."""
         max_depth = config.settings.QUEUE_MAX_DEPTH

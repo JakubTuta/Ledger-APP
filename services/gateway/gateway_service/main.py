@@ -13,14 +13,12 @@ from gateway_service.routes import (
     dashboard_routes,
     error_groups_routes,
     health_routes,
-    ingestion_routes,
     monitor_routes,
     notification_inbox_routes,
     notifications,
     otlp_routes,
     project_routes,
     query_routes,
-    settings_routes,
     sharing_routes,
     tracing_routes,
 )
@@ -175,10 +173,6 @@ def custom_openapi():
             "description": "OpenTelemetry Protocol (OTLP/HTTP) ingestion for traces and logs, compatible with any language's OTel SDK",
         },
         {
-            "name": "Ingestion",
-            "description": "Ingestion queue monitoring endpoints",
-        },
-        {
             "name": "Query",
             "description": "Log retrieval and analytics query endpoints",
         },
@@ -189,10 +183,6 @@ def custom_openapi():
         {
             "name": "Notifications",
             "description": "Real-time error notifications via Server-Sent Events (SSE)",
-        },
-        {
-            "name": "Settings",
-            "description": "Project settings, quotas, and rate limits",
         },
         {
             "name": "Sharing",
@@ -343,7 +333,6 @@ include_router(project_routes.router, prefix="/api/v1")
 include_router(api_key_routes.router, prefix="/api/v1")
 include_router(dashboard_routes.router, prefix="/api/v1")
 include_router(health_routes.router, prefix="/api/v1")
-include_router(ingestion_routes.router, prefix="/api/v1")
 include_router(otlp_routes.router)
 include_router(query_routes.router, prefix="/api/v1")
 include_router(error_groups_routes.router, prefix="/api/v1")
@@ -351,7 +340,6 @@ include_router(tracing_routes.router, prefix="/api/v1")
 include_router(notifications.router, prefix="/api/v1")
 include_router(notification_inbox_routes.router, prefix="/api/v1")
 include_router(alert_routes.router, prefix="/api/v1")
-include_router(settings_routes.router, prefix="/api/v1")
 include_router(sharing_routes.router, prefix="/api/v1")
 include_router(monitor_routes.router, prefix="/api/v1")
 

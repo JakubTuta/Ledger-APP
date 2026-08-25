@@ -118,15 +118,6 @@ class TestAlertFiringFlow:
         )
         event = history_response.json()["events"][0]
         assert event["metric"] == "p95_latency"
-        assert event["acked_at"] is None
-
-        ack_response = await client.post(
-            f"/api/v1/alerts/history/{event['id']}/ack",
-            headers=auth_headers,
-            params={"project_id": project["project_id"]},
-        )
-        assert ack_response.status_code == 200, ack_response.text
-        assert ack_response.json()["acked_at"] is not None
 
         async def _notification_created() -> bool:
             response = await client.get("/api/v1/notifications", headers=auth_headers)

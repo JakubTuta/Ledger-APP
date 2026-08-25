@@ -1842,71 +1842,6 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
             context.set_details(f"Internal error: {str(e)}")
             return auth_pb2.ListAlertEventsResponse()
 
-    async def AckAlertEvent(
-        self,
-        request: auth_pb2.AckAlertEventRequest,
-        context: grpc.aio.ServicerContext,
-    ) -> auth_pb2.AckAlertEventResponse:
-        try:
-            async with database.get_session() as session:
-                result = await session.execute(
-                    sa.select(models.AlertEvent).where(models.AlertEvent.id == request.event_id)
-                )
-                event = result.scalar_one_or_none()
-                if event is None or event.project_id != request.project_id:
-                    return auth_pb2.AckAlertEventResponse(
-                        success=False, error_message="Alert event not found"
-                    )
-
-                event.acked_by = request.account_id
-                event.acked_at = datetime.datetime.now(datetime.timezone.utc)
-                await session.commit()
-                await session.refresh(event)
-
-                return auth_pb2.AckAlertEventResponse(
-                    success=True, event=_alert_event_to_proto(event)
-                )
-        except Exception as e:
-            context.set_code(grpc.StatusCode.INTERNAL)
-            context.set_details(f"Internal error: {str(e)}")
-            return auth_pb2.AckAlertEventResponse(success=False, error_message=str(e))
-
-    async def SnoozeAlertEvent(
-        self,
-        request: auth_pb2.SnoozeAlertEventRequest,
-        context: grpc.aio.ServicerContext,
-    ) -> auth_pb2.SnoozeAlertEventResponse:
-        try:
-            if request.minutes <= 0 or request.minutes > _MAX_SNOOZE_MINUTES:
-                return auth_pb2.SnoozeAlertEventResponse(
-                    success=False,
-                    error_message=f"minutes must be between 1 and {_MAX_SNOOZE_MINUTES}",
-                )
-
-            async with database.get_session() as session:
-                result = await session.execute(
-                    sa.select(models.AlertEvent).where(models.AlertEvent.id == request.event_id)
-                )
-                event = result.scalar_one_or_none()
-                if event is None or event.project_id != request.project_id:
-                    return auth_pb2.SnoozeAlertEventResponse(
-                        success=False, error_message="Alert event not found"
-                    )
-
-                event.snoozed_until = datetime.datetime.now(
-                    datetime.timezone.utc
-                ) + datetime.timedelta(minutes=request.minutes)
-                await session.commit()
-                await session.refresh(event)
-
-                return auth_pb2.SnoozeAlertEventResponse(
-                    success=True, event=_alert_event_to_proto(event)
-                )
-        except Exception as e:
-            context.set_code(grpc.StatusCode.INTERNAL)
-            context.set_details(f"Internal error: {str(e)}")
-            return auth_pb2.SnoozeAlertEventResponse(success=False, error_message=str(e))
-
     async def GetAlertNotificationPreferences(
         self,
         request: auth_pb2.GetAlertNotificationPreferencesRequest,
@@ -2351,12 +2286,6 @@ def _alert_event_to_proto(e: models.AlertEvent) -> auth_pb2.AlertEvent:
     )
     if e.rule_id is not None:
         event.rule_id = e.rule_id
-    if e.acked_by is not None:
-        event.acked_by = e.acked_by
-    if e.acked_at is not None:
-        event.acked_at = e.acked_at.isoformat()
-    if e.snoozed_until is not None:
-        event.snoozed_until = e.snoozed_until.isoformat()
     return event
 
 

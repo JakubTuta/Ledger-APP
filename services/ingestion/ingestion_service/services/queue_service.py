@@ -167,14 +167,3 @@ async def enqueue_metrics_envelope(project_id: int, points: list[dict]) -> None:
             await _publish_metrics_envelope(
                 channel, exchange, project_id, points[i : i + chunk_size]
             )
-
-
-async def get_queue_depth(project_id: int) -> int:
-    pool = await rabbitmq_client.get_channel_pool()
-
-    async with pool.acquire() as channel:
-        queue = await channel.declare_queue(
-            config.settings.RABBITMQ_QUEUE,
-            passive=True,
-        )
-        return queue.declaration_result.message_count

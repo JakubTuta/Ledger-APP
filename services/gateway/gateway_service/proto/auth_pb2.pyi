@@ -1306,7 +1306,7 @@ class DeleteConnectorResponse(_message.Message):
     def __init__(self, success: bool = ...) -> None: ...
 
 class AlertEvent(_message.Message):
-    __slots__ = ("id", "rule_id", "project_id", "rule_name", "metric", "comparator", "threshold", "unit", "value", "severity", "connectors_sent", "fired_at", "acked_by", "acked_at", "snoozed_until")
+    __slots__ = ("id", "rule_id", "project_id", "rule_name", "metric", "comparator", "threshold", "unit", "value", "severity", "connectors_sent", "fired_at")
     ID_FIELD_NUMBER: _ClassVar[int]
     RULE_ID_FIELD_NUMBER: _ClassVar[int]
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
@@ -1319,9 +1319,6 @@ class AlertEvent(_message.Message):
     SEVERITY_FIELD_NUMBER: _ClassVar[int]
     CONNECTORS_SENT_FIELD_NUMBER: _ClassVar[int]
     FIRED_AT_FIELD_NUMBER: _ClassVar[int]
-    ACKED_BY_FIELD_NUMBER: _ClassVar[int]
-    ACKED_AT_FIELD_NUMBER: _ClassVar[int]
-    SNOOZED_UNTIL_FIELD_NUMBER: _ClassVar[int]
     id: int
     rule_id: int
     project_id: int
@@ -1334,10 +1331,7 @@ class AlertEvent(_message.Message):
     severity: int
     connectors_sent: str
     fired_at: str
-    acked_by: int
-    acked_at: str
-    snoozed_until: str
-    def __init__(self, id: _Optional[int] = ..., rule_id: _Optional[int] = ..., project_id: _Optional[int] = ..., rule_name: _Optional[str] = ..., metric: _Optional[str] = ..., comparator: _Optional[str] = ..., threshold: _Optional[float] = ..., unit: _Optional[str] = ..., value: _Optional[float] = ..., severity: _Optional[int] = ..., connectors_sent: _Optional[str] = ..., fired_at: _Optional[str] = ..., acked_by: _Optional[int] = ..., acked_at: _Optional[str] = ..., snoozed_until: _Optional[str] = ...) -> None: ...
+    def __init__(self, id: _Optional[int] = ..., rule_id: _Optional[int] = ..., project_id: _Optional[int] = ..., rule_name: _Optional[str] = ..., metric: _Optional[str] = ..., comparator: _Optional[str] = ..., threshold: _Optional[float] = ..., unit: _Optional[str] = ..., value: _Optional[float] = ..., severity: _Optional[int] = ..., connectors_sent: _Optional[str] = ..., fired_at: _Optional[str] = ...) -> None: ...
 
 class ListAlertEventsRequest(_message.Message):
     __slots__ = ("project_id", "limit", "before_id")
@@ -1356,46 +1350,6 @@ class ListAlertEventsResponse(_message.Message):
     events: _containers.RepeatedCompositeFieldContainer[AlertEvent]
     has_more: bool
     def __init__(self, events: _Optional[_Iterable[_Union[AlertEvent, _Mapping]]] = ..., has_more: bool = ...) -> None: ...
-
-class AckAlertEventRequest(_message.Message):
-    __slots__ = ("event_id", "project_id", "account_id")
-    EVENT_ID_FIELD_NUMBER: _ClassVar[int]
-    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
-    ACCOUNT_ID_FIELD_NUMBER: _ClassVar[int]
-    event_id: int
-    project_id: int
-    account_id: int
-    def __init__(self, event_id: _Optional[int] = ..., project_id: _Optional[int] = ..., account_id: _Optional[int] = ...) -> None: ...
-
-class AckAlertEventResponse(_message.Message):
-    __slots__ = ("success", "error_message", "event")
-    SUCCESS_FIELD_NUMBER: _ClassVar[int]
-    ERROR_MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    EVENT_FIELD_NUMBER: _ClassVar[int]
-    success: bool
-    error_message: str
-    event: AlertEvent
-    def __init__(self, success: bool = ..., error_message: _Optional[str] = ..., event: _Optional[_Union[AlertEvent, _Mapping]] = ...) -> None: ...
-
-class SnoozeAlertEventRequest(_message.Message):
-    __slots__ = ("event_id", "project_id", "minutes")
-    EVENT_ID_FIELD_NUMBER: _ClassVar[int]
-    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
-    MINUTES_FIELD_NUMBER: _ClassVar[int]
-    event_id: int
-    project_id: int
-    minutes: int
-    def __init__(self, event_id: _Optional[int] = ..., project_id: _Optional[int] = ..., minutes: _Optional[int] = ...) -> None: ...
-
-class SnoozeAlertEventResponse(_message.Message):
-    __slots__ = ("success", "error_message", "event")
-    SUCCESS_FIELD_NUMBER: _ClassVar[int]
-    ERROR_MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    EVENT_FIELD_NUMBER: _ClassVar[int]
-    success: bool
-    error_message: str
-    event: AlertEvent
-    def __init__(self, success: bool = ..., error_message: _Optional[str] = ..., event: _Optional[_Union[AlertEvent, _Mapping]] = ...) -> None: ...
 
 class AlertNotificationPreference(_message.Message):
     __slots__ = ("user_id", "project_id", "rule_id", "severity", "muted", "channels")

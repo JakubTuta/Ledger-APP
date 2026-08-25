@@ -142,14 +142,6 @@ class SearchLogsRequest(_message.Message):
     offset: int
     def __init__(self, project_id: _Optional[int] = ..., query: _Optional[str] = ..., start_time: _Optional[str] = ..., end_time: _Optional[str] = ..., limit: _Optional[int] = ..., offset: _Optional[int] = ...) -> None: ...
 
-class GetLogRequest(_message.Message):
-    __slots__ = ("log_id", "project_id")
-    LOG_ID_FIELD_NUMBER: _ClassVar[int]
-    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
-    log_id: int
-    project_id: int
-    def __init__(self, log_id: _Optional[int] = ..., project_id: _Optional[int] = ...) -> None: ...
-
 class LogEntry(_message.Message):
     __slots__ = ("id", "project_id", "timestamp", "ingested_at", "level", "log_type", "importance", "environment", "release", "message", "error_type", "error_message", "stack_trace", "attributes", "sdk_version", "platform", "platform_version", "processing_time_ms", "error_fingerprint", "method", "path", "status_code", "duration_ms", "client_channel", "client_country")
     ID_FIELD_NUMBER: _ClassVar[int]
@@ -225,14 +217,6 @@ class SearchLogsResponse(_message.Message):
     total: int
     has_more: bool
     def __init__(self, logs: _Optional[_Iterable[_Union[LogEntry, _Mapping]]] = ..., total: _Optional[int] = ..., has_more: bool = ...) -> None: ...
-
-class GetLogResponse(_message.Message):
-    __slots__ = ("log", "found")
-    LOG_FIELD_NUMBER: _ClassVar[int]
-    FOUND_FIELD_NUMBER: _ClassVar[int]
-    log: LogEntry
-    found: bool
-    def __init__(self, log: _Optional[_Union[LogEntry, _Mapping]] = ..., found: bool = ...) -> None: ...
 
 class GetErrorRateRequest(_message.Message):
     __slots__ = ("project_id", "interval", "start_time", "end_time")
@@ -909,112 +893,3 @@ class ListTracesResponse(_message.Message):
     total: int
     has_more: bool
     def __init__(self, traces: _Optional[_Iterable[_Union[TraceSummary, _Mapping]]] = ..., total: _Optional[int] = ..., has_more: bool = ...) -> None: ...
-
-class GetSpanLatencyRequest(_message.Message):
-    __slots__ = ("project_id", "service", "name", "from_time", "to_time")
-    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
-    SERVICE_FIELD_NUMBER: _ClassVar[int]
-    NAME_FIELD_NUMBER: _ClassVar[int]
-    FROM_TIME_FIELD_NUMBER: _ClassVar[int]
-    TO_TIME_FIELD_NUMBER: _ClassVar[int]
-    project_id: int
-    service: str
-    name: str
-    from_time: str
-    to_time: str
-    def __init__(self, project_id: _Optional[int] = ..., service: _Optional[str] = ..., name: _Optional[str] = ..., from_time: _Optional[str] = ..., to_time: _Optional[str] = ...) -> None: ...
-
-class SpanLatencyBucket(_message.Message):
-    __slots__ = ("service_name", "name", "bucket", "calls", "p50_ns", "p95_ns", "p99_ns", "errors")
-    SERVICE_NAME_FIELD_NUMBER: _ClassVar[int]
-    NAME_FIELD_NUMBER: _ClassVar[int]
-    BUCKET_FIELD_NUMBER: _ClassVar[int]
-    CALLS_FIELD_NUMBER: _ClassVar[int]
-    P50_NS_FIELD_NUMBER: _ClassVar[int]
-    P95_NS_FIELD_NUMBER: _ClassVar[int]
-    P99_NS_FIELD_NUMBER: _ClassVar[int]
-    ERRORS_FIELD_NUMBER: _ClassVar[int]
-    service_name: str
-    name: str
-    bucket: str
-    calls: int
-    p50_ns: int
-    p95_ns: int
-    p99_ns: int
-    errors: int
-    def __init__(self, service_name: _Optional[str] = ..., name: _Optional[str] = ..., bucket: _Optional[str] = ..., calls: _Optional[int] = ..., p50_ns: _Optional[int] = ..., p95_ns: _Optional[int] = ..., p99_ns: _Optional[int] = ..., errors: _Optional[int] = ...) -> None: ...
-
-class GetSpanLatencyResponse(_message.Message):
-    __slots__ = ("project_id", "data")
-    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
-    DATA_FIELD_NUMBER: _ClassVar[int]
-    project_id: int
-    data: _containers.RepeatedCompositeFieldContainer[SpanLatencyBucket]
-    def __init__(self, project_id: _Optional[int] = ..., data: _Optional[_Iterable[_Union[SpanLatencyBucket, _Mapping]]] = ...) -> None: ...
-
-class GetMetricSeriesRequest(_message.Message):
-    __slots__ = ("project_id",)
-    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
-    project_id: int
-    def __init__(self, project_id: _Optional[int] = ...) -> None: ...
-
-class MetricSeriesInfo(_message.Message):
-    __slots__ = ("name", "type", "tag_keys")
-    NAME_FIELD_NUMBER: _ClassVar[int]
-    TYPE_FIELD_NUMBER: _ClassVar[int]
-    TAG_KEYS_FIELD_NUMBER: _ClassVar[int]
-    name: str
-    type: int
-    tag_keys: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, name: _Optional[str] = ..., type: _Optional[int] = ..., tag_keys: _Optional[_Iterable[str]] = ...) -> None: ...
-
-class GetMetricSeriesResponse(_message.Message):
-    __slots__ = ("project_id", "series")
-    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
-    SERIES_FIELD_NUMBER: _ClassVar[int]
-    project_id: int
-    series: _containers.RepeatedCompositeFieldContainer[MetricSeriesInfo]
-    def __init__(self, project_id: _Optional[int] = ..., series: _Optional[_Iterable[_Union[MetricSeriesInfo, _Mapping]]] = ...) -> None: ...
-
-class QueryMetricsRequest(_message.Message):
-    __slots__ = ("project_id", "name", "tags", "aggregation", "from_time", "to_time")
-    class TagsEntry(_message.Message):
-        __slots__ = ("key", "value")
-        KEY_FIELD_NUMBER: _ClassVar[int]
-        VALUE_FIELD_NUMBER: _ClassVar[int]
-        key: str
-        value: str
-        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
-    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
-    NAME_FIELD_NUMBER: _ClassVar[int]
-    TAGS_FIELD_NUMBER: _ClassVar[int]
-    AGGREGATION_FIELD_NUMBER: _ClassVar[int]
-    FROM_TIME_FIELD_NUMBER: _ClassVar[int]
-    TO_TIME_FIELD_NUMBER: _ClassVar[int]
-    project_id: int
-    name: str
-    tags: _containers.ScalarMap[str, str]
-    aggregation: str
-    from_time: str
-    to_time: str
-    def __init__(self, project_id: _Optional[int] = ..., name: _Optional[str] = ..., tags: _Optional[_Mapping[str, str]] = ..., aggregation: _Optional[str] = ..., from_time: _Optional[str] = ..., to_time: _Optional[str] = ...) -> None: ...
-
-class MetricDataPoint(_message.Message):
-    __slots__ = ("bucket", "value")
-    BUCKET_FIELD_NUMBER: _ClassVar[int]
-    VALUE_FIELD_NUMBER: _ClassVar[int]
-    bucket: str
-    value: float
-    def __init__(self, bucket: _Optional[str] = ..., value: _Optional[float] = ...) -> None: ...
-
-class QueryMetricsResponse(_message.Message):
-    __slots__ = ("project_id", "name", "aggregation", "data")
-    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
-    NAME_FIELD_NUMBER: _ClassVar[int]
-    AGGREGATION_FIELD_NUMBER: _ClassVar[int]
-    DATA_FIELD_NUMBER: _ClassVar[int]
-    project_id: int
-    name: str
-    aggregation: str
-    data: _containers.RepeatedCompositeFieldContainer[MetricDataPoint]
-    def __init__(self, project_id: _Optional[int] = ..., name: _Optional[str] = ..., aggregation: _Optional[str] = ..., data: _Optional[_Iterable[_Union[MetricDataPoint, _Mapping]]] = ...) -> None: ...

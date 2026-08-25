@@ -204,45 +204,6 @@ class TestLogQuery(_LogFactoryMixin, test_base.BaseQueryTest):
         assert response.has_more is False
 
     @pytest.mark.asyncio
-    async def test_get_log_by_id(self):
-        log = await self.create_test_log(project_id=1, message="Test log")
-
-        request = query_pb2.GetLogRequest(
-            log_id=log.id,
-            project_id=1,
-        )
-
-        response = await self.stub.GetLog(request)
-
-        assert response.found is True
-        assert response.log.id == log.id
-        assert response.log.message == "Test log"
-
-    @pytest.mark.asyncio
-    async def test_get_log_not_found(self):
-        request = query_pb2.GetLogRequest(
-            log_id=999999,
-            project_id=1,
-        )
-
-        response = await self.stub.GetLog(request)
-
-        assert response.found is False
-
-    @pytest.mark.asyncio
-    async def test_get_log_wrong_project(self):
-        log = await self.create_test_log(project_id=1, message="Test log")
-
-        request = query_pb2.GetLogRequest(
-            log_id=log.id,
-            project_id=2,
-        )
-
-        response = await self.stub.GetLog(request)
-
-        assert response.found is False
-
-    @pytest.mark.asyncio
     async def test_query_logs_with_attributes(self):
         attributes = {"user_id": "usr_123", "request_id": "req_abc"}
         log = await self.create_test_log(
@@ -557,6 +518,56 @@ class TestGetLogFacets(_LogFactoryMixin, test_base.BaseQueryTest):
         )
 
         assert {v.value: v.count for v in response.client_channel} == {"bot": 9}
+
+    @pytest.mark.asyncio
+    async def test_a_facet_ignores_its_own_filter(self):
+        # Selecting level=error must not collapse the level facet to just
+        # "error" - the sidebar has to keep showing what else is available or
+        # there is no way back without clearing the filter.
+        base = datetime.datetime.now(datetime.timezone.utc).replace(
+            minute=0, second=0, microsecond=0
+        ) - datetime.timedelta(hours=3)
+
+        await self.seed_rollup_bucket(project_id=1, bucket=base, count=5, level="info")
+        await self.seed_rollup_bucket(project_id=1, bucket=base, count=9, level="error")
+
+        response = await self.stub.GetLogFacets(
+            query_pb2.GetLogFacetsRequest(
+                project_id=1,
+                start_time=base.isoformat(),
+                end_time=(base + datetime.timedelta(hours=1)).isoformat(),
+                level="error",
+            )
+        )
+
+        assert {v.value: v.count for v in response.level} == {"info": 5, "error": 9}
+
+    @pytest.mark.asyncio
+    async def test_other_facets_still_honour_an_active_filter(self):
+        # The flip side of the rule above: every dimension *except* the one being
+        # filtered stays narrowed, so its counts match the log list.
+        base = datetime.datetime.now(datetime.timezone.utc).replace(
+            minute=0, second=0, microsecond=0
+        ) - datetime.timedelta(hours=3)
+
+        await self.seed_rollup_bucket(
+            project_id=1, bucket=base, count=5, level="info", log_type="logger"
+        )
+        await self.seed_rollup_bucket(
+            project_id=1, bucket=base, count=9, level="error", log_type="exception"
+        )
+
+        response = await self.stub.GetLogFacets(
+            query_pb2.GetLogFacetsRequest(
+                project_id=1,
+                start_time=base.isoformat(),
+                end_time=(base + datetime.timedelta(hours=1)).isoformat(),
+                level="error",
+            )
+        )
+
+        assert {v.value: v.count for v in response.level} == {"info": 5, "error": 9}
+        assert {v.value: v.count for v in response.log_type} == {"exception": 9}
 
     @pytest.mark.asyncio
     async def test_facets_drop_the_rollups_absent_value_marker(self):

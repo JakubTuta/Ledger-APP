@@ -101,13 +101,6 @@ class AlertEventResponse(BaseModel):
     severity: int
     connectors_sent: str
     fired_at: str
-    acked_by: int | None = None
-    acked_at: str | None = None
-    snoozed_until: str | None = None
-
-
-class SnoozeAlertEventRequest(BaseModel):
-    minutes: int = Field(gt=0, le=7 * 24 * 60)
 
 
 class AlertEventListResponse(BaseModel):
@@ -165,9 +158,6 @@ def _proto_event_to_response(e) -> AlertEventResponse:
         severity=e.severity,
         connectors_sent=e.connectors_sent,
         fired_at=e.fired_at,
-        acked_by=e.acked_by if e.HasField("acked_by") else None,
-        acked_at=e.acked_at if e.HasField("acked_at") else None,
-        snoozed_until=e.snoozed_until if e.HasField("snoozed_until") else None,
     )
 
 
@@ -580,61 +570,6 @@ async def list_alert_history(
         events=[_proto_event_to_response(e) for e in response.events],
         has_more=response.has_more,
     )
-
-
-@router.post(
-    "/alerts/history/{event_id}/ack",
-    response_model=AlertEventResponse,
-    summary="Acknowledge an alert event",
-)
-async def ack_alert_event(
-    event_id: int,
-    request: fastapi.Request,
-    project_id: int = fastapi.Depends(dependencies.require_project_member),
-) -> AlertEventResponse:
-    account_id = _require_account(request)
-    try:
-        response = await _stub(request).AckAlertEvent(
-            auth_pb2.AckAlertEventRequest(
-                event_id=event_id, project_id=project_id, account_id=account_id
-            ),
-            timeout=5.0,
-        )
-    except grpc.RpcError as e:
-        raise fastapi.HTTPException(status_code=502, detail=str(e.details()))
-    if not response.success:
-        raise fastapi.HTTPException(
-            status_code=404, detail=response.error_message or "Alert event not found"
-        )
-    return _proto_event_to_response(response.event)
-
-
-@router.post(
-    "/alerts/history/{event_id}/snooze",
-    response_model=AlertEventResponse,
-    summary="Snooze re-notification for an alert event",
-)
-async def snooze_alert_event(
-    event_id: int,
-    payload: SnoozeAlertEventRequest,
-    request: fastapi.Request,
-    project_id: int = fastapi.Depends(dependencies.require_project_member),
-) -> AlertEventResponse:
-    _require_account(request)
-    try:
-        response = await _stub(request).SnoozeAlertEvent(
-            auth_pb2.SnoozeAlertEventRequest(
-                event_id=event_id, project_id=project_id, minutes=payload.minutes
-            ),
-            timeout=5.0,
-        )
-    except grpc.RpcError as e:
-        raise fastapi.HTTPException(status_code=502, detail=str(e.details()))
-    if not response.success:
-        raise fastapi.HTTPException(
-            status_code=404, detail=response.error_message or "Alert event not found"
-        )
-    return _proto_event_to_response(response.event)
 
 
 class MaintenanceWindowResponse(BaseModel):

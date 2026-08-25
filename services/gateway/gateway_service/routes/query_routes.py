@@ -613,149 +613,6 @@ async def stream_log_tail(
 
 
 @router.get(
-    "/logs/{log_id}",
-    status_code=200,
-    summary="Get log by ID",
-    description="Retrieve detailed information for a specific log entry by its ID. Returns complete log data including metadata, error information, and custom attributes.",
-    response_description="Complete log entry details",
-    response_model=schemas.LogEntryResponse,
-    responses={
-        404: {
-            "description": "Log not found",
-            "content": {
-                "application/json": {"example": {"detail": "Log not found or access denied"}}
-            },
-        },
-        400: {
-            "description": "Invalid log ID",
-            "content": {"application/json": {"example": {"detail": "Invalid log ID format"}}},
-        },
-        500: {
-            "description": "Server error",
-            "content": {"application/json": {"example": {"detail": "Failed to retrieve log"}}},
-        },
-    },
-)
-async def get_log_by_id(
-    log_id: int,
-    request: fastapi.Request,
-    project_id: int = fastapi.Depends(dependencies.require_project_member),
-) -> schemas.LogEntryResponse:
-    """
-    Retrieve a complete log entry by its unique ID.
-
-    Returns all available information for the specified log, including:
-    - Temporal data (timestamp, ingestion time)
-    - Classification (level, type, importance)
-    - Content (message, error details, stack trace)
-    - Metadata (environment, release, SDK info, platform)
-    - Custom attributes (JSON object)
-    - Error tracking (fingerprint for grouping similar errors)
-
-    ## Path Parameters
-
-    - **log_id** (integer, required): The unique identifier of the log entry
-
-    ## Query Parameters
-
-    - **project_id** (integer, required): The project ID to retrieve the log from
-
-    ## Authorization
-
-    Requires session token authentication via `Authorization: Bearer <token>` header.
-
-    ## Response
-
-    Returns a complete `LogEntryResponse` object with all fields populated
-    according to what was captured during log ingestion.
-
-    ## Use Cases
-
-    - **Error investigation**: View full stack traces and error context
-    - **Audit trails**: Retrieve specific log entries for compliance
-    - **Debugging**: Access detailed metadata and custom attributes
-    - **Context expansion**: Get full details from log list or search results
-
-    ## Example Response
-
-    ```json
-    {
-      "id": 123456,
-      "project_id": 1,
-      "timestamp": "2025-11-21T14:30:00Z",
-      "ingested_at": "2025-11-21T14:30:01Z",
-      "level": "error",
-      "log_type": "exception",
-      "importance": "high",
-      "environment": "production",
-      "release": "v1.2.3",
-      "message": "Database connection failed",
-      "error_type": "psycopg2.OperationalError",
-      "error_message": "could not connect to server",
-      "stack_trace": "Traceback (most recent call last):\\n  File ...",
-      "attributes": {
-        "user_id": 42,
-        "request_id": "abc123",
-        "endpoint": "/api/users"
-      },
-      "sdk_version": "1.0.0",
-      "platform": "Python",
-      "platform_version": "3.12.0",
-      "processing_time_ms": 5,
-      "error_fingerprint": "a3f8b9c2d1e4f5a6b7c8d9e0f1a2b3c4..."
-    }
-    ```
-
-    Requires session token authentication via `Authorization: Bearer <token>` header.
-    """
-    grpc_pool = request.app.state.grpc_pool
-
-    try:
-        async with grpc_pool.get_query_stub() as stub:
-            response = await stub.GetLog(
-                query_pb2.GetLogRequest(log_id=log_id, project_id=project_id),
-                timeout=5.0,
-            )
-
-        if not response.found:
-            raise fastapi.HTTPException(
-                status_code=404,
-                detail="Log not found or access denied",
-            )
-
-        log_entry = _proto_to_pydantic_log(response.log)
-        return log_entry
-
-    except grpc.RpcError as e:
-        if e.code() == grpc.StatusCode.NOT_FOUND:
-            raise fastapi.HTTPException(
-                status_code=404,
-                detail="Log not found or access denied",
-            )
-        elif e.code() == grpc.StatusCode.INVALID_ARGUMENT:
-            raise fastapi.HTTPException(
-                status_code=400,
-                detail="Invalid log ID format",
-            )
-        else:
-            logger.error(f"gRPC error retrieving log: {e.code()} - {e.details()}")
-            raise fastapi.HTTPException(
-                status_code=500,
-                detail="Failed to retrieve log",
-            )
-
-    except fastapi.HTTPException:
-        raise
-
-    except Exception as e:
-        logger.error(f"Failed to retrieve log: {e}", exc_info=True)
-        raise fastapi.HTTPException(
-            status_code=500,
-            detail="Failed to retrieve log",
-        )
-
-
-@router.get(
     "/logs",
     status_code=200,
     summary="Query logs for dashboard panel",
@@ -1277,7 +1134,7 @@ async def get_aggregated_metrics(
     if periodFrom:
         try:
             period_from_date = datetime.date.fromisoformat(periodFrom)
-            today = datetime.date.today()
+            today = datetime.datetime.now(datetime.timezone.utc).date()
             if period_from_date > today:
                 raise fastapi.HTTPException(
                     status_code=400, detail="periodFrom cannot be in the future"
@@ -1291,7 +1148,7 @@ async def get_aggregated_metrics(
     if periodTo:
         try:
             period_to_date = datetime.date.fromisoformat(periodTo)
-            today = datetime.date.today()
+            today = datetime.datetime.now(datetime.timezone.utc).date()
             if period_to_date > today:
                 raise fastapi.HTTPException(
                     status_code=400, detail="periodTo cannot be in the future"
@@ -1704,86 +1561,3 @@ def _proto_to_pydantic_log(proto_log: query_pb2.LogEntry) -> schemas.LogEntryRes
         client_channel=proto_log.client_channel if proto_log.HasField("client_channel") else None,
         client_country=proto_log.client_country if proto_log.HasField("client_country") else None,
     )
-
-
-@router.get(
-    "/metrics/series",
-    status_code=200,
-    summary="List distinct metric names + tag keys for a project",
-    tags=["Custom Metrics"],
-)
-async def get_metric_series(
-    request: fastapi.Request,
-    project_id: int = fastapi.Depends(dependencies.require_project_member),
-) -> dict:
-    grpc_pool = request.app.state.grpc_pool
-    try:
-        async with grpc_pool.get_query_stub() as stub:
-            response = await stub.GetMetricSeries(
-                query_pb2.GetMetricSeriesRequest(project_id=project_id),
-                timeout=10.0,
-            )
-        return {
-            "project_id": response.project_id,
-            "series": [
-                {"name": s.name, "type": s.type, "tag_keys": list(s.tag_keys)}
-                for s in response.series
-            ],
-        }
-    except grpc.RpcError as e:
-        logger.error(f"gRPC error during GetMetricSeries: {e.code()} - {e.details()}")
-        raise fastapi.HTTPException(status_code=500, detail="Failed to fetch metric series")
-
-
-@router.get(
-    "/metrics/query",
-    status_code=200,
-    summary="Query a metric's time series",
-    tags=["Custom Metrics"],
-)
-async def query_metrics(
-    request: fastapi.Request,
-    name: str = fastapi.Query(...),
-    aggregation: typing.Literal["avg", "sum", "min", "max", "count"] = fastapi.Query("avg"),
-    fromTime: str | None = fastapi.Query(None),
-    toTime: str | None = fastapi.Query(None),
-    tags: str | None = fastapi.Query(None, description="JSON object of tag key/value filters"),
-    project_id: int = fastapi.Depends(dependencies.require_project_member),
-) -> dict:
-    grpc_pool = request.app.state.grpc_pool
-
-    tags_map: dict[str, str] = {}
-    if tags:
-        try:
-            parsed = json.loads(tags)
-            if isinstance(parsed, dict):
-                tags_map = {str(k): str(v) for k, v in parsed.items()}
-        except json.JSONDecodeError:
-            raise fastapi.HTTPException(status_code=400, detail="tags must be valid JSON")
-
-    try:
-        req_kwargs: dict = dict(
-            project_id=project_id,
-            name=name,
-            tags=tags_map,
-            aggregation=aggregation,
-        )
-        if fromTime:
-            req_kwargs["from_time"] = fromTime
-        if toTime:
-            req_kwargs["to_time"] = toTime
-
-        async with grpc_pool.get_query_stub() as stub:
-            response = await stub.QueryMetrics(
-                query_pb2.QueryMetricsRequest(**req_kwargs),
-                timeout=10.0,
-            )
-        return {
-            "project_id": response.project_id,
-            "name": response.name,
-            "aggregation": response.aggregation,
-            "data": [{"bucket": d.bucket, "value": d.value} for d in response.data],
-        }
-    except grpc.RpcError as e:
-        logger.error(f"gRPC error during QueryMetrics: {e.code()} - {e.details()}")
-        raise fastapi.HTTPException(status_code=500, detail="Failed to query metric")

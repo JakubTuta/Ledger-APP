@@ -182,22 +182,6 @@ class IngestionServicer(ingestion_pb2_grpc.IngestionServiceServicer):
                 "Failed to ingest batch",
             )
 
-    async def GetQueueDepth(
-        self,
-        request: ingestion_pb2.QueueDepthRequest,
-        context: grpc.aio.ServicerContext,
-    ) -> ingestion_pb2.QueueDepthResponse:
-        try:
-            depth = await queue_service.get_queue_depth(request.project_id)
-            return ingestion_pb2.QueueDepthResponse(depth=depth)
-
-        except Exception as e:
-            logger.error(f"Failed to get queue depth: {e}", exc_info=True)
-            await context.abort(
-                grpc.StatusCode.INTERNAL,
-                "Failed to get queue depth",
-            )
-
     async def IngestSpansBatch(
         self,
         request: ingestion_pb2.IngestSpansBatchRequest,

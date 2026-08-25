@@ -49,11 +49,6 @@ class QueryServiceStub(object):
                 request_serializer=query__pb2.SearchLogsRequest.SerializeToString,
                 response_deserializer=query__pb2.SearchLogsResponse.FromString,
                 _registered_method=True)
-        self.GetLog = channel.unary_unary(
-                '/query.QueryService/GetLog',
-                request_serializer=query__pb2.GetLogRequest.SerializeToString,
-                response_deserializer=query__pb2.GetLogResponse.FromString,
-                _registered_method=True)
         self.GetErrorRate = channel.unary_unary(
                 '/query.QueryService/GetErrorRate',
                 request_serializer=query__pb2.GetErrorRateRequest.SerializeToString,
@@ -134,21 +129,6 @@ class QueryServiceStub(object):
                 request_serializer=query__pb2.ListTracesRequest.SerializeToString,
                 response_deserializer=query__pb2.ListTracesResponse.FromString,
                 _registered_method=True)
-        self.GetSpanLatency = channel.unary_unary(
-                '/query.QueryService/GetSpanLatency',
-                request_serializer=query__pb2.GetSpanLatencyRequest.SerializeToString,
-                response_deserializer=query__pb2.GetSpanLatencyResponse.FromString,
-                _registered_method=True)
-        self.GetMetricSeries = channel.unary_unary(
-                '/query.QueryService/GetMetricSeries',
-                request_serializer=query__pb2.GetMetricSeriesRequest.SerializeToString,
-                response_deserializer=query__pb2.GetMetricSeriesResponse.FromString,
-                _registered_method=True)
-        self.QueryMetrics = channel.unary_unary(
-                '/query.QueryService/QueryMetrics',
-                request_serializer=query__pb2.QueryMetricsRequest.SerializeToString,
-                response_deserializer=query__pb2.QueryMetricsResponse.FromString,
-                _registered_method=True)
 
 
 class QueryServiceServicer(object):
@@ -167,12 +147,6 @@ class QueryServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def SearchLogs(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def GetLog(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -276,25 +250,6 @@ class QueryServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def GetSpanLatency(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def GetMetricSeries(self, request, context):
-        """Metric points
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def QueryMetrics(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
 
 def add_QueryServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -312,11 +267,6 @@ def add_QueryServiceServicer_to_server(servicer, server):
                     servicer.SearchLogs,
                     request_deserializer=query__pb2.SearchLogsRequest.FromString,
                     response_serializer=query__pb2.SearchLogsResponse.SerializeToString,
-            ),
-            'GetLog': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetLog,
-                    request_deserializer=query__pb2.GetLogRequest.FromString,
-                    response_serializer=query__pb2.GetLogResponse.SerializeToString,
             ),
             'GetErrorRate': grpc.unary_unary_rpc_method_handler(
                     servicer.GetErrorRate,
@@ -397,21 +347,6 @@ def add_QueryServiceServicer_to_server(servicer, server):
                     servicer.ListTraces,
                     request_deserializer=query__pb2.ListTracesRequest.FromString,
                     response_serializer=query__pb2.ListTracesResponse.SerializeToString,
-            ),
-            'GetSpanLatency': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetSpanLatency,
-                    request_deserializer=query__pb2.GetSpanLatencyRequest.FromString,
-                    response_serializer=query__pb2.GetSpanLatencyResponse.SerializeToString,
-            ),
-            'GetMetricSeries': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetMetricSeries,
-                    request_deserializer=query__pb2.GetMetricSeriesRequest.FromString,
-                    response_serializer=query__pb2.GetMetricSeriesResponse.SerializeToString,
-            ),
-            'QueryMetrics': grpc.unary_unary_rpc_method_handler(
-                    servicer.QueryMetrics,
-                    request_deserializer=query__pb2.QueryMetricsRequest.FromString,
-                    response_serializer=query__pb2.QueryMetricsResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -495,33 +430,6 @@ class QueryService(object):
             '/query.QueryService/SearchLogs',
             query__pb2.SearchLogsRequest.SerializeToString,
             query__pb2.SearchLogsResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def GetLog(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/query.QueryService/GetLog',
-            query__pb2.GetLogRequest.SerializeToString,
-            query__pb2.GetLogResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -954,87 +862,6 @@ class QueryService(object):
             '/query.QueryService/ListTraces',
             query__pb2.ListTracesRequest.SerializeToString,
             query__pb2.ListTracesResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def GetSpanLatency(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/query.QueryService/GetSpanLatency',
-            query__pb2.GetSpanLatencyRequest.SerializeToString,
-            query__pb2.GetSpanLatencyResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def GetMetricSeries(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/query.QueryService/GetMetricSeries',
-            query__pb2.GetMetricSeriesRequest.SerializeToString,
-            query__pb2.GetMetricSeriesResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def QueryMetrics(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/query.QueryService/QueryMetrics',
-            query__pb2.QueryMetricsRequest.SerializeToString,
-            query__pb2.QueryMetricsResponse.FromString,
             options,
             channel_credentials,
             insecure,

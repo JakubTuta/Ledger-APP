@@ -11,7 +11,6 @@ import query_service.services.bottleneck_metrics as bottleneck_metrics_service
 import query_service.services.error_groups as error_groups_service
 import query_service.services.health_summary as health_summary_service
 import query_service.services.log_query as log_query
-import query_service.services.metric_points as metric_points_service
 import query_service.services.metrics as metrics_service
 import query_service.services.tracing as tracing_service
 
@@ -240,22 +239,6 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
 
         except Exception as e:
             await context.abort(grpc.StatusCode.INTERNAL, f"Search failed: {str(e)}")
-
-    async def GetLog(
-        self, request: query_pb2.GetLogRequest, context: grpc.aio.ServicerContext
-    ) -> query_pb2.GetLogResponse:
-        try:
-            log = await log_query.get_log_by_id(
-                log_id=request.log_id, project_id=request.project_id
-            )
-
-            if not log:
-                return query_pb2.GetLogResponse(found=False)
-
-            return query_pb2.GetLogResponse(log=_log_to_proto(log), found=True)
-
-        except Exception as e:
-            await context.abort(grpc.StatusCode.INTERNAL, f"Get log failed: {str(e)}")
 
     async def GetErrorRate(
         self, request: query_pb2.GetErrorRateRequest, context: grpc.aio.ServicerContext
@@ -874,77 +857,3 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
             )
         except Exception as e:
             await context.abort(grpc.StatusCode.INTERNAL, f"ListTraces failed: {str(e)}")
-
-    async def GetSpanLatency(
-        self,
-        request: query_pb2.GetSpanLatencyRequest,
-        context: grpc.aio.ServicerContext,
-    ) -> query_pb2.GetSpanLatencyResponse:
-        try:
-            buckets = await tracing_service.get_span_latency(
-                project_id=request.project_id,
-                service=request.service if request.HasField("service") else None,
-                name=request.name if request.HasField("name") else None,
-                from_time=request.from_time if request.HasField("from_time") else None,
-                to_time=request.to_time if request.HasField("to_time") else None,
-            )
-            data = [
-                query_pb2.SpanLatencyBucket(
-                    service_name=b["service_name"],
-                    name=b["name"],
-                    bucket=b["bucket"],
-                    calls=b["calls"],
-                    p50_ns=b["p50_ns"],
-                    p95_ns=b["p95_ns"],
-                    p99_ns=b["p99_ns"],
-                    errors=b["errors"],
-                )
-                for b in buckets
-            ]
-            return query_pb2.GetSpanLatencyResponse(project_id=request.project_id, data=data)
-        except Exception as e:
-            await context.abort(grpc.StatusCode.INTERNAL, f"GetSpanLatency failed: {str(e)}")
-
-    async def GetMetricSeries(
-        self,
-        request: query_pb2.GetMetricSeriesRequest,
-        context: grpc.aio.ServicerContext,
-    ) -> query_pb2.GetMetricSeriesResponse:
-        try:
-            series = await metric_points_service.get_metric_series(request.project_id)
-            return query_pb2.GetMetricSeriesResponse(
-                project_id=request.project_id,
-                series=[
-                    query_pb2.MetricSeriesInfo(
-                        name=s["name"], type=s["type"], tag_keys=s["tag_keys"]
-                    )
-                    for s in series
-                ],
-            )
-        except Exception as e:
-            await context.abort(grpc.StatusCode.INTERNAL, f"GetMetricSeries failed: {str(e)}")
-
-    async def QueryMetrics(
-        self,
-        request: query_pb2.QueryMetricsRequest,
-        context: grpc.aio.ServicerContext,
-    ) -> query_pb2.QueryMetricsResponse:
-        try:
-            data = await metric_points_service.query_metrics(
-                project_id=request.project_id,
-                name=request.name,
-                tags=dict(request.tags) if request.tags else None,
-                aggregation=request.aggregation,
-                from_time=request.from_time if request.HasField("from_time") else None,
-                to_time=request.to_time if request.HasField("to_time") else None,
-            )
-            return query_pb2.QueryMetricsResponse(
-                project_id=request.project_id,
-                name=request.name,
-                aggregation=request.aggregation,
-                data=[
-                    query_pb2.MetricDataPoint(bucket=d["bucket"], value=d["value"]) for d in data
-                ],
-            )
-        except Exception as e:
-            await context.abort(grpc.StatusCode.INTERNAL, f"QueryMetrics failed: {str(e)}")

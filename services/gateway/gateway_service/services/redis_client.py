@@ -1,6 +1,8 @@
+import datetime
 import hashlib
 import json
 import logging
+import time
 import typing
 
 from gateway_service import config
@@ -99,8 +101,6 @@ class RedisClient:
         key_prefix: str = "project",
         amount: int = 1,
     ) -> tuple[bool, dict]:
-        import time
-
         now = int(time.time())
         minute_key = f"ratelimit:{key_prefix}:{entity_id}:min:{now // 60}"
         hour_key = f"ratelimit:{key_prefix}:{entity_id}:hour:{now // 3600}"
@@ -191,14 +191,18 @@ class RedisClient:
 
     _USAGE_SIGNALS = ("logs", "spans", "metrics")
 
+    @staticmethod
+    def _utc_day() -> str:
+        # UTC, not local time: dependencies.next_daily_quota_reset() promises
+        # callers that quotas reset at midnight UTC, so the counter keys have to
+        # roll over on the same boundary regardless of the container's TZ.
+        return datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d")
+
     def _daily_usage_key(self, project_id: int, signal: str, today: str) -> str:
         return f"usage:{project_id}:{signal}:{today}"
 
     async def get_daily_usage(self, project_id: int, signal: str = "logs") -> int:
-        import datetime
-
-        today = datetime.date.today().strftime("%Y%m%d")
-        key = self._daily_usage_key(project_id, signal, today)
+        key = self._daily_usage_key(project_id, signal, self._utc_day())
 
         try:
             count = await self.client.get(key)  # type: ignore
@@ -210,9 +214,7 @@ class RedisClient:
 
     async def get_daily_usage_by_signal(self, project_id: int) -> dict[str, int]:
         """Fetch today's usage for all three signals in a single round trip."""
-        import datetime
-
-        today = datetime.date.today().strftime("%Y%m%d")
+        today = self._utc_day()
         keys = [self._daily_usage_key(project_id, signal, today) for signal in self._USAGE_SIGNALS]
 
         try:
@@ -234,10 +236,7 @@ class RedisClient:
         so usage reflects only accepted items, avoiding the increment-after-accept
         race where a burst could overshoot the quota by a full request.
         """
-        import datetime
-
-        today = datetime.date.today().strftime("%Y%m%d")
-        key = self._daily_usage_key(project_id, signal, today)
+        key = self._daily_usage_key(project_id, signal, self._utc_day())
 
         try:
             allowed, usage = await self.client.eval(  # type: ignore

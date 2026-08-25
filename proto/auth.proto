@@ -85,8 +85,6 @@ service AuthService {
 
   // Alert event history
   rpc ListAlertEvents(ListAlertEventsRequest) returns (ListAlertEventsResponse);
-  rpc AckAlertEvent(AckAlertEventRequest) returns (AckAlertEventResponse);
-  rpc SnoozeAlertEvent(SnoozeAlertEventRequest) returns (SnoozeAlertEventResponse);
 
   // Notification preferences (alert-specific)
   rpc GetAlertNotificationPreferences(GetAlertNotificationPreferencesRequest) returns (GetAlertNotificationPreferencesResponse);
@@ -931,9 +929,6 @@ message AlertEvent {
   int32 severity = 10;
   string connectors_sent = 12;  // JSON array of {id,kind,name}
   string fired_at = 13;
-  optional int64 acked_by = 14;
-  optional string acked_at = 15;
-  optional string snoozed_until = 16;
 }
 
 message ListAlertEventsRequest {
@@ -945,30 +940,6 @@ message ListAlertEventsRequest {
 message ListAlertEventsResponse {
   repeated AlertEvent events = 1;
   bool has_more = 2;
-}
-
-message AckAlertEventRequest {
-  int64 event_id = 1;
-  int64 project_id = 2;
-  int64 account_id = 3;
-}
-
-message AckAlertEventResponse {
-  bool success = 1;
-  string error_message = 2;
-  AlertEvent event = 3;
-}
-
-message SnoozeAlertEventRequest {
-  int64 event_id = 1;
-  int64 project_id = 2;
-  int32 minutes = 3;
-}
-
-message SnoozeAlertEventResponse {
-  bool success = 1;
-  string error_message = 2;
-  AlertEvent event = 3;
 }
 
 // ==================== Alert Notification Preferences Messages ====================

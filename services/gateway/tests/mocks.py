@@ -434,51 +434,11 @@ class MockAuthStub:
     async def GetProjectRole(self, request, timeout=None):
         return auth_pb2.GetProjectRoleResponse(is_member=True, role="owner")
 
-    async def AckAlertEvent(self, request, timeout=None):
-        return auth_pb2.AckAlertEventResponse(
-            success=True,
-            event=auth_pb2.AlertEvent(
-                id=request.event_id,
-                project_id=request.project_id,
-                rule_name="Test Rule",
-                metric="error_rate",
-                comparator=">",
-                threshold=10.0,
-                unit="percent",
-                value=25.0,
-                severity=3,
-                connectors_sent="[]",
-                fired_at="2026-01-01T00:00:00+00:00",
-                acked_by=request.account_id,
-                acked_at="2026-01-01T00:05:00+00:00",
-            ),
-        )
-
-    async def SnoozeAlertEvent(self, request, timeout=None):
-        return auth_pb2.SnoozeAlertEventResponse(
-            success=True,
-            event=auth_pb2.AlertEvent(
-                id=request.event_id,
-                project_id=request.project_id,
-                rule_name="Test Rule",
-                metric="error_rate",
-                comparator=">",
-                threshold=10.0,
-                unit="percent",
-                value=25.0,
-                severity=3,
-                connectors_sent="[]",
-                fired_at="2026-01-01T00:00:00+00:00",
-                snoozed_until="2026-01-01T01:00:00+00:00",
-            ),
-        )
-
 
 class MockIngestionStub:
     def __init__(self):
         self.ingest_log_response = None
         self.ingest_log_batch_response = None
-        self.get_queue_depth_response = None
         self.ingest_spans_batch_response = None
         self.ingest_metric_points_batch_response = None
 
@@ -498,13 +458,6 @@ class MockIngestionStub:
             queued=len(request.logs),
             failed=0,
             error=None,
-        )
-
-    async def GetQueueDepth(self, request, timeout=None):
-        if self.get_queue_depth_response:
-            return self.get_queue_depth_response
-        return ingestion_pb2.QueueDepthResponse(
-            depth=0,
         )
 
     async def IngestSpansBatch(self, request, timeout=None):

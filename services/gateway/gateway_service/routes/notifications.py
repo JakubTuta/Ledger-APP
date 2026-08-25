@@ -1,7 +1,7 @@
 import asyncio
+import datetime
 import json
 import logging
-from datetime import datetime
 from typing import AsyncGenerator
 
 import fastapi
@@ -467,7 +467,9 @@ async def stream_error_notifications(request: fastapi.Request):
                 await queue.put(
                     {
                         "event": "heartbeat",
-                        "data": json.dumps({"timestamp": datetime.utcnow().isoformat() + "Z"}),
+                        "data": json.dumps(
+                            {"timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()}
+                        ),
                     }
                 )
 
@@ -476,7 +478,7 @@ async def stream_error_notifications(request: fastapi.Request):
                 "event": "connected",
                 "data": json.dumps(
                     {
-                        "timestamp": datetime.utcnow().isoformat() + "Z",
+                        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                         "projects": list(project_ids),
                         "warning": (
                             "No projects available — stream idle" if not project_ids else None

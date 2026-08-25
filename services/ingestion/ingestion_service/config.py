@@ -14,11 +14,9 @@ class Settings(pydantic_settings.BaseSettings):
         extra="ignore",
     )
 
-    ENV: typing.Literal["development", "staging", "production", "test"] = (
-        pydantic.Field(
-            default="development",
-            description="Application environment",
-        )
+    ENV: typing.Literal["development", "staging", "production", "test"] = pydantic.Field(
+        default="development",
+        description="Application environment",
     )
 
     DEBUG: bool = pydantic.Field(
@@ -26,11 +24,9 @@ class Settings(pydantic_settings.BaseSettings):
         description="Enable debug mode",
     )
 
-    LOG_LEVEL: typing.Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = (
-        pydantic.Field(
-            default="INFO",
-            description="Logging level",
-        )
+    LOG_LEVEL: typing.Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = pydantic.Field(
+        default="INFO",
+        description="Logging level",
     )
 
     INGESTION_HOST: typing.ClassVar[str] = "0.0.0.0"

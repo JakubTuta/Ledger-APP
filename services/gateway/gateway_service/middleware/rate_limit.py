@@ -50,7 +50,10 @@ class RateLimitMiddleware:
             await self.app(scope, receive, send)
             return
 
-        self.redis = scope["app"].state.redis_client
+        # Read per-request off the ASGI scope rather than stashing on self: the
+        # middleware is a single instance shared by every concurrent request, so
+        # instance attributes are shared mutable state by definition.
+        redis = scope["app"].state.redis_client
         request = Request(scope, receive=receive)
 
         if not hasattr(request.state, "project_id"):
@@ -74,6 +77,7 @@ class RateLimitMiddleware:
                 account_id = getattr(request.state, "account_id", None)
                 if account_id:
                     await self._check_rate_limits(
+                        redis,
                         account_id,
                         _SESSION_RATE_LIMIT_PER_MINUTE,
                         _SESSION_RATE_LIMIT_PER_HOUR,
@@ -84,11 +88,11 @@ class RateLimitMiddleware:
                 logs_daily_quota = request.state.logs_daily_quota
 
                 await self._check_rate_limits(
-                    project_id, rate_limits["per_minute"], rate_limits["per_hour"]
+                    redis, project_id, rate_limits["per_minute"], rate_limits["per_hour"]
                 )
 
                 if request.url.path not in self.DAILY_QUOTA_EXEMPT_PATHS:
-                    await self._check_daily_quota(project_id, logs_daily_quota)
+                    await self._check_daily_quota(redis, project_id, logs_daily_quota)
 
                 extra_headers = {
                     "X-RateLimit-Limit-Minute": str(rate_limits["per_minute"]),
@@ -127,12 +131,13 @@ class RateLimitMiddleware:
 
     async def _check_rate_limits(
         self,
+        redis,
         entity_id: int,
         limit_per_minute: int,
         limit_per_hour: int,
         key_prefix: str = "project",
     ):
-        allowed, metadata = await self.redis.check_rate_limit(
+        allowed, metadata = await redis.check_rate_limit(
             entity_id, limit_per_minute, limit_per_hour, key_prefix=key_prefix
         )
 
@@ -174,8 +179,8 @@ class RateLimitMiddleware:
                 },
             )
 
-    async def _check_daily_quota(self, project_id: int, logs_daily_quota: int):
-        current_usage = await self.redis.get_daily_usage(project_id, signal="logs")
+    async def _check_daily_quota(self, redis, project_id: int, logs_daily_quota: int):
+        current_usage = await redis.get_daily_usage(project_id, signal="logs")
 
         if current_usage >= logs_daily_quota:
             logger.warning(

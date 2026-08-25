@@ -1343,37 +1343,3 @@ async def revoke_all_sessions(
             status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to revoke sessions",
         )
-
-
-@router.get(
-    "/accounts/stats",
-    summary="Get auth statistics",
-    description="Performance metrics for auth endpoints (internal use)",
-    include_in_schema=False,  # Hide from public docs
-)
-async def get_auth_stats(request: fastapi.Request):
-    """
-    Get authentication statistics.
-
-    Args:
-        request: HTTP request with app state
-
-    Returns:
-        Dictionary of auth-related stats
-    """
-
-    stats = {}
-
-    if hasattr(request.app.state, "auth_middleware"):
-        auth_middleware = request.app.state.auth_middleware
-        stats["auth"] = auth_middleware.get_stats()
-
-    if hasattr(request.app.state, "rate_limit_middleware"):
-        rate_limit_middleware = request.app.state.rate_limit_middleware
-        stats["rate_limit"] = rate_limit_middleware.get_stats()
-
-    if hasattr(request.state, "circuit_breakers"):
-        circuit_breakers = request.state.circuit_breakers
-        stats["circuit_breakers"] = circuit_breakers.get_all_stats()
-
-    return stats

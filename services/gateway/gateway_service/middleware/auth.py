@@ -39,6 +39,7 @@ class AuthMiddleware:
         self._cache_hits = 0
         self._cache_misses = 0
         self._auth_failures = 0
+        self._cache_write_tasks: set[asyncio.Task] = set()
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         """Main middleware logic."""
@@ -53,8 +54,11 @@ class AuthMiddleware:
             await self.app(scope, receive, send)
             return
 
-        self.redis = scope["app"].state.redis_client
-        self.grpc_pool = scope["app"].state.grpc_pool
+        # Read per-request off the ASGI scope rather than stashing on self: the
+        # middleware is a single instance shared by every concurrent request, so
+        # instance attributes are shared mutable state by definition.
+        redis = scope["app"].state.redis_client
+        grpc_pool = scope["app"].state.grpc_pool
         request = Request(scope, receive=receive)
 
         try:
@@ -63,7 +67,7 @@ class AuthMiddleware:
             if auth_type == "session":
                 auth_data = await self._validate_session_token(token)
             else:
-                auth_data = await self._validate_api_key(token)
+                auth_data = await self._validate_api_key(redis, grpc_pool, token)
 
             state = scope.setdefault("state", {})
             state["project_id"] = auth_data.get("project_id")
@@ -201,8 +205,8 @@ class AuthMiddleware:
 
     _NEGATIVE_CACHE_TTL = 30
 
-    async def _validate_api_key(self, api_key: str) -> dict:
-        cached_data = await self.redis.get_cached_api_key(api_key)
+    async def _validate_api_key(self, redis, grpc_pool, api_key: str) -> dict:
+        cached_data = await redis.get_cached_api_key(api_key)
 
         if cached_data:
             if cached_data.get("__invalid__"):
@@ -217,37 +221,35 @@ class AuthMiddleware:
         self._cache_misses += 1
 
         try:
-            auth_data = await self._fetch_from_auth_service(api_key)
+            auth_data = await self._fetch_from_auth_service(redis, grpc_pool, api_key)
         except fastapi.HTTPException as exc:
             if exc.status_code == fastapi.status.HTTP_401_UNAUTHORIZED:
                 task = asyncio.create_task(
-                    self.redis.set_cached_api_key(
+                    redis.set_cached_api_key(
                         api_key, {"__invalid__": True}, ttl=self._NEGATIVE_CACHE_TTL
                     )
                 )
-                task.add_done_callback(
-                    lambda t: (
-                        logger.error("Negative cache write failed: %s", t.exception())
-                        if not t.cancelled() and t.exception()
-                        else None
-                    )
-                )
+                self._cache_write_tasks.add(task)
+                task.add_done_callback(self._on_cache_write_done)
             raise
 
-        task = asyncio.create_task(self.redis.set_cached_api_key(api_key, auth_data))
-        task.add_done_callback(
-            lambda t: (
-                logger.error("Cache write failed: %s", t.exception())
-                if not t.cancelled() and t.exception()
-                else None
-            )
-        )
+        task = asyncio.create_task(redis.set_cached_api_key(api_key, auth_data))
+        self._cache_write_tasks.add(task)
+        task.add_done_callback(self._on_cache_write_done)
 
         return auth_data
 
-    async def _fetch_from_auth_service(self, api_key: str) -> dict:
+    def _on_cache_write_done(self, task: asyncio.Task) -> None:
+        # Discarding the reference here is what keeps _cache_write_tasks bounded;
+        # holding it in the first place is what stops asyncio (which keeps only a
+        # weak reference to a running task) from collecting the write mid-flight.
+        self._cache_write_tasks.discard(task)
+        if not task.cancelled() and task.exception():
+            logger.error("API key cache write failed: %s", task.exception())
+
+    async def _fetch_from_auth_service(self, redis, grpc_pool, api_key: str) -> dict:
         try:
-            stub = self.grpc_pool.get_stub("auth", auth_pb2_grpc.AuthServiceStub)
+            stub = grpc_pool.get_stub("auth", auth_pb2_grpc.AuthServiceStub)
 
             request = auth_pb2.ValidateApiKeyRequest(api_key=api_key)
 
@@ -276,7 +278,7 @@ class AuthMiddleware:
             logger.error(f"gRPC error: {e.code()} - {e.details()}")
 
             if e.code() in (grpc.StatusCode.DEADLINE_EXCEEDED, grpc.StatusCode.UNAVAILABLE):
-                stale_data = await self.redis.get_stale_cache(api_key)
+                stale_data = await redis.get_stale_cache(api_key)
                 if stale_data:
                     logger.warning("Using stale cache due to auth service error")
                     return stale_data
@@ -289,7 +291,7 @@ class AuthMiddleware:
                     )
 
             if e.code() == grpc.StatusCode.UNAVAILABLE:
-                stale_data = await self.redis.get_stale_cache(api_key)
+                stale_data = await redis.get_stale_cache(api_key)
                 if stale_data:
                     logger.warning("Using stale cache due to service unavailability")
                     return stale_data

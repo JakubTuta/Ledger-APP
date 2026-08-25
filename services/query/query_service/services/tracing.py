@@ -123,58 +123,6 @@ async def list_traces(
     return {"traces": traces, "total": total, "has_more": has_more}
 
 
-async def get_span_latency(
-    project_id: int,
-    service: str | None,
-    name: str | None,
-    from_time: str | None,
-    to_time: str | None,
-) -> list[dict]:
-    conditions = ["project_id = :project_id"]
-    params: dict = {"project_id": project_id}
-
-    if service:
-        conditions.append("service_name = :service")
-        params["service"] = service
-    if name:
-        conditions.append("name = :name")
-        params["name"] = name
-    if from_time:
-        conditions.append("bucket >= :from_time")
-        params["from_time"] = from_time
-    if to_time:
-        conditions.append("bucket <= :to_time")
-        params["to_time"] = to_time
-
-    where = " AND ".join(conditions)
-    sql = f"""
-        SELECT service_name, name, bucket::text AS bucket,
-               calls, p50_ns, p95_ns, p99_ns, errors
-        FROM span_latency_1h
-        WHERE {where}
-        ORDER BY bucket DESC
-        LIMIT 500
-    """
-
-    async with database.get_logs_session() as session:
-        result = await session.execute(sa.text(sql), params)
-        rows = result.fetchall()
-
-    return [
-        {
-            "service_name": r.service_name,
-            "name": r.name,
-            "bucket": r.bucket,
-            "calls": r.calls,
-            "p50_ns": r.p50_ns,
-            "p95_ns": r.p95_ns,
-            "p99_ns": r.p99_ns,
-            "errors": r.errors,
-        }
-        for r in rows
-    ]
-
-
 def _row_to_span_dict(row) -> dict:
     start_time = row.start_time
     return {

@@ -46,11 +46,6 @@ class IngestionServiceStub(object):
                 request_serializer=ingestion__pb2.IngestLogBatchRequest.SerializeToString,
                 response_deserializer=ingestion__pb2.IngestLogBatchResponse.FromString,
                 _registered_method=True)
-        self.GetQueueDepth = channel.unary_unary(
-                '/ingestion.IngestionService/GetQueueDepth',
-                request_serializer=ingestion__pb2.QueueDepthRequest.SerializeToString,
-                response_deserializer=ingestion__pb2.QueueDepthResponse.FromString,
-                _registered_method=True)
         self.IngestSpansBatch = channel.unary_unary(
                 '/ingestion.IngestionService/IngestSpansBatch',
                 request_serializer=ingestion__pb2.IngestSpansBatchRequest.SerializeToString,
@@ -82,15 +77,10 @@ class IngestionServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def GetQueueDepth(self, request, context):
-        """Get queue depth for a project
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
     def IngestSpansBatch(self, request, context):
-        """Ingest a batch of distributed trace spans
+        """Get queue depth for a project
+
+        Ingest a batch of distributed trace spans
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -115,11 +105,6 @@ def add_IngestionServiceServicer_to_server(servicer, server):
                     servicer.IngestLogBatch,
                     request_deserializer=ingestion__pb2.IngestLogBatchRequest.FromString,
                     response_serializer=ingestion__pb2.IngestLogBatchResponse.SerializeToString,
-            ),
-            'GetQueueDepth': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetQueueDepth,
-                    request_deserializer=ingestion__pb2.QueueDepthRequest.FromString,
-                    response_serializer=ingestion__pb2.QueueDepthResponse.SerializeToString,
             ),
             'IngestSpansBatch': grpc.unary_unary_rpc_method_handler(
                     servicer.IngestSpansBatch,
@@ -188,33 +173,6 @@ class IngestionService(object):
             '/ingestion.IngestionService/IngestLogBatch',
             ingestion__pb2.IngestLogBatchRequest.SerializeToString,
             ingestion__pb2.IngestLogBatchResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def GetQueueDepth(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/ingestion.IngestionService/GetQueueDepth',
-            ingestion__pb2.QueueDepthRequest.SerializeToString,
-            ingestion__pb2.QueueDepthResponse.FromString,
             options,
             channel_credentials,
             insecure,

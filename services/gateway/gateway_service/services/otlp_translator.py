@@ -43,7 +43,7 @@ _SEVERITY_TEXT_MAP = {
     "critical": "critical",
 }
 
-_VALID_LOG_TYPES = {"console", "logger", "exception", "database", "endpoint", "custom"}
+_VALID_LOG_TYPES = {"console", "logger", "exception", "network", "database", "endpoint", "custom"}
 _VALID_IMPORTANCE = {"critical", "high", "standard", "low"}
 _HTTP_METHOD_KEYS = ("http.request.method", "http.method")
 _HTTP_ROUTE_KEYS = ("http.route", "url.path")

@@ -163,10 +163,9 @@ class TestEvaluateRuleStateMachine:
         with patch.object(alert_evaluator, "_query_metric", AsyncMock(return_value=10.0)):
             await alert_evaluator._evaluate_rule(rule, logs_session, auth_session)
 
-        # The maintenance-window check plus the firing-state snooze lookup
-        # (_get_snoozed_until) account for the two calls; cooldown_minutes=0
-        # means _fire() is never reached regardless of snooze state.
-        assert auth_session.execute.call_count == 2
+        # Only the maintenance-window check runs; cooldown_minutes=0 means
+        # _fire() is never reached, so nothing else touches the auth session.
+        assert auth_session.execute.call_count == 1
 
     async def test_firing_refires_after_cooldown_elapsed(self):
         last_notified = _now() - datetime.timedelta(minutes=90)

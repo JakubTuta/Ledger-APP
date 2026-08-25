@@ -51,23 +51,6 @@ async def _with_retry(
     return await send()
 
 
-async def _get_snoozed_until(
-    rule_id: int, auth_session: sa.ext.asyncio.AsyncSession
-) -> datetime.datetime | None:
-    """Snooze state lives on the most recent alert_event for this rule (set via
-    the gateway's /alerts/history/{event_id}/snooze endpoint), not on the rule
-    itself - it's per-incident, not a standing rule setting."""
-    result = await auth_session.execute(
-        sa.text(
-            "SELECT snoozed_until FROM alert_events WHERE rule_id = :rule_id "
-            "ORDER BY id DESC LIMIT 1"
-        ),
-        {"rule_id": rule_id},
-    )
-    row = result.fetchone()
-    return row[0] if row else None
-
-
 async def evaluate_alert_rules() -> None:
     start = time.perf_counter()
 
@@ -225,15 +208,12 @@ async def _evaluate_rule(
                     suppress_notifications=in_maintenance,
                 )
         elif state == "firing":
-            snoozed_until = await _get_snoozed_until(rule_id, auth_session)
-            is_snoozed = snoozed_until is not None and snoozed_until > now
-
             cooldown_elapsed = (
                 (now - last_notified_at).total_seconds() / 60.0
                 if last_notified_at
                 else float("inf")
             )
-            if not is_snoozed and cooldown_minutes > 0 and cooldown_elapsed >= cooldown_minutes:
+            if cooldown_minutes > 0 and cooldown_elapsed >= cooldown_minutes:
                 await _fire(
                     rule_id,
                     project_id,
@@ -248,7 +228,7 @@ async def _evaluate_rule(
                     auth_session,
                     suppress_notifications=in_maintenance,
                 )
-            if not in_maintenance and not is_snoozed:
+            if not in_maintenance:
                 await _maybe_escalate(
                     rule_id,
                     project_id,

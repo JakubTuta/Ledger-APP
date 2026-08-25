@@ -1,6 +1,7 @@
 import base64
 import collections
 import datetime
+import typing
 
 import sqlalchemy as sa
 
@@ -18,6 +19,29 @@ def _decode_cursor(cursor: str) -> tuple[datetime.datetime, int]:
     raw = base64.urlsafe_b64decode(cursor.encode()).decode()
     ts_str, id_str = raw.rsplit("|", 1)
     return datetime.datetime.fromisoformat(ts_str), int(id_str)
+
+
+def _search_predicate(term: str) -> sa.ColumnElement[bool]:
+    """The free-text predicate behind both QueryLogs(search=...) and SearchLogs.
+
+    One definition for both so "search" means the same set of columns wherever a
+    user types into a search box.
+
+    This OR spans columns with no per-column index, so no index can serve it
+    directly - it is evaluated as a filter on top of whatever the
+    project_id/timestamp predicates already narrowed the scan to. Keep search
+    requests time-bounded. (Trigram GIN indexes on message and error_message
+    were dropped in ingestion revision 015: a BitmapOr needs every arm
+    indexable, so they were never usable here, while costing on every insert.)
+    """
+    pattern = f"%{term}%"
+    return sa.or_(
+        models.Log.method.ilike(pattern),
+        models.Log.path.ilike(pattern),
+        models.Log.message.ilike(pattern),
+        models.Log.error_message.ilike(pattern),
+        models.Log.error_type.ilike(pattern),
+    )
 
 
 def _apply_log_dimension_filters(query: sa.Select, filters: schemas.LogFilters) -> sa.Select:
@@ -49,22 +73,7 @@ def _apply_log_dimension_filters(query: sa.Select, filters: schemas.LogFilters) 
         if status_conditions:
             query = query.where(sa.or_(*status_conditions))
     if filters.search:
-        term = f"%{filters.search}%"
-        # This OR spans columns with no per-column index, so no index can serve
-        # it directly - it is evaluated as a filter on top of whatever the
-        # project_id/timestamp predicates already narrowed the scan to. Keep
-        # search requests time-bounded. (Trigram GIN indexes on message and
-        # error_message were dropped in ingestion revision 015: a BitmapOr needs
-        # every arm indexable, so they were never usable here, while costing on
-        # every insert.)
-        query = query.where(
-            sa.or_(
-                models.Log.method.ilike(term),
-                models.Log.path.ilike(term),
-                models.Log.message.ilike(term),
-                models.Log.error_message.ilike(term),
-            )
-        )
+        query = query.where(_search_predicate(filters.search))
     return query
 
 
@@ -150,6 +159,27 @@ _ROLLUP_FACET_DIMENSIONS: tuple[tuple[str, sa.ColumnElement], ...] = (
     ("client_channel", models.log_facets_1h.c.client_channel),
 )
 
+# The five facet dimensions are also LogFilters fields, so an active filter on
+# one of them would otherwise collapse its own facet to the single selected
+# value - see _facet_filters_in_effect().
+_FACET_NAMES: tuple[str, ...] = tuple(name for name, _ in _FACET_DIMENSIONS)
+
+
+def _select_dimensions(
+    dimensions: tuple[tuple[str, sa.ColumnElement], ...], names: typing.Collection[str]
+) -> tuple[tuple[str, sa.ColumnElement], ...]:
+    return tuple((name, expression) for name, expression in dimensions if name in names)
+
+
+def _facet_filters_in_effect(filters: schemas.LogFilters) -> set[str]:
+    """Which facet dimensions the caller is currently filtering on."""
+    return {name for name in _FACET_NAMES if getattr(filters, name)}
+
+
+def _without_facet_filter(filters: schemas.LogFilters, name: str) -> schemas.LogFilters:
+    return filters.model_copy(update={name: None})
+
+
 # log_facets_1h stores '' where the source column was NULL, so that the whole
 # dimension tuple can be a primary key. Dropped on read, same as a raw NULL.
 _ROLLUP_ABSENT = ""
@@ -206,12 +236,12 @@ async def _facets_from_logs(
     start_time: datetime.datetime | None,
     end_time: datetime.datetime | None,
     end_inclusive: bool,
+    names: typing.Collection[str],
 ) -> _FacetCounts:
     """Facet counts straight off `logs`, for a window the rollup can't serve."""
-    dimension_columns = [expression.label(f"dim_{name}") for name, expression in _FACET_DIMENSIONS]
-    grouping_sets = sa.func.grouping_sets(
-        *[sa.tuple_(expression) for _, expression in _FACET_DIMENSIONS]
-    )
+    dimensions = _select_dimensions(_FACET_DIMENSIONS, names)
+    dimension_columns = [expression.label(f"dim_{name}") for name, expression in dimensions]
+    grouping_sets = sa.func.grouping_sets(*[sa.tuple_(expression) for _, expression in dimensions])
 
     query = sa.select(*dimension_columns, sa.func.count().label("count")).where(
         models.Log.project_id == project_id
@@ -226,7 +256,7 @@ async def _facets_from_logs(
     query = query.group_by(grouping_sets)
 
     result = await session.execute(query)
-    return _collect_grouping_sets_rows(result.all(), _FACET_DIMENSIONS, None)
+    return _collect_grouping_sets_rows(result.all(), dimensions, None)
 
 
 async def _facets_from_rollup(
@@ -235,18 +265,16 @@ async def _facets_from_rollup(
     filters: schemas.LogFilters,
     start_time: datetime.datetime,
     end_time: datetime.datetime,
+    names: typing.Collection[str],
 ) -> _FacetCounts:
     """
     Facet counts off the pre-aggregated log_facets_1h rollup, over a
     hour-aligned half-open [start_time, end_time) window.
     """
     facets = models.log_facets_1h.c
-    dimension_columns = [
-        expression.label(f"dim_{name}") for name, expression in _ROLLUP_FACET_DIMENSIONS
-    ]
-    grouping_sets = sa.func.grouping_sets(
-        *[sa.tuple_(expression) for _, expression in _ROLLUP_FACET_DIMENSIONS]
-    )
+    dimensions = _select_dimensions(_ROLLUP_FACET_DIMENSIONS, names)
+    dimension_columns = [expression.label(f"dim_{name}") for name, expression in dimensions]
+    grouping_sets = sa.func.grouping_sets(*[sa.tuple_(expression) for _, expression in dimensions])
 
     # SUM() over a BIGINT comes back as numeric; cast so the counter stays int.
     total = sa.cast(sa.func.sum(facets["count"]), sa.BigInteger).label("count")
@@ -269,7 +297,7 @@ async def _facets_from_rollup(
     query = query.group_by(grouping_sets)
 
     result = await session.execute(query)
-    return _collect_grouping_sets_rows(result.all(), _ROLLUP_FACET_DIMENSIONS, _ROLLUP_ABSENT)
+    return _collect_grouping_sets_rows(result.all(), dimensions, _ROLLUP_ABSENT)
 
 
 def _floor_hour(moment: datetime.datetime) -> datetime.datetime:
@@ -329,48 +357,81 @@ def _rollup_can_serve(filters: schemas.LogFilters) -> bool:
     return not filters.search and not filters.error_fingerprint
 
 
+async def _facet_pass(
+    session: sa.ext.asyncio.AsyncSession,
+    project_id: int,
+    filters: schemas.LogFilters,
+    names: typing.Collection[str],
+) -> _FacetCounts:
+    """Counts for `names` under `filters`, split across the rollup and `logs`.
+
+    The bulk of the window is answered from the hourly log_facets_1h rollup -
+    counting every raw row instead put this past the gateway's 10s deadline at a
+    few hundred thousand logs per window, since the facet dimensions live in no
+    index and each row costs a heap fetch. Only the partial hours at the edges
+    and anything outside the rollup's trailing window are read from `logs`.
+    """
+    counts = _empty_facet_counts()
+
+    if filters.start_time and filters.end_time and _rollup_can_serve(filters):
+        now = datetime.datetime.now(datetime.timezone.utc)
+        raw_ranges, rollup_range = _split_facet_window(filters.start_time, filters.end_time, now)
+    else:
+        raw_ranges = [(filters.start_time, filters.end_time, True)]
+        rollup_range = None
+
+    if rollup_range:
+        _merge_facet_counts(
+            counts,
+            await _facets_from_rollup(session, project_id, filters, *rollup_range, names=names),
+        )
+
+    for range_start, range_end, end_inclusive in raw_ranges:
+        _merge_facet_counts(
+            counts,
+            await _facets_from_logs(
+                session, project_id, filters, range_start, range_end, end_inclusive, names=names
+            ),
+        )
+
+    return counts
+
+
 async def get_log_facets(
     project_id: int,
     filters: schemas.LogFilters,
 ) -> schemas.LogFacetsResponse:
     """
     Aggregate counts per facet value (level, log_type, status_class,
-    environment, client_channel) under the current filter set, using the same
-    dimension predicates as query_logs() so facet counts always match what the
-    log table itself would show.
+    environment, client_channel) under the current filter set.
 
-    All facets come out of a single GROUPING SETS pass per source. The bulk of
-    the window is answered from the hourly log_facets_1h rollup - counting
-    every raw row instead put this past the gateway's 10s deadline at a few
-    hundred thousand logs per window, since the facet dimensions live in no
-    index and each row costs a heap fetch. Only the partial hours at the edges
-    and anything outside the rollup's trailing window are read from `logs`.
+    Each dimension's counts exclude that dimension's own filter, so selecting
+    `level=error` still shows how many warnings and infos the rest of the filter
+    set matches - otherwise the level facet collapses to the single value the
+    user just picked and there is no way back without clearing it. Every *other*
+    predicate (including the time window and the non-facet filters) is applied,
+    so a facet count always equals the number of rows the log list would show if
+    that value were selected.
+
+    Cost is one GROUPING SETS pass plus one extra pass per dimension the caller
+    is actually filtering on: with no facet filters active - the common case -
+    this is a single pass, exactly as before.
     """
     async with database.get_logs_session() as session:
         counts = _empty_facet_counts()
+        self_filtered = _facet_filters_in_effect(filters)
 
-        if filters.start_time and filters.end_time and _rollup_can_serve(filters):
-            now = datetime.datetime.now(datetime.timezone.utc)
-            raw_ranges, rollup_range = _split_facet_window(
-                filters.start_time, filters.end_time, now
-            )
-        else:
-            raw_ranges = [(filters.start_time, filters.end_time, True)]
-            rollup_range = None
+        unfiltered = [name for name in _FACET_NAMES if name not in self_filtered]
+        if unfiltered:
+            base = await _facet_pass(session, project_id, filters, unfiltered)
+            for name in unfiltered:
+                counts[name] = base[name]
 
-        if rollup_range:
-            _merge_facet_counts(
-                counts,
-                await _facets_from_rollup(session, project_id, filters, *rollup_range),
+        for name in sorted(self_filtered):
+            relaxed = await _facet_pass(
+                session, project_id, _without_facet_filter(filters, name), [name]
             )
-
-        for range_start, range_end, end_inclusive in raw_ranges:
-            _merge_facet_counts(
-                counts,
-                await _facets_from_logs(
-                    session, project_id, filters, range_start, range_end, end_inclusive
-                ),
-            )
+            counts[name] = relaxed[name]
 
         return schemas.LogFacetsResponse(
             project_id=project_id,
@@ -434,12 +495,7 @@ async def search_logs(
         if end_time:
             query = query.where(models.Log.timestamp <= end_time)
 
-        search_filter = sa.or_(
-            models.Log.message.ilike(f"%{search_query}%"),
-            models.Log.error_message.ilike(f"%{search_query}%"),
-            models.Log.error_type.ilike(f"%{search_query}%"),
-        )
-        query = query.where(search_filter)
+        query = query.where(_search_predicate(search_query))
 
         query = query.order_by(models.Log.timestamp.desc())
         query = query.limit(pagination.limit + 1).offset(pagination.offset)
@@ -456,20 +512,6 @@ async def search_logs(
             total=None,
             has_more=has_more,
         )
-
-
-async def get_log_by_id(log_id: int, project_id: int) -> schemas.LogResponse | None:
-    async with database.get_logs_session() as session:
-        query = sa.select(models.Log).where(
-            models.Log.id == log_id, models.Log.project_id == project_id
-        )
-
-        result = await session.execute(query)
-        log = result.scalar_one_or_none()
-
-        if log:
-            return schemas.LogResponse.model_validate(log)
-        return None
 
 
 def _calculate_time_range_for_period(

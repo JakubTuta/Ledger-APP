@@ -465,27 +465,3 @@ class TestBatchLogIngestion(BaseIngestionTest):
         total_queued = sum(r.queued for r in results)
         assert total_queued == 500
         print("✅ 10 concurrent batches (500 logs total) ingested successfully")
-
-    async def test_queue_depth_endpoint(self):
-        """Test queue depth check endpoint."""
-        logs = [
-            {
-                "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                "level": "info",
-                "log_type": "console",
-                "importance": "standard",
-                "message": f"Queue test log {i}",
-            }
-            for i in range(25)
-        ]
-
-        proto_logs = [create_proto_log(log) for log in logs]
-        request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=proto_logs)
-
-        await self.stub.IngestLogBatch(request)
-
-        depth_request = ingestion_pb2.QueueDepthRequest(project_id=1)
-        response = await self.stub.GetQueueDepth(depth_request)
-
-        assert response.depth >= 0
-        print("✅ Queue depth endpoint accessible")

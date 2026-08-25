@@ -116,9 +116,12 @@ class TestOtlpTracesFlow:
 
 
 class TestOtlpMetricsFlow:
-    async def test_ingest_metric_then_query_back(
-        self, client: httpx.AsyncClient, auth_headers: dict, project: dict, api_key_headers: dict
+    async def test_ingest_metric_is_accepted(
+        self, client: httpx.AsyncClient, project: dict, api_key_headers: dict
     ):
+        # Ingest-only: the metric read-back endpoints were removed, so there is
+        # no longer a supported way to observe a stored metric point from the
+        # outside. This asserts the OTLP metrics path still accepts an export.
         metric_name = f"e2e.gauge.{_hex(8)}"
 
         ingest_response = await client.post(
@@ -129,29 +132,3 @@ class TestOtlpMetricsFlow:
             headers={**api_key_headers, "Content-Type": "application/json"},
         )
         assert ingest_response.status_code == 200, ingest_response.text
-
-        async def _metric_is_queryable() -> bool:
-            # No fromTime/toTime -> reads raw metric_points directly rather
-            # than metric_points_1h, so this doesn't need to wait on the
-            # rollup cron (ANALYTICS_METRIC_POINTS_1H_ROLLUP_CRON, every
-            # 10 minutes) to catch up.
-            response = await client.get(
-                "/api/v1/metrics/query",
-                headers=auth_headers,
-                params={
-                    "project_id": project["project_id"],
-                    "name": metric_name,
-                    "aggregation": "avg",
-                },
-            )
-            if response.status_code != 200:
-                return False
-            data_points = response.json().get("data", [])
-            return len(data_points) > 0
-
-        await poll_until(
-            _metric_is_queryable,
-            timeout=30.0,
-            interval=1.0,
-            description="metric point to become queryable",
-        )

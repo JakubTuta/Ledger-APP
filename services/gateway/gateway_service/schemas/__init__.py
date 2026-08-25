@@ -56,7 +56,6 @@ from gateway_service.schemas.health import (
     HealthSummaryResponse,
     HealthThresholds,
 )
-from gateway_service.schemas.ingestion import QueueDepthResponse
 from gateway_service.schemas.projects import (
     CreateProjectRequest,
     ProjectListResponse,
@@ -89,14 +88,6 @@ from gateway_service.schemas.sharing import (
     ListMembersResponse,
     MemberInfo,
     RemoveMemberResponse,
-)
-from gateway_service.schemas.settings import (
-    Constraints,
-    Features,
-    Quotas,
-    RateLimits,
-    ServerInfo,
-    SettingsResponse,
 )
 
 __all__ = [
@@ -166,15 +157,6 @@ __all__ = [
     "ListMembersResponse",
     "RemoveMemberResponse",
     "LeaveProjectResponse",
-    # Settings schemas
-    "RateLimits",
-    "Quotas",
-    "Constraints",
-    "Features",
-    "ServerInfo",
-    "SettingsResponse",
-    # Ingestion schemas
-    "QueueDepthResponse",
     # Query schemas
     "LogEntryResponse",
     "AggregatedMetricDataResponse",

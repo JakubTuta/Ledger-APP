@@ -94,54 +94,6 @@ class SpanLatencyResponse(BaseModel):
 
 
 @router.get(
-    "/metrics/span-latency",
-    response_model=SpanLatencyResponse,
-    summary="Get span latency percentiles",
-    description="Query hourly span latency rollup (p50/p95/p99) from span_latency_1h table.",
-)
-async def get_span_latency(
-    request: fastapi.Request,
-    project_id: int = fastapi.Depends(dependencies.require_project_member),
-    service: str | None = fastapi.Query(None),
-    name: str | None = fastapi.Query(None),
-    from_time: str | None = fastapi.Query(None),
-    to_time: str | None = fastapi.Query(None),
-) -> SpanLatencyResponse:
-    grpc_pool = request.app.state.grpc_pool
-
-    proto_req = query_pb2.GetSpanLatencyRequest(project_id=project_id)
-    if service is not None:
-        proto_req.service = service
-    if name is not None:
-        proto_req.name = name
-    if from_time is not None:
-        proto_req.from_time = from_time
-    if to_time is not None:
-        proto_req.to_time = to_time
-
-    try:
-        async with grpc_pool.get_query_stub() as stub:
-            response = await stub.GetSpanLatency(proto_req, timeout=10.0)
-    except grpc.RpcError as e:
-        raise fastapi.HTTPException(status_code=502, detail=str(e.details()))
-
-    data = [
-        SpanLatencyBucketResponse(
-            service_name=b.service_name,
-            name=b.name,
-            bucket=b.bucket,
-            calls=b.calls,
-            p50_ns=b.p50_ns,
-            p95_ns=b.p95_ns,
-            p99_ns=b.p99_ns,
-            errors=b.errors,
-        )
-        for b in response.data
-    ]
-    return SpanLatencyResponse(project_id=response.project_id, data=data)
-
-
-@router.get(
     "/traces",
     response_model=ListTracesResponse,
     summary="List traces",

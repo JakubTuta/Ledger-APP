@@ -474,11 +474,23 @@ class StorageWorker:
         self._record_batch_timing(len(logs), phase_ms)
 
     async def _publish_tail(self, log_records: list[dict]) -> None:
+        # Best-effort, and deliberately swallows its own failures: it runs after
+        # the batch has already been committed, so letting an exception escape
+        # would send _flush_batch down the per-message retry path and re-run
+        # process_logs_batch on rows that are already stored. The COPY dedups on
+        # log_id, but the error_groups upsert does not - it would add the same
+        # occurrences a second time.
         by_project: dict[int, list[dict]] = {}
         for record in log_records:
             by_project.setdefault(record["project_id"], []).append(record)
         for project_id, records in by_project.items():
-            await self.tail_publisher.publish_tail_batch(project_id, records)
+            try:
+                await self.tail_publisher.publish_tail_batch(project_id, records)
+            except Exception as e:
+                logger.error(
+                    f"Worker {self.worker_id}: tail publish failed for project {project_id}: {e}",
+                    exc_info=True,
+                )
 
     async def _upsert_error_groups_batch(self, session, groups: list[dict]) -> None:
         # Sort by conflict key so concurrent workers acquire row locks in the same
@@ -1006,6 +1018,9 @@ class WorkerManager:
         await asyncio.gather(*self.tasks, return_exceptions=True)
 
 
+_ip_country_refresh_task: asyncio.Task | None = None
+
+
 async def _refresh_ip_country_loop() -> None:
     while True:
         await asyncio.sleep(config.settings.IP_COUNTRY_REFRESH_INTERVAL_SECONDS)
@@ -1036,7 +1051,12 @@ async def main():
         logger.error(f"Failed to load ip_country table: {e}", exc_info=True)
         logger.warning("Worker will continue; country resolution will yield NULL until it loads")
 
-    asyncio.create_task(_refresh_ip_country_loop())
+    # Held in a module global rather than a bare create_task(): asyncio only
+    # keeps a weak reference to a running task, so an unreferenced one can be
+    # garbage collected mid-await and stop refreshing silently. Holding it also
+    # lets shutdown() cancel the loop before the DB pool is closed under it.
+    global _ip_country_refresh_task
+    _ip_country_refresh_task = asyncio.create_task(_refresh_ip_country_loop())
 
     if config.settings.ENABLE_PARTITION_SCHEDULER:
         scheduler = partition_scheduler.get_partition_scheduler()
@@ -1082,6 +1102,9 @@ async def shutdown(
     await manager.stop()
     await spans_manager.stop()
     await metrics_manager.stop()
+
+    if _ip_country_refresh_task is not None:
+        _ip_country_refresh_task.cancel()
 
     if config.settings.ENABLE_PARTITION_SCHEDULER:
         scheduler = partition_scheduler.get_partition_scheduler()
