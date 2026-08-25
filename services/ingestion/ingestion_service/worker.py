@@ -142,6 +142,7 @@ _METRIC_POINT_COPY_COLUMNS = [
     "tags",
     "tags_hash",
     "service_name",
+    "temporality",
 ]
 
 _METRIC_POINTS_STAGING_DDL = """
@@ -157,7 +158,8 @@ _METRIC_POINTS_STAGING_DDL = """
         explicit_bounds JSONB,
         tags            JSONB,
         tags_hash       CHAR(16),
-        service_name    TEXT
+        service_name    TEXT,
+        temporality     SMALLINT
     ) ON COMMIT DELETE ROWS
 """
 
@@ -596,6 +598,7 @@ class StorageWorker:
             "tags": point_data.get("tags") or {},
             "tags_hash": point_data["tags_hash"],
             "service_name": point_data.get("service_name"),
+            "temporality": point_data.get("temporality") or None,
         }
         return record, ts.date()
 

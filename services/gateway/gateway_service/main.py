@@ -13,6 +13,7 @@ from gateway_service.routes import (
     dashboard_routes,
     error_groups_routes,
     health_routes,
+    metrics_routes,
     monitor_routes,
     notification_inbox_routes,
     notifications,
@@ -337,6 +338,7 @@ include_router(otlp_routes.router)
 include_router(query_routes.router, prefix="/api/v1")
 include_router(error_groups_routes.router, prefix="/api/v1")
 include_router(tracing_routes.router, prefix="/api/v1")
+include_router(metrics_routes.router, prefix="/api/v1")
 include_router(notifications.router, prefix="/api/v1")
 include_router(notification_inbox_routes.router, prefix="/api/v1")
 include_router(alert_routes.router, prefix="/api/v1")

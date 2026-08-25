@@ -307,6 +307,7 @@ class IngestionServicer(ingestion_pb2_grpc.IngestionServiceServicer):
                     "tags": tags,
                     "tags_hash": _compute_tags_hash(tags),
                     "service_name": point.service_name[:255] if point.service_name else None,
+                    "temporality": int(point.temporality) or None,
                 }
             )
             accepted += 1

@@ -570,24 +570,36 @@ def otlp_metrics_to_proto(
                 data_kind = metric.WhichOneof("data")
 
                 if data_kind == "sum":
+                    temporality = _map_temporality(metric.sum.aggregation_temporality)
                     for dp in metric.sum.data_points:
                         points.append(
                             _translate_number_point(
-                                metric.name, ingestion_pb2.SUM, dp, resource_attrs, service_name
+                                metric.name,
+                                ingestion_pb2.SUM,
+                                dp,
+                                resource_attrs,
+                                service_name,
+                                temporality,
                             )
                         )
                 elif data_kind == "gauge":
                     for dp in metric.gauge.data_points:
                         points.append(
                             _translate_number_point(
-                                metric.name, ingestion_pb2.GAUGE, dp, resource_attrs, service_name
+                                metric.name,
+                                ingestion_pb2.GAUGE,
+                                dp,
+                                resource_attrs,
+                                service_name,
+                                ingestion_pb2.TEMPORALITY_UNSPECIFIED,
                             )
                         )
                 elif data_kind == "histogram":
+                    temporality = _map_temporality(metric.histogram.aggregation_temporality)
                     for dp in metric.histogram.data_points:
                         points.append(
                             _translate_histogram_point(
-                                metric.name, dp, resource_attrs, service_name
+                                metric.name, dp, resource_attrs, service_name, temporality
                             )
                         )
                 # exponential_histogram and summary metric types are not yet
@@ -596,12 +608,23 @@ def otlp_metrics_to_proto(
     return points
 
 
+def _map_temporality(otlp_temporality: int) -> int:
+    # OTLP AggregationTemporality uses the same numbering as the internal enum
+    # (1 delta, 2 cumulative); anything else means the exporter left it unset.
+    if otlp_temporality == 1:
+        return ingestion_pb2.TEMPORALITY_DELTA
+    if otlp_temporality == 2:
+        return ingestion_pb2.TEMPORALITY_CUMULATIVE
+    return ingestion_pb2.TEMPORALITY_UNSPECIFIED
+
+
 def _translate_number_point(
     name: str,
     metric_type,
     dp,
     resource_attrs: dict[str, typing.Any],
     service_name: str,
+    temporality: int,
 ) -> ingestion_pb2.MetricPoint:
     value = dp.as_double if dp.WhichOneof("value") == "as_double" else float(dp.as_int)
 
@@ -611,6 +634,7 @@ def _translate_number_point(
         timestamp=_nano_to_iso(dp.time_unix_nano),
         tags=_merge_point_tags(resource_attrs, dp.attributes),
         service_name=service_name[:255],
+        temporality=temporality,
     )
     point.value = value
     return point
@@ -621,6 +645,7 @@ def _translate_histogram_point(
     dp,
     resource_attrs: dict[str, typing.Any],
     service_name: str,
+    temporality: int,
 ) -> ingestion_pb2.MetricPoint:
     point = ingestion_pb2.MetricPoint(
         name=name[:255],
@@ -630,6 +655,7 @@ def _translate_histogram_point(
         service_name=service_name[:255],
         bucket_counts=[float(c) for c in dp.bucket_counts],
         explicit_bounds=list(dp.explicit_bounds),
+        temporality=temporality,
     )
     point.count = dp.count
     if dp.HasField("sum"):

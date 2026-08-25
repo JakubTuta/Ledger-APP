@@ -136,6 +136,16 @@ enum MetricType {
     HISTOGRAM = 2;
 }
 
+// Mirrors OTLP AggregationTemporality. A cumulative point carries a running
+// total since process start, so it must be differenced (reset-aware) before it
+// means anything on a chart; a delta point is already per-interval. Gauges are
+// unspecified - a gauge is neither.
+enum MetricTemporality {
+    TEMPORALITY_UNSPECIFIED = 0;
+    TEMPORALITY_DELTA       = 1;
+    TEMPORALITY_CUMULATIVE  = 2;
+}
+
 message MetricPoint {
     string name              = 1;
     MetricType type          = 2;
@@ -152,6 +162,8 @@ message MetricPoint {
 
     map<string, string> tags = 9;
     string service_name      = 10;
+
+    MetricTemporality temporality = 11;
 }
 
 message IngestMetricPointsBatchRequest {

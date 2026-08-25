@@ -83,6 +83,40 @@ def _otlp_metric_body(name: str, value: float, service_name: str) -> dict:
     }
 
 
+def _otlp_delta_counter_body(name: str, value: int, service_name: str) -> dict:
+    now_ns = int(time.time() * 1e9)
+    return {
+        "resourceMetrics": [
+            {
+                "resource": {
+                    "attributes": [
+                        {"key": "service.name", "value": {"stringValue": service_name}},
+                    ]
+                },
+                "scopeMetrics": [
+                    {
+                        "metrics": [
+                            {
+                                "name": name,
+                                "sum": {
+                                    "dataPoints": [
+                                        {
+                                            "timeUnixNano": str(now_ns),
+                                            "asInt": str(value),
+                                        }
+                                    ],
+                                    "aggregationTemporality": "AGGREGATION_TEMPORALITY_DELTA",
+                                    "isMonotonic": True,
+                                },
+                            }
+                        ]
+                    }
+                ],
+            }
+        ]
+    }
+
+
 class TestOtlpTracesFlow:
     async def test_ingest_trace_then_query_back(
         self, client: httpx.AsyncClient, auth_headers: dict, project: dict, api_key_headers: dict
@@ -116,12 +150,13 @@ class TestOtlpTracesFlow:
 
 
 class TestOtlpMetricsFlow:
-    async def test_ingest_metric_is_accepted(
-        self, client: httpx.AsyncClient, project: dict, api_key_headers: dict
+    async def test_ingest_metric_then_query_back(
+        self,
+        client: httpx.AsyncClient,
+        auth_headers: dict,
+        project: dict,
+        api_key_headers: dict,
     ):
-        # Ingest-only: the metric read-back endpoints were removed, so there is
-        # no longer a supported way to observe a stored metric point from the
-        # outside. This asserts the OTLP metrics path still accepts an export.
         metric_name = f"e2e.gauge.{_hex(8)}"
 
         ingest_response = await client.post(
@@ -132,3 +167,93 @@ class TestOtlpMetricsFlow:
             headers={**api_key_headers, "Content-Type": "application/json"},
         )
         assert ingest_response.status_code == 200, ingest_response.text
+
+        async def _metric_is_listed() -> bool:
+            response = await client.get(
+                "/api/v1/metrics/names",
+                headers=auth_headers,
+                params={"project_id": project["project_id"]},
+            )
+            if response.status_code != 200:
+                return False
+            return any(
+                metric["name"] == metric_name for metric in response.json()["metrics"]
+            )
+
+        await poll_until(
+            _metric_is_listed,
+            timeout=30.0,
+            interval=1.0,
+            description="metric name to become discoverable",
+        )
+
+        tags_response = await client.get(
+            f"/api/v1/metrics/{metric_name}/tags",
+            headers=auth_headers,
+            params={"project_id": project["project_id"]},
+        )
+        assert tags_response.status_code == 200, tags_response.text
+        tag_keys = {entry["key"]: entry["values"] for entry in tags_response.json()["keys"]}
+        assert "e2e" in tag_keys["region"]
+
+        series_response = await client.get(
+            f"/api/v1/metrics/{metric_name}/series",
+            headers=auth_headers,
+            params={
+                "project_id": project["project_id"],
+                "aggregation": "avg",
+                "group_by": ["region"],
+                "interval": "5m",
+            },
+        )
+        assert series_response.status_code == 200, series_response.text
+        body = series_response.json()
+
+        assert body["type"] == "gauge"
+        assert len(body["series"]) == 1
+        assert body["series"][0]["tags"]["region"] == "e2e"
+        assert body["series"][0]["points"][-1]["value"] == pytest.approx(42.5)
+
+    async def test_delta_counter_sums_per_bucket(
+        self,
+        client: httpx.AsyncClient,
+        auth_headers: dict,
+        project: dict,
+        api_key_headers: dict,
+    ):
+        """Three delta increments of 2 read back as 6, not as three separate points."""
+        metric_name = f"e2e.counter.{_hex(8)}"
+
+        for _ in range(3):
+            response = await client.post(
+                "/v1/metrics",
+                content=json.dumps(
+                    _otlp_delta_counter_body(metric_name, 2, "e2e-metrics-service")
+                ).encode(),
+                headers={**api_key_headers, "Content-Type": "application/json"},
+            )
+            assert response.status_code == 200, response.text
+
+        async def _counter_totals_six() -> bool:
+            response = await client.get(
+                f"/api/v1/metrics/{metric_name}/series",
+                headers=auth_headers,
+                params={
+                    "project_id": project["project_id"],
+                    "aggregation": "sum",
+                    "interval": "1h",
+                },
+            )
+            if response.status_code != 200:
+                return False
+            series = response.json()["series"]
+            if not series:
+                return False
+            return sum(point["value"] for point in series[0]["points"]) == 6.0
+
+        await poll_until(
+            _counter_totals_six,
+            timeout=30.0,
+            interval=1.0,
+            description="delta counter to total 6 across the bucket",
+        )

@@ -590,6 +590,12 @@ message Panel {
   optional string logs_search = 25;
   // caller categories this panel shows (users/bots/servers/unknown); empty means all
   repeated string traffic_categories = 26;
+  // metric_series panel fields
+  optional string metric_name        = 27;
+  optional string metric_aggregation = 28;
+  repeated string metric_group_by    = 29;
+  map<string, string> metric_tag_filters = 30;
+  optional string metric_interval    = 31;
 }
 
 message GetDashboardPanelsRequest {
@@ -622,6 +628,11 @@ message CreateDashboardPanelRequest {
   optional string status_class = 24;
   optional string logs_search = 25;
   repeated string traffic_categories = 26;
+  optional string metric_name        = 27;
+  optional string metric_aggregation = 28;
+  repeated string metric_group_by    = 29;
+  map<string, string> metric_tag_filters = 30;
+  optional string metric_interval    = 31;
 }
 
 message CreateDashboardPanelResponse {
@@ -651,6 +662,11 @@ message UpdateDashboardPanelRequest {
   optional string status_class = 25;
   optional string logs_search = 26;
   repeated string traffic_categories = 27;
+  optional string metric_name        = 28;
+  optional string metric_aggregation = 29;
+  repeated string metric_group_by    = 30;
+  map<string, string> metric_tag_filters = 31;
+  optional string metric_interval    = 32;
 }
 
 message UpdateDashboardPanelResponse {

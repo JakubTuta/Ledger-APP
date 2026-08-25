@@ -193,6 +193,12 @@ class Settings(pydantic_settings.BaseSettings):
         "trailing window, so this only needs to fire once an hour",
     )
 
+    ANALYTICS_METRIC_POINTS_1H_ROLLUP_CRON: str = pydantic.Field(
+        default="*/10 * * * *",
+        description="metric_points_1h rollup cron schedule - feeds the downsampled read path "
+        "the metric series query falls back to for windows longer than two days",
+    )
+
     ANALYTICS_PARTITION_MANAGER_CRON: str = pydantic.Field(
         default="10 * * * *",
         description="Partition manager cron schedule (staggered off the hour boundary)",

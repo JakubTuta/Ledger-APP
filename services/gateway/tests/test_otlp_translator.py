@@ -522,6 +522,41 @@ class TestMetricTranslation:
         assert len(points) == 1
         assert points[0].type == ingestion_pb2.SUM
         assert points[0].value == 7.0
+        assert points[0].temporality == ingestion_pb2.TEMPORALITY_CUMULATIVE
+
+    def test_delta_sum_records_delta_temporality(self):
+        request = self._build_request(
+            {
+                "name": "requests.count",
+                "sum": {
+                    "dataPoints": [{"timeUnixNano": "1000000000", "asInt": "7"}],
+                    "aggregationTemporality": "AGGREGATION_TEMPORALITY_DELTA",
+                    "isMonotonic": True,
+                },
+            }
+        )
+        points = otlp_translator.otlp_metrics_to_proto(request)
+        assert points[0].temporality == ingestion_pb2.TEMPORALITY_DELTA
+
+    def test_unset_temporality_stays_unspecified(self):
+        request = self._build_request(
+            {
+                "name": "requests.count",
+                "sum": {"dataPoints": [{"timeUnixNano": "1000000000", "asInt": "7"}]},
+            }
+        )
+        points = otlp_translator.otlp_metrics_to_proto(request)
+        assert points[0].temporality == ingestion_pb2.TEMPORALITY_UNSPECIFIED
+
+    def test_gauge_carries_no_temporality(self):
+        request = self._build_request(
+            {
+                "name": "queue.depth",
+                "gauge": {"dataPoints": [{"timeUnixNano": "1000000000", "asDouble": 1.0}]},
+            }
+        )
+        points = otlp_translator.otlp_metrics_to_proto(request)
+        assert points[0].temporality == ingestion_pb2.TEMPORALITY_UNSPECIFIED
 
     def test_histogram_point_translated(self):
         request = self._build_request(

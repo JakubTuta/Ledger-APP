@@ -893,3 +893,172 @@ class ListTracesResponse(_message.Message):
     total: int
     has_more: bool
     def __init__(self, traces: _Optional[_Iterable[_Union[TraceSummary, _Mapping]]] = ..., total: _Optional[int] = ..., has_more: bool = ...) -> None: ...
+
+class ListMetricNamesRequest(_message.Message):
+    __slots__ = ("project_id", "from_time", "to_time")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    FROM_TIME_FIELD_NUMBER: _ClassVar[int]
+    TO_TIME_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    from_time: str
+    to_time: str
+    def __init__(self, project_id: _Optional[int] = ..., from_time: _Optional[str] = ..., to_time: _Optional[str] = ...) -> None: ...
+
+class MetricNameInfo(_message.Message):
+    __slots__ = ("name", "type", "temporality", "tag_keys", "last_seen", "series_count")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    TYPE_FIELD_NUMBER: _ClassVar[int]
+    TEMPORALITY_FIELD_NUMBER: _ClassVar[int]
+    TAG_KEYS_FIELD_NUMBER: _ClassVar[int]
+    LAST_SEEN_FIELD_NUMBER: _ClassVar[int]
+    SERIES_COUNT_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    type: int
+    temporality: int
+    tag_keys: _containers.RepeatedScalarFieldContainer[str]
+    last_seen: str
+    series_count: int
+    def __init__(self, name: _Optional[str] = ..., type: _Optional[int] = ..., temporality: _Optional[int] = ..., tag_keys: _Optional[_Iterable[str]] = ..., last_seen: _Optional[str] = ..., series_count: _Optional[int] = ...) -> None: ...
+
+class ListMetricNamesResponse(_message.Message):
+    __slots__ = ("project_id", "metrics")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    METRICS_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    metrics: _containers.RepeatedCompositeFieldContainer[MetricNameInfo]
+    def __init__(self, project_id: _Optional[int] = ..., metrics: _Optional[_Iterable[_Union[MetricNameInfo, _Mapping]]] = ...) -> None: ...
+
+class GetMetricTagsRequest(_message.Message):
+    __slots__ = ("project_id", "name", "from_time", "to_time", "max_values_per_key")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    FROM_TIME_FIELD_NUMBER: _ClassVar[int]
+    TO_TIME_FIELD_NUMBER: _ClassVar[int]
+    MAX_VALUES_PER_KEY_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    name: str
+    from_time: str
+    to_time: str
+    max_values_per_key: int
+    def __init__(self, project_id: _Optional[int] = ..., name: _Optional[str] = ..., from_time: _Optional[str] = ..., to_time: _Optional[str] = ..., max_values_per_key: _Optional[int] = ...) -> None: ...
+
+class MetricTagKey(_message.Message):
+    __slots__ = ("key", "values", "truncated")
+    KEY_FIELD_NUMBER: _ClassVar[int]
+    VALUES_FIELD_NUMBER: _ClassVar[int]
+    TRUNCATED_FIELD_NUMBER: _ClassVar[int]
+    key: str
+    values: _containers.RepeatedScalarFieldContainer[str]
+    truncated: bool
+    def __init__(self, key: _Optional[str] = ..., values: _Optional[_Iterable[str]] = ..., truncated: bool = ...) -> None: ...
+
+class GetMetricTagsResponse(_message.Message):
+    __slots__ = ("project_id", "name", "keys")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    KEYS_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    name: str
+    keys: _containers.RepeatedCompositeFieldContainer[MetricTagKey]
+    def __init__(self, project_id: _Optional[int] = ..., name: _Optional[str] = ..., keys: _Optional[_Iterable[_Union[MetricTagKey, _Mapping]]] = ...) -> None: ...
+
+class QueryMetricSeriesRequest(_message.Message):
+    __slots__ = ("project_id", "name", "tag_filters", "group_by", "aggregation", "from_time", "to_time", "interval")
+    class TagFiltersEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: str
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    TAG_FILTERS_FIELD_NUMBER: _ClassVar[int]
+    GROUP_BY_FIELD_NUMBER: _ClassVar[int]
+    AGGREGATION_FIELD_NUMBER: _ClassVar[int]
+    FROM_TIME_FIELD_NUMBER: _ClassVar[int]
+    TO_TIME_FIELD_NUMBER: _ClassVar[int]
+    INTERVAL_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    name: str
+    tag_filters: _containers.ScalarMap[str, str]
+    group_by: _containers.RepeatedScalarFieldContainer[str]
+    aggregation: str
+    from_time: str
+    to_time: str
+    interval: str
+    def __init__(self, project_id: _Optional[int] = ..., name: _Optional[str] = ..., tag_filters: _Optional[_Mapping[str, str]] = ..., group_by: _Optional[_Iterable[str]] = ..., aggregation: _Optional[str] = ..., from_time: _Optional[str] = ..., to_time: _Optional[str] = ..., interval: _Optional[str] = ...) -> None: ...
+
+class MetricSeriesPoint(_message.Message):
+    __slots__ = ("bucket", "value")
+    BUCKET_FIELD_NUMBER: _ClassVar[int]
+    VALUE_FIELD_NUMBER: _ClassVar[int]
+    bucket: str
+    value: float
+    def __init__(self, bucket: _Optional[str] = ..., value: _Optional[float] = ...) -> None: ...
+
+class MetricSeries(_message.Message):
+    __slots__ = ("tags", "points")
+    class TagsEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: str
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
+    TAGS_FIELD_NUMBER: _ClassVar[int]
+    POINTS_FIELD_NUMBER: _ClassVar[int]
+    tags: _containers.ScalarMap[str, str]
+    points: _containers.RepeatedCompositeFieldContainer[MetricSeriesPoint]
+    def __init__(self, tags: _Optional[_Mapping[str, str]] = ..., points: _Optional[_Iterable[_Union[MetricSeriesPoint, _Mapping]]] = ...) -> None: ...
+
+class HistogramBucket(_message.Message):
+    __slots__ = ("upper_bound", "count")
+    UPPER_BOUND_FIELD_NUMBER: _ClassVar[int]
+    COUNT_FIELD_NUMBER: _ClassVar[int]
+    upper_bound: float
+    count: float
+    def __init__(self, upper_bound: _Optional[float] = ..., count: _Optional[float] = ...) -> None: ...
+
+class MetricHistogram(_message.Message):
+    __slots__ = ("tags", "buckets", "count", "sum")
+    class TagsEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: str
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
+    TAGS_FIELD_NUMBER: _ClassVar[int]
+    BUCKETS_FIELD_NUMBER: _ClassVar[int]
+    COUNT_FIELD_NUMBER: _ClassVar[int]
+    SUM_FIELD_NUMBER: _ClassVar[int]
+    tags: _containers.ScalarMap[str, str]
+    buckets: _containers.RepeatedCompositeFieldContainer[HistogramBucket]
+    count: int
+    sum: float
+    def __init__(self, tags: _Optional[_Mapping[str, str]] = ..., buckets: _Optional[_Iterable[_Union[HistogramBucket, _Mapping]]] = ..., count: _Optional[int] = ..., sum: _Optional[float] = ...) -> None: ...
+
+class QueryMetricSeriesResponse(_message.Message):
+    __slots__ = ("project_id", "name", "type", "temporality", "aggregation", "interval", "series", "histograms", "downsampled", "truncated")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    TYPE_FIELD_NUMBER: _ClassVar[int]
+    TEMPORALITY_FIELD_NUMBER: _ClassVar[int]
+    AGGREGATION_FIELD_NUMBER: _ClassVar[int]
+    INTERVAL_FIELD_NUMBER: _ClassVar[int]
+    SERIES_FIELD_NUMBER: _ClassVar[int]
+    HISTOGRAMS_FIELD_NUMBER: _ClassVar[int]
+    DOWNSAMPLED_FIELD_NUMBER: _ClassVar[int]
+    TRUNCATED_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    name: str
+    type: int
+    temporality: int
+    aggregation: str
+    interval: str
+    series: _containers.RepeatedCompositeFieldContainer[MetricSeries]
+    histograms: _containers.RepeatedCompositeFieldContainer[MetricHistogram]
+    downsampled: bool
+    truncated: bool
+    def __init__(self, project_id: _Optional[int] = ..., name: _Optional[str] = ..., type: _Optional[int] = ..., temporality: _Optional[int] = ..., aggregation: _Optional[str] = ..., interval: _Optional[str] = ..., series: _Optional[_Iterable[_Union[MetricSeries, _Mapping]]] = ..., histograms: _Optional[_Iterable[_Union[MetricHistogram, _Mapping]]] = ..., downsampled: bool = ..., truncated: bool = ...) -> None: ...

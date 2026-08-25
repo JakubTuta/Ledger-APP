@@ -30,6 +30,8 @@ def _panel_dict_to_proto(panel: dict) -> auth_pb2.Panel:
         "statistic": panel.get("statistic", ""),
         "layout": auth_pb2.PanelLayout(**panel["layout"]) if panel.get("layout") else None,
         "traffic_categories": panel.get("traffic_categories", []),
+        "metric_group_by": panel.get("metric_group_by", []),
+        "metric_tag_filters": panel.get("metric_tag_filters", {}),
     }
     if panel.get("trace_id") is not None:
         kwargs["trace_id"] = panel["trace_id"]
@@ -45,6 +47,12 @@ def _panel_dict_to_proto(panel: dict) -> auth_pb2.Panel:
         kwargs["status_class"] = panel["status_class"]
     if panel.get("logs_search") is not None:
         kwargs["logs_search"] = panel["logs_search"]
+    if panel.get("metric_name") is not None:
+        kwargs["metric_name"] = panel["metric_name"]
+    if panel.get("metric_aggregation") is not None:
+        kwargs["metric_aggregation"] = panel["metric_aggregation"]
+    if panel.get("metric_interval") is not None:
+        kwargs["metric_interval"] = panel["metric_interval"]
     return auth_pb2.Panel(**kwargs)
 
 
@@ -1214,6 +1222,15 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     status_class=request.status_class if request.HasField("status_class") else None,
                     logs_search=request.logs_search if request.HasField("logs_search") else None,
                     traffic_categories=list(request.traffic_categories),
+                    metric_name=request.metric_name if request.HasField("metric_name") else None,
+                    metric_aggregation=request.metric_aggregation
+                    if request.HasField("metric_aggregation")
+                    else None,
+                    metric_group_by=list(request.metric_group_by),
+                    metric_tag_filters=dict(request.metric_tag_filters),
+                    metric_interval=request.metric_interval
+                    if request.HasField("metric_interval")
+                    else None,
                 )
 
                 return auth_pb2.CreateDashboardPanelResponse(panel=_panel_dict_to_proto(panel))
@@ -1274,6 +1291,15 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     status_class=request.status_class if request.HasField("status_class") else None,
                     logs_search=request.logs_search if request.HasField("logs_search") else None,
                     traffic_categories=list(request.traffic_categories),
+                    metric_name=request.metric_name if request.HasField("metric_name") else None,
+                    metric_aggregation=request.metric_aggregation
+                    if request.HasField("metric_aggregation")
+                    else None,
+                    metric_group_by=list(request.metric_group_by),
+                    metric_tag_filters=dict(request.metric_tag_filters),
+                    metric_interval=request.metric_interval
+                    if request.HasField("metric_interval")
+                    else None,
                 )
 
                 return auth_pb2.UpdateDashboardPanelResponse(panel=_panel_dict_to_proto(panel))

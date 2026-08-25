@@ -317,6 +317,7 @@ class MetricPoint(database.Base):
 
     tags: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     service_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    temporality: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
 
     __table_args__ = (
         Index(

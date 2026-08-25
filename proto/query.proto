@@ -28,6 +28,9 @@ service QueryService {
     rpc ListTraces(ListTracesRequest) returns (ListTracesResponse);
 
     // Metric points
+    rpc ListMetricNames(ListMetricNamesRequest) returns (ListMetricNamesResponse);
+    rpc GetMetricTags(GetMetricTagsRequest) returns (GetMetricTagsResponse);
+    rpc QueryMetricSeries(QueryMetricSeriesRequest) returns (QueryMetricSeriesResponse);
 }
 
 message QueryLogsRequest {
@@ -531,5 +534,95 @@ message ListTracesResponse {
     repeated TraceSummary traces = 1;
     int32 total   = 2;
     bool has_more = 3;
+}
+
+// ==================== Metric Points Messages ====================
+
+message ListMetricNamesRequest {
+    int64  project_id         = 1;
+    optional string from_time = 2;
+    optional string to_time   = 3;
+}
+
+message MetricNameInfo {
+    string name       = 1;
+    int32  type       = 2;  // matches ingestion.MetricType
+    int32  temporality = 3;  // matches ingestion.MetricTemporality
+    repeated string tag_keys = 4;
+    string last_seen  = 5;
+    int64  series_count = 6;  // distinct tag combinations
+}
+
+message ListMetricNamesResponse {
+    int64 project_id = 1;
+    repeated MetricNameInfo metrics = 2;
+}
+
+message GetMetricTagsRequest {
+    int64  project_id         = 1;
+    string name               = 2;
+    optional string from_time = 3;
+    optional string to_time   = 4;
+    int32  max_values_per_key = 5;
+}
+
+message MetricTagKey {
+    string key = 1;
+    repeated string values = 2;
+    bool truncated = 3;
+}
+
+message GetMetricTagsResponse {
+    int64  project_id = 1;
+    string name       = 2;
+    repeated MetricTagKey keys = 3;
+}
+
+message QueryMetricSeriesRequest {
+    int64  project_id               = 1;
+    string name                     = 2;
+    map<string, string> tag_filters = 3;
+    repeated string group_by        = 4;  // tag keys to split series on
+    string aggregation              = 5;  // avg|sum|min|max|count|p50|p95|p99
+    optional string from_time       = 6;
+    optional string to_time         = 7;
+    optional string interval        = 8;  // 1m|5m|1h|1d; resolved from span when unset
+}
+
+message MetricSeriesPoint {
+    string bucket = 1;
+    double value  = 2;
+}
+
+message MetricSeries {
+    map<string, string> tags = 1;
+    repeated MetricSeriesPoint points = 2;
+}
+
+message HistogramBucket {
+    double upper_bound = 1;  // +Inf for the overflow bucket
+    double count       = 2;
+}
+
+// Distribution over the whole queried window, one per series - the companion to
+// the quantile time series carried in MetricSeries.
+message MetricHistogram {
+    map<string, string> tags = 1;
+    repeated HistogramBucket buckets = 2;
+    int64  count = 3;
+    double sum   = 4;
+}
+
+message QueryMetricSeriesResponse {
+    int64  project_id  = 1;
+    string name        = 2;
+    int32  type        = 3;
+    int32  temporality = 4;
+    string aggregation = 5;
+    string interval    = 6;
+    repeated MetricSeries series = 7;
+    repeated MetricHistogram histograms = 8;  // populated for HISTOGRAM metrics
+    bool   downsampled = 9;  // true when served from metric_points_1h
+    bool   truncated   = 10;  // histogram row cap hit; series cover part of the window
 }
 

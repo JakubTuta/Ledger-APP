@@ -165,9 +165,13 @@ async def _get_log_volume_from_db(
         resolved_interval = "1day"
 
     if table == "log_volume_1d":
-        bucket_col = "bucket::timestamptz AS bucket"
-        start_cast = ":start::date"
-        end_cast = ":end::date"
+        # CAST(), not `:start::date` - SQLAlchemy's bindparam regex is
+        # `(?<![:\w\\]):(\w+)(?!:)`, so a name followed by ':' does not match in
+        # full and it silently binds the truncated name `star` instead, leaving
+        # the real placeholder in the SQL for Postgres to choke on.
+        bucket_col = "CAST(bucket AS timestamptz) AS bucket"
+        start_cast = "CAST(:start AS date)"
+        end_cast = "CAST(:end AS date)"
     else:
         bucket_col = "bucket"
         start_cast = ":start"

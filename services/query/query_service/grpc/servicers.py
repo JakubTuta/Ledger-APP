@@ -11,6 +11,7 @@ import query_service.services.bottleneck_metrics as bottleneck_metrics_service
 import query_service.services.error_groups as error_groups_service
 import query_service.services.health_summary as health_summary_service
 import query_service.services.log_query as log_query
+import query_service.services.metric_points as metric_points_service
 import query_service.services.metrics as metrics_service
 import query_service.services.tracing as tracing_service
 
@@ -857,3 +858,118 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
             )
         except Exception as e:
             await context.abort(grpc.StatusCode.INTERNAL, f"ListTraces failed: {str(e)}")
+
+    async def ListMetricNames(
+        self,
+        request: query_pb2.ListMetricNamesRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> query_pb2.ListMetricNamesResponse:
+        try:
+            result = await metric_points_service.list_metric_names(
+                project_id=request.project_id,
+                from_time=request.from_time if request.HasField("from_time") else None,
+                to_time=request.to_time if request.HasField("to_time") else None,
+            )
+            metrics = [
+                query_pb2.MetricNameInfo(
+                    name=metric["name"],
+                    type=metric["type"],
+                    temporality=metric["temporality"],
+                    tag_keys=metric["tag_keys"],
+                    last_seen=metric["last_seen"],
+                    series_count=metric["series_count"],
+                )
+                for metric in result["metrics"]
+            ]
+            return query_pb2.ListMetricNamesResponse(
+                project_id=result["project_id"], metrics=metrics
+            )
+        except Exception as e:
+            await context.abort(grpc.StatusCode.INTERNAL, f"ListMetricNames failed: {str(e)}")
+
+    async def GetMetricTags(
+        self,
+        request: query_pb2.GetMetricTagsRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> query_pb2.GetMetricTagsResponse:
+        try:
+            result = await metric_points_service.get_metric_tags(
+                project_id=request.project_id,
+                name=request.name,
+                from_time=request.from_time if request.HasField("from_time") else None,
+                to_time=request.to_time if request.HasField("to_time") else None,
+                max_values_per_key=request.max_values_per_key
+                if request.max_values_per_key > 0
+                else metric_points_service.MAX_TAG_VALUES_PER_KEY,
+            )
+            keys = [
+                query_pb2.MetricTagKey(
+                    key=entry["key"],
+                    values=entry["values"],
+                    truncated=entry["truncated"],
+                )
+                for entry in result["keys"]
+            ]
+            return query_pb2.GetMetricTagsResponse(
+                project_id=result["project_id"], name=result["name"], keys=keys
+            )
+        except Exception as e:
+            await context.abort(grpc.StatusCode.INTERNAL, f"GetMetricTags failed: {str(e)}")
+
+    async def QueryMetricSeries(
+        self,
+        request: query_pb2.QueryMetricSeriesRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> query_pb2.QueryMetricSeriesResponse:
+        try:
+            result = await metric_points_service.query_metric_series(
+                project_id=request.project_id,
+                name=request.name,
+                tag_filters=dict(request.tag_filters),
+                group_by=list(request.group_by),
+                aggregation=request.aggregation or "avg",
+                from_time=request.from_time if request.HasField("from_time") else None,
+                to_time=request.to_time if request.HasField("to_time") else None,
+                interval=request.interval if request.HasField("interval") else None,
+            )
+        except ValueError as e:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
+            return
+        except Exception as e:
+            await context.abort(grpc.StatusCode.INTERNAL, f"QueryMetricSeries failed: {str(e)}")
+            return
+
+        return query_pb2.QueryMetricSeriesResponse(
+            project_id=result["project_id"],
+            name=result["name"],
+            type=result["type"],
+            temporality=result["temporality"],
+            aggregation=result["aggregation"],
+            interval=result["interval"],
+            series=[
+                query_pb2.MetricSeries(
+                    tags=series["tags"],
+                    points=[
+                        query_pb2.MetricSeriesPoint(bucket=point["bucket"], value=point["value"])
+                        for point in series["points"]
+                    ],
+                )
+                for series in result["series"]
+            ],
+            histograms=[
+                query_pb2.MetricHistogram(
+                    tags=histogram["tags"],
+                    buckets=[
+                        query_pb2.HistogramBucket(
+                            upper_bound=bucket["upper_bound"], count=bucket["count"]
+                        )
+                        for bucket in histogram["buckets"]
+                    ],
+                    count=histogram["count"],
+                    sum=histogram["sum"],
+                )
+                for histogram in result["histograms"]
+            ],
+            downsampled=result["downsampled"],
+            truncated=result["truncated"],
+        )

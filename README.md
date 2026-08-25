@@ -204,6 +204,28 @@ GET /api/v1/metrics/error-rate?project_id=1
 GET /api/v1/metrics/top-errors?project_id=1
 ```
 
+### Query Your Metrics
+
+Counters, gauges and histograms sent over OTLP read back by name, tag and time bucket:
+
+```bash
+# What metrics has this project sent?
+GET /api/v1/metrics/names?project_id=1
+
+# Which tags does one of them carry, and what values?
+GET /api/v1/metrics/orders_processed/tags?project_id=1
+
+# One line per region, summed into 5-minute buckets
+GET /api/v1/metrics/orders_processed/series?project_id=1&aggregation=sum&group_by=region&interval=5m
+
+# Narrow to a single tag value
+GET /api/v1/metrics/orders_processed/series?project_id=1&tag=region=eu
+```
+
+A counter exported cumulatively (the OpenTelemetry default) is differenced reset-aware before
+aggregation, so it charts as activity per bucket rather than as a running total. Histogram
+metrics also return a whole-window distribution alongside the quantile series.
+
 ## Ecosystem
 
 - **[Python SDK](https://github.com/JakubTuta/Ledger-SDK)** — Official client library ([PyPI](https://pypi.org/project/ledger-sdk/)), OpenTelemetry-native with enhanced Python features

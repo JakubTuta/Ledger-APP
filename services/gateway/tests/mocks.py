@@ -283,6 +283,7 @@ class MockAuthStub:
         self.create_project_response = None
         self.get_projects_response = None
         self.get_project_by_id_response = None
+        self.get_project_role_response = None
         self.update_project_response = None
         self.create_api_key_response = None
         self.revoke_api_key_response = None
@@ -432,6 +433,8 @@ class MockAuthStub:
         return auth_pb2.RevokeAllSessionsResponse(revoked_count=1)
 
     async def GetProjectRole(self, request, timeout=None):
+        if self.get_project_role_response:
+            return self.get_project_role_response
         return auth_pb2.GetProjectRoleResponse(is_member=True, role="owner")
 
 
@@ -482,8 +485,38 @@ class MockIngestionStub:
 class MockQueryStub:
     def __init__(self):
         self.get_usage_stats_response = None
+        self.list_metric_names_response = None
+        self.get_metric_tags_response = None
+        self.query_metric_series_response = None
+        self.query_metric_series_error = None
+        self.last_query_metric_series_request = None
 
     async def GetUsageStats(self, request, timeout=None):
         if self.get_usage_stats_response:
             return self.get_usage_stats_response
         return query_pb2.GetUsageStatsResponse(project_id=request.project_id, usage=[])
+
+    async def ListMetricNames(self, request, timeout=None):
+        if self.list_metric_names_response:
+            return self.list_metric_names_response
+        return query_pb2.ListMetricNamesResponse(project_id=request.project_id, metrics=[])
+
+    async def GetMetricTags(self, request, timeout=None):
+        if self.get_metric_tags_response:
+            return self.get_metric_tags_response
+        return query_pb2.GetMetricTagsResponse(
+            project_id=request.project_id, name=request.name, keys=[]
+        )
+
+    async def QueryMetricSeries(self, request, timeout=None):
+        self.last_query_metric_series_request = request
+        if self.query_metric_series_error:
+            raise self.query_metric_series_error
+        if self.query_metric_series_response:
+            return self.query_metric_series_response
+        return query_pb2.QueryMetricSeriesResponse(
+            project_id=request.project_id,
+            name=request.name,
+            aggregation=request.aggregation,
+            interval="5m",
+        )

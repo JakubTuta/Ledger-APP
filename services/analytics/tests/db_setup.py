@@ -34,16 +34,19 @@ TEST_LOGS_DB_PORT = "5433"
 TEST_AUTH_DB_NAME = "test_auth_db"
 TEST_LOGS_DB_NAME = "test_logs_db"
 
-_AUTH_ROLLUP_DDL = """
+# Rollup tables live in logs_db (created by ingestion's migrations), mirrored
+# here since analytics has no ORM model for them either.
+_LOGS_ROLLUP_DDL = [
+    # Every rollup job reads and writes its watermark through get_logs_session(),
+    # and init_logs_db.sql puts the table in logs_db - so it belongs here, and
+    # has to be truncated here, or a watermark set by one test hides the next
+    # test's fixtures from the job under test.
+    """
     CREATE TABLE IF NOT EXISTS rollup_job_state (
         job_name    TEXT NOT NULL PRIMARY KEY,
         last_bucket TIMESTAMPTZ NOT NULL
     )
-"""
-
-# Rollup tables live in logs_db (created by ingestion's migrations), mirrored
-# here since analytics has no ORM model for them either.
-_LOGS_ROLLUP_DDL = [
+    """,
     """
     CREATE TABLE IF NOT EXISTS log_volume_5m (
         project_id  BIGINT NOT NULL,
@@ -108,6 +111,7 @@ _LOGS_ROLLUP_DDL = [
         min_v        DOUBLE PRECISION,
         max_v        DOUBLE PRECISION,
         avg_v        DOUBLE PRECISION,
+        temporality  SMALLINT,
         PRIMARY KEY (project_id, name, tags_hash, bucket)
     )
     """,
@@ -155,7 +159,6 @@ class AnalyticsTestDatabases:
 
             def create_auth(conn_sync):
                 auth_db_module.Base.metadata.create_all(conn_sync)
-                conn_sync.execute(sqlalchemy.text(_AUTH_ROLLUP_DDL))
                 # auth_service.models declares created_at with a Python-side
                 # default= (applied by the ORM, not raw SQL); production
                 # tables get NOW() via the migration's server_default
@@ -213,7 +216,6 @@ class AnalyticsTestDatabases:
         async with self.auth.engine.begin() as conn:
 
             def drop_auth(conn_sync):
-                conn_sync.execute(sqlalchemy.text("DROP TABLE IF EXISTS rollup_job_state"))
                 auth_db_module.Base.metadata.drop_all(conn_sync)
 
             await conn.run_sync(drop_auth)
@@ -222,6 +224,7 @@ class AnalyticsTestDatabases:
 
             def drop_logs(conn_sync):
                 for table in (
+                    "rollup_job_state",
                     "metric_points_1h",
                     "span_latency_1h",
                     "error_rate_5m",
@@ -239,7 +242,6 @@ class AnalyticsTestDatabases:
     async def clear_tables(self) -> None:
         async with self.auth.engine.begin() as conn:
             table_names = [t.name for t in reversed(auth_db_module.Base.metadata.sorted_tables)]
-            table_names.append("rollup_job_state")
             await conn.execute(
                 sqlalchemy.text(f"TRUNCATE TABLE {', '.join(table_names)} RESTART IDENTITY CASCADE")
             )
@@ -247,6 +249,7 @@ class AnalyticsTestDatabases:
         async with self.logs.engine.begin() as conn:
             table_names = [t.name for t in reversed(logs_db_module.Base.metadata.sorted_tables)]
             table_names += [
+                "rollup_job_state",
                 "log_volume_5m",
                 "log_volume_1h",
                 "log_volume_1d",

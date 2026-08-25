@@ -129,6 +129,21 @@ class QueryServiceStub(object):
                 request_serializer=query__pb2.ListTracesRequest.SerializeToString,
                 response_deserializer=query__pb2.ListTracesResponse.FromString,
                 _registered_method=True)
+        self.ListMetricNames = channel.unary_unary(
+                '/query.QueryService/ListMetricNames',
+                request_serializer=query__pb2.ListMetricNamesRequest.SerializeToString,
+                response_deserializer=query__pb2.ListMetricNamesResponse.FromString,
+                _registered_method=True)
+        self.GetMetricTags = channel.unary_unary(
+                '/query.QueryService/GetMetricTags',
+                request_serializer=query__pb2.GetMetricTagsRequest.SerializeToString,
+                response_deserializer=query__pb2.GetMetricTagsResponse.FromString,
+                _registered_method=True)
+        self.QueryMetricSeries = channel.unary_unary(
+                '/query.QueryService/QueryMetricSeries',
+                request_serializer=query__pb2.QueryMetricSeriesRequest.SerializeToString,
+                response_deserializer=query__pb2.QueryMetricSeriesResponse.FromString,
+                _registered_method=True)
 
 
 class QueryServiceServicer(object):
@@ -250,6 +265,25 @@ class QueryServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ListMetricNames(self, request, context):
+        """Metric points
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetMetricTags(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def QueryMetricSeries(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_QueryServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -347,6 +381,21 @@ def add_QueryServiceServicer_to_server(servicer, server):
                     servicer.ListTraces,
                     request_deserializer=query__pb2.ListTracesRequest.FromString,
                     response_serializer=query__pb2.ListTracesResponse.SerializeToString,
+            ),
+            'ListMetricNames': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListMetricNames,
+                    request_deserializer=query__pb2.ListMetricNamesRequest.FromString,
+                    response_serializer=query__pb2.ListMetricNamesResponse.SerializeToString,
+            ),
+            'GetMetricTags': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetMetricTags,
+                    request_deserializer=query__pb2.GetMetricTagsRequest.FromString,
+                    response_serializer=query__pb2.GetMetricTagsResponse.SerializeToString,
+            ),
+            'QueryMetricSeries': grpc.unary_unary_rpc_method_handler(
+                    servicer.QueryMetricSeries,
+                    request_deserializer=query__pb2.QueryMetricSeriesRequest.FromString,
+                    response_serializer=query__pb2.QueryMetricSeriesResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -862,6 +911,87 @@ class QueryService(object):
             '/query.QueryService/ListTraces',
             query__pb2.ListTracesRequest.SerializeToString,
             query__pb2.ListTracesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListMetricNames(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/query.QueryService/ListMetricNames',
+            query__pb2.ListMetricNamesRequest.SerializeToString,
+            query__pb2.ListMetricNamesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetMetricTags(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/query.QueryService/GetMetricTags',
+            query__pb2.GetMetricTagsRequest.SerializeToString,
+            query__pb2.GetMetricTagsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def QueryMetricSeries(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/query.QueryService/QueryMetricSeries',
+            query__pb2.QueryMetricSeriesRequest.SerializeToString,
+            query__pb2.QueryMetricSeriesResponse.FromString,
             options,
             channel_credentials,
             insecure,

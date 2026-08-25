@@ -10,6 +10,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 VALID_TRAFFIC_CATEGORIES = {"users", "bots", "servers", "unknown"}
 
+# Ordered so the validation error reads the same way every time it is raised.
+VALID_PANEL_TYPES = (
+    "logs",
+    "errors",
+    "metrics",
+    "error_list",
+    "bottleneck",
+    "error_heatmap",
+    "trace",
+    "trace_list",
+    "summary",
+    "latency_overview",
+    "country_map",
+    "metric_series",
+)
+
+VALID_METRIC_AGGREGATIONS = ("avg", "sum", "min", "max", "count", "p50", "p95", "p99")
+VALID_METRIC_INTERVALS = ("1m", "5m", "1h", "1d")
+
 
 class DashboardService:
     """
@@ -93,17 +112,27 @@ class DashboardService:
         status_class: str | None = None,
         logs_search: str | None = None,
         traffic_categories: list[str] | None = None,
+        metric_name: str | None = None,
+        metric_aggregation: str | None = None,
+        metric_group_by: list[str] | None = None,
+        metric_tag_filters: dict[str, str] | None = None,
+        metric_interval: str | None = None,
     ) -> dict:
         """Create a new dashboard panel."""
 
         if not self._validate_panel_type(panel_type):
             raise ValueError(
-                f"Invalid panel type '{panel_type}'. Must be one of: logs, errors, metrics, error_list, bottleneck, error_heatmap, trace, trace_list, summary, latency_overview, country_map"
+                f"Invalid panel type '{panel_type}'. "
+                f"Must be one of: {', '.join(VALID_PANEL_TYPES)}"
             )
 
         if panel_type == "metrics":
             if not endpoint:
                 raise ValueError("'endpoint' is required for metrics type panels")
+
+        self._validate_metric_panel(
+            panel_type, metric_name, metric_aggregation, metric_interval
+        )
 
         has_period = period is not None
         has_dates = period_from is not None and period_to is not None
@@ -145,6 +174,11 @@ class DashboardService:
             "status_class": status_class,
             "logs_search": logs_search,
             "traffic_categories": traffic_categories if traffic_categories else [],
+            "metric_name": metric_name,
+            "metric_aggregation": metric_aggregation,
+            "metric_group_by": metric_group_by if metric_group_by else [],
+            "metric_tag_filters": metric_tag_filters if metric_tag_filters else {},
+            "metric_interval": metric_interval,
         }
 
         result = await session.execute(
@@ -196,17 +230,27 @@ class DashboardService:
         status_class: str | None = None,
         logs_search: str | None = None,
         traffic_categories: list[str] | None = None,
+        metric_name: str | None = None,
+        metric_aggregation: str | None = None,
+        metric_group_by: list[str] | None = None,
+        metric_tag_filters: dict[str, str] | None = None,
+        metric_interval: str | None = None,
     ) -> dict:
         """Update an existing dashboard panel."""
 
         if not self._validate_panel_type(panel_type):
             raise ValueError(
-                f"Invalid panel type '{panel_type}'. Must be one of: logs, errors, metrics, error_list, bottleneck, error_heatmap, trace, trace_list, summary, latency_overview, country_map"
+                f"Invalid panel type '{panel_type}'. "
+                f"Must be one of: {', '.join(VALID_PANEL_TYPES)}"
             )
 
         if panel_type == "metrics":
             if not endpoint:
                 raise ValueError("'endpoint' is required for metrics type panels")
+
+        self._validate_metric_panel(
+            panel_type, metric_name, metric_aggregation, metric_interval
+        )
 
         has_period = period is not None
         has_dates = period_from is not None and period_to is not None
@@ -259,6 +303,11 @@ class DashboardService:
                     "status_class": status_class,
                     "logs_search": logs_search,
                     "traffic_categories": traffic_categories if traffic_categories else [],
+                    "metric_name": metric_name,
+                    "metric_aggregation": metric_aggregation,
+                    "metric_group_by": metric_group_by if metric_group_by else [],
+                    "metric_tag_filters": metric_tag_filters if metric_tag_filters else {},
+                    "metric_interval": metric_interval,
                 }
                 panel_found = True
                 break
@@ -355,20 +404,32 @@ class DashboardService:
         return True
 
     def _validate_panel_type(self, panel_type: str) -> bool:
-        valid_types = {
-            "logs",
-            "errors",
-            "metrics",
-            "error_list",
-            "bottleneck",
-            "error_heatmap",
-            "trace",
-            "trace_list",
-            "summary",
-            "latency_overview",
-            "country_map",
-        }
-        return panel_type in valid_types
+        return panel_type in VALID_PANEL_TYPES
+
+    def _validate_metric_panel(
+        self,
+        panel_type: str,
+        metric_name: str | None,
+        metric_aggregation: str | None,
+        metric_interval: str | None,
+    ) -> None:
+        if panel_type != "metric_series":
+            return
+
+        if not metric_name:
+            raise ValueError("'metric_name' is required for metric_series type panels")
+
+        if metric_aggregation and metric_aggregation not in VALID_METRIC_AGGREGATIONS:
+            raise ValueError(
+                f"Invalid metric_aggregation '{metric_aggregation}'. "
+                f"Must be one of: {', '.join(VALID_METRIC_AGGREGATIONS)}"
+            )
+
+        if metric_interval and metric_interval not in VALID_METRIC_INTERVALS:
+            raise ValueError(
+                f"Invalid metric_interval '{metric_interval}'. "
+                f"Must be one of: {', '.join(VALID_METRIC_INTERVALS)}"
+            )
 
     def _validate_traffic_categories(self, traffic_categories: list[str] | None) -> None:
         """

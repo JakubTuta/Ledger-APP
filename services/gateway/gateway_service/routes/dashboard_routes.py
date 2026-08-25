@@ -43,6 +43,13 @@ def _panel_proto_to_response(panel) -> schemas.PanelResponse:
         statusClass=panel.status_class if panel.HasField("status_class") else None,
         search=panel.logs_search if panel.HasField("logs_search") else None,
         trafficCategories=list(panel.traffic_categories),
+        metric_name=panel.metric_name if panel.HasField("metric_name") else None,
+        metric_aggregation=panel.metric_aggregation
+        if panel.HasField("metric_aggregation")
+        else None,
+        metric_group_by=list(panel.metric_group_by),
+        metric_tag_filters=dict(panel.metric_tag_filters),
+        metric_interval=panel.metric_interval if panel.HasField("metric_interval") else None,
     )
 
 
@@ -171,6 +178,16 @@ async def create_dashboard_panel(
             grpc_request_kwargs["logs_search"] = request_data.search
         if request_data.trafficCategories is not None:
             grpc_request_kwargs["traffic_categories"] = request_data.trafficCategories
+        if request_data.metric_name is not None:
+            grpc_request_kwargs["metric_name"] = request_data.metric_name
+        if request_data.metric_aggregation is not None:
+            grpc_request_kwargs["metric_aggregation"] = request_data.metric_aggregation
+        if request_data.metric_group_by is not None:
+            grpc_request_kwargs["metric_group_by"] = request_data.metric_group_by
+        if request_data.metric_tag_filters is not None:
+            grpc_request_kwargs["metric_tag_filters"] = request_data.metric_tag_filters
+        if request_data.metric_interval is not None:
+            grpc_request_kwargs["metric_interval"] = request_data.metric_interval
 
         grpc_request = auth_pb2.CreateDashboardPanelRequest(**grpc_request_kwargs)
 
@@ -280,6 +297,16 @@ async def update_dashboard_panel(
             grpc_request_kwargs["logs_search"] = request_data.search
         if request_data.trafficCategories is not None:
             grpc_request_kwargs["traffic_categories"] = request_data.trafficCategories
+        if request_data.metric_name is not None:
+            grpc_request_kwargs["metric_name"] = request_data.metric_name
+        if request_data.metric_aggregation is not None:
+            grpc_request_kwargs["metric_aggregation"] = request_data.metric_aggregation
+        if request_data.metric_group_by is not None:
+            grpc_request_kwargs["metric_group_by"] = request_data.metric_group_by
+        if request_data.metric_tag_filters is not None:
+            grpc_request_kwargs["metric_tag_filters"] = request_data.metric_tag_filters
+        if request_data.metric_interval is not None:
+            grpc_request_kwargs["metric_interval"] = request_data.metric_interval
 
         grpc_request = auth_pb2.UpdateDashboardPanelRequest(**grpc_request_kwargs)
 

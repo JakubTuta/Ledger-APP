@@ -7,6 +7,7 @@ from analytics_workers.jobs.log_facets_1h import rollup_log_facets_1h
 from analytics_workers.jobs.log_metrics import aggregate_log_metrics
 from analytics_workers.jobs.log_volume_1d_rollup import rollup_log_volume_1d
 from analytics_workers.jobs.log_volume_1h_rollup import rollup_log_volume_1h
+from analytics_workers.jobs.metric_points_1h_rollup import rollup_metric_points_1h
 from analytics_workers.jobs.monitor_checks import check_monitors
 from analytics_workers.jobs.notification_cleanup import cleanup_expired_notifications
 from analytics_workers.jobs.partition_manager import manage_partitions
@@ -25,6 +26,7 @@ __all__ = [
     "rollup_log_volume_1h",
     "rollup_log_volume_1d",
     "rollup_log_facets_1h",
+    "rollup_metric_points_1h",
     "manage_partitions",
     "evaluate_alert_rules",
     "cleanup_expired_notifications",

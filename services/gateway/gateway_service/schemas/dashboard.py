@@ -51,7 +51,7 @@ class PanelRequest(pydantic.BaseModel):
     )
     type: str = pydantic.Field(
         ...,
-        pattern=r"^(logs|errors|metrics|error_list|bottleneck|error_heatmap|trace|trace_list|summary|latency_overview|country_map)$",
+        pattern=r"^(logs|errors|metrics|error_list|bottleneck|error_heatmap|trace|trace_list|summary|latency_overview|country_map|metric_series)$",
         description="Panel type",
         examples=["errors"],
     )
@@ -96,6 +96,34 @@ class PanelRequest(pydantic.BaseModel):
     )
     trafficCategories: list[TrafficCategory] | None = pydantic.Field(
         None, description=TRAFFIC_CATEGORIES_DESCRIPTION, examples=[["users"]]
+    )
+    metric_name: str | None = pydantic.Field(
+        None,
+        max_length=255,
+        description="Metric name to chart (required for metric_series panels)",
+        examples=["orders_processed"],
+    )
+    metric_aggregation: str | None = pydantic.Field(
+        None,
+        pattern=r"^(avg|sum|min|max|count|p50|p95|p99)$",
+        description="How points are combined per bucket (metric_series panels)",
+        examples=["sum"],
+    )
+    metric_group_by: list[str] | None = pydantic.Field(
+        None,
+        description="Tag keys to split the metric into separate series (metric_series panels)",
+        examples=[["region"]],
+    )
+    metric_tag_filters: dict[str, str] | None = pydantic.Field(
+        None,
+        description="Tag equality filters narrowing the metric (metric_series panels)",
+        examples=[{"region": "eu"}],
+    )
+    metric_interval: str | None = pydantic.Field(
+        None,
+        pattern=r"^(1m|5m|1h|1d)$",
+        description="Bucket width; omit to resolve from the panel's time range",
+        examples=["5m"],
     )
 
     @pydantic.model_validator(mode="after")
@@ -178,6 +206,11 @@ class PanelResponse(pydantic.BaseModel):
     trafficCategories: list[TrafficCategory] = pydantic.Field(
         default_factory=list, description=TRAFFIC_CATEGORIES_DESCRIPTION
     )
+    metric_name: str | None = pydantic.Field(None)
+    metric_aggregation: str | None = pydantic.Field(None)
+    metric_group_by: list[str] = pydantic.Field(default_factory=list)
+    metric_tag_filters: dict[str, str] = pydantic.Field(default_factory=dict)
+    metric_interval: str | None = pydantic.Field(None)
 
     model_config = pydantic.ConfigDict(
         json_schema_extra={
@@ -289,7 +322,7 @@ class UpdatePanelRequest(pydantic.BaseModel):
     )
     type: str = pydantic.Field(
         ...,
-        pattern=r"^(logs|errors|metrics|error_list|bottleneck|error_heatmap|trace|trace_list|summary|latency_overview|country_map)$",
+        pattern=r"^(logs|errors|metrics|error_list|bottleneck|error_heatmap|trace|trace_list|summary|latency_overview|country_map|metric_series)$",
         description="Panel type",
         examples=["errors"],
     )
@@ -334,6 +367,34 @@ class UpdatePanelRequest(pydantic.BaseModel):
     )
     trafficCategories: list[TrafficCategory] | None = pydantic.Field(
         None, description=TRAFFIC_CATEGORIES_DESCRIPTION, examples=[["users"]]
+    )
+    metric_name: str | None = pydantic.Field(
+        None,
+        max_length=255,
+        description="Metric name to chart (required for metric_series panels)",
+        examples=["orders_processed"],
+    )
+    metric_aggregation: str | None = pydantic.Field(
+        None,
+        pattern=r"^(avg|sum|min|max|count|p50|p95|p99)$",
+        description="How points are combined per bucket (metric_series panels)",
+        examples=["sum"],
+    )
+    metric_group_by: list[str] | None = pydantic.Field(
+        None,
+        description="Tag keys to split the metric into separate series (metric_series panels)",
+        examples=[["region"]],
+    )
+    metric_tag_filters: dict[str, str] | None = pydantic.Field(
+        None,
+        description="Tag equality filters narrowing the metric (metric_series panels)",
+        examples=[{"region": "eu"}],
+    )
+    metric_interval: str | None = pydantic.Field(
+        None,
+        pattern=r"^(1m|5m|1h|1d)$",
+        description="Bucket width; omit to resolve from the panel's time range",
+        examples=["5m"],
     )
 
     @pydantic.model_validator(mode="after")

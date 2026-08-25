@@ -26,6 +26,12 @@ class MetricType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     SUM: _ClassVar[MetricType]
     GAUGE: _ClassVar[MetricType]
     HISTOGRAM: _ClassVar[MetricType]
+
+class MetricTemporality(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    TEMPORALITY_UNSPECIFIED: _ClassVar[MetricTemporality]
+    TEMPORALITY_DELTA: _ClassVar[MetricTemporality]
+    TEMPORALITY_CUMULATIVE: _ClassVar[MetricTemporality]
 SERVER: SpanKind
 CLIENT: SpanKind
 INTERNAL: SpanKind
@@ -37,6 +43,9 @@ ERROR: SpanStatus
 SUM: MetricType
 GAUGE: MetricType
 HISTOGRAM: MetricType
+TEMPORALITY_UNSPECIFIED: MetricTemporality
+TEMPORALITY_DELTA: MetricTemporality
+TEMPORALITY_CUMULATIVE: MetricTemporality
 
 class LogEntry(_message.Message):
     __slots__ = ("timestamp", "level", "log_type", "importance", "message", "error_type", "error_message", "stack_trace", "environment", "release", "sdk_version", "platform", "platform_version", "attributes", "log_id", "client_channel", "client_country")
@@ -187,7 +196,7 @@ class IngestSpansBatchResponse(_message.Message):
     def __init__(self, success: bool = ..., accepted: _Optional[int] = ..., rejected: _Optional[int] = ..., error: _Optional[str] = ...) -> None: ...
 
 class MetricPoint(_message.Message):
-    __slots__ = ("name", "type", "timestamp", "value", "count", "sum", "bucket_counts", "explicit_bounds", "tags", "service_name")
+    __slots__ = ("name", "type", "timestamp", "value", "count", "sum", "bucket_counts", "explicit_bounds", "tags", "service_name", "temporality")
     class TagsEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -205,6 +214,7 @@ class MetricPoint(_message.Message):
     EXPLICIT_BOUNDS_FIELD_NUMBER: _ClassVar[int]
     TAGS_FIELD_NUMBER: _ClassVar[int]
     SERVICE_NAME_FIELD_NUMBER: _ClassVar[int]
+    TEMPORALITY_FIELD_NUMBER: _ClassVar[int]
     name: str
     type: MetricType
     timestamp: str
@@ -215,7 +225,8 @@ class MetricPoint(_message.Message):
     explicit_bounds: _containers.RepeatedScalarFieldContainer[float]
     tags: _containers.ScalarMap[str, str]
     service_name: str
-    def __init__(self, name: _Optional[str] = ..., type: _Optional[_Union[MetricType, str]] = ..., timestamp: _Optional[str] = ..., value: _Optional[float] = ..., count: _Optional[int] = ..., sum: _Optional[float] = ..., bucket_counts: _Optional[_Iterable[float]] = ..., explicit_bounds: _Optional[_Iterable[float]] = ..., tags: _Optional[_Mapping[str, str]] = ..., service_name: _Optional[str] = ...) -> None: ...
+    temporality: MetricTemporality
+    def __init__(self, name: _Optional[str] = ..., type: _Optional[_Union[MetricType, str]] = ..., timestamp: _Optional[str] = ..., value: _Optional[float] = ..., count: _Optional[int] = ..., sum: _Optional[float] = ..., bucket_counts: _Optional[_Iterable[float]] = ..., explicit_bounds: _Optional[_Iterable[float]] = ..., tags: _Optional[_Mapping[str, str]] = ..., service_name: _Optional[str] = ..., temporality: _Optional[_Union[MetricTemporality, str]] = ...) -> None: ...
 
 class IngestMetricPointsBatchRequest(_message.Message):
     __slots__ = ("project_id", "points")

@@ -728,7 +728,14 @@ class PanelLayout(_message.Message):
     def __init__(self, x: _Optional[int] = ..., y: _Optional[int] = ..., w: _Optional[int] = ..., h: _Optional[int] = ...) -> None: ...
 
 class Panel(_message.Message):
-    __slots__ = ("id", "name", "index", "project_id", "period", "periodFrom", "periodTo", "type", "endpoint", "routes", "statistic", "layout", "trace_id", "service_filter", "operation_filter", "min_duration_ms", "has_error", "limit", "status_class", "logs_search", "traffic_categories")
+    __slots__ = ("id", "name", "index", "project_id", "period", "periodFrom", "periodTo", "type", "endpoint", "routes", "statistic", "layout", "trace_id", "service_filter", "operation_filter", "min_duration_ms", "has_error", "limit", "status_class", "logs_search", "traffic_categories", "metric_name", "metric_aggregation", "metric_group_by", "metric_tag_filters", "metric_interval")
+    class MetricTagFiltersEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: str
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
     ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     INDEX_FIELD_NUMBER: _ClassVar[int]
@@ -750,6 +757,11 @@ class Panel(_message.Message):
     STATUS_CLASS_FIELD_NUMBER: _ClassVar[int]
     LOGS_SEARCH_FIELD_NUMBER: _ClassVar[int]
     TRAFFIC_CATEGORIES_FIELD_NUMBER: _ClassVar[int]
+    METRIC_NAME_FIELD_NUMBER: _ClassVar[int]
+    METRIC_AGGREGATION_FIELD_NUMBER: _ClassVar[int]
+    METRIC_GROUP_BY_FIELD_NUMBER: _ClassVar[int]
+    METRIC_TAG_FILTERS_FIELD_NUMBER: _ClassVar[int]
+    METRIC_INTERVAL_FIELD_NUMBER: _ClassVar[int]
     id: str
     name: str
     index: int
@@ -771,7 +783,12 @@ class Panel(_message.Message):
     status_class: str
     logs_search: str
     traffic_categories: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., period: _Optional[str] = ..., periodFrom: _Optional[str] = ..., periodTo: _Optional[str] = ..., type: _Optional[str] = ..., endpoint: _Optional[str] = ..., routes: _Optional[_Iterable[str]] = ..., statistic: _Optional[str] = ..., layout: _Optional[_Union[PanelLayout, _Mapping]] = ..., trace_id: _Optional[str] = ..., service_filter: _Optional[str] = ..., operation_filter: _Optional[str] = ..., min_duration_ms: _Optional[int] = ..., has_error: bool = ..., limit: _Optional[int] = ..., status_class: _Optional[str] = ..., logs_search: _Optional[str] = ..., traffic_categories: _Optional[_Iterable[str]] = ...) -> None: ...
+    metric_name: str
+    metric_aggregation: str
+    metric_group_by: _containers.RepeatedScalarFieldContainer[str]
+    metric_tag_filters: _containers.ScalarMap[str, str]
+    metric_interval: str
+    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., period: _Optional[str] = ..., periodFrom: _Optional[str] = ..., periodTo: _Optional[str] = ..., type: _Optional[str] = ..., endpoint: _Optional[str] = ..., routes: _Optional[_Iterable[str]] = ..., statistic: _Optional[str] = ..., layout: _Optional[_Union[PanelLayout, _Mapping]] = ..., trace_id: _Optional[str] = ..., service_filter: _Optional[str] = ..., operation_filter: _Optional[str] = ..., min_duration_ms: _Optional[int] = ..., has_error: bool = ..., limit: _Optional[int] = ..., status_class: _Optional[str] = ..., logs_search: _Optional[str] = ..., traffic_categories: _Optional[_Iterable[str]] = ..., metric_name: _Optional[str] = ..., metric_aggregation: _Optional[str] = ..., metric_group_by: _Optional[_Iterable[str]] = ..., metric_tag_filters: _Optional[_Mapping[str, str]] = ..., metric_interval: _Optional[str] = ...) -> None: ...
 
 class GetDashboardPanelsRequest(_message.Message):
     __slots__ = ("user_id",)
@@ -786,7 +803,14 @@ class GetDashboardPanelsResponse(_message.Message):
     def __init__(self, panels: _Optional[_Iterable[_Union[Panel, _Mapping]]] = ...) -> None: ...
 
 class CreateDashboardPanelRequest(_message.Message):
-    __slots__ = ("user_id", "name", "index", "project_id", "period", "periodFrom", "periodTo", "type", "endpoint", "routes", "statistic", "layout", "trace_id", "service_filter", "operation_filter", "min_duration_ms", "has_error", "limit", "status_class", "logs_search", "traffic_categories")
+    __slots__ = ("user_id", "name", "index", "project_id", "period", "periodFrom", "periodTo", "type", "endpoint", "routes", "statistic", "layout", "trace_id", "service_filter", "operation_filter", "min_duration_ms", "has_error", "limit", "status_class", "logs_search", "traffic_categories", "metric_name", "metric_aggregation", "metric_group_by", "metric_tag_filters", "metric_interval")
+    class MetricTagFiltersEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: str
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
     USER_ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     INDEX_FIELD_NUMBER: _ClassVar[int]
@@ -808,6 +832,11 @@ class CreateDashboardPanelRequest(_message.Message):
     STATUS_CLASS_FIELD_NUMBER: _ClassVar[int]
     LOGS_SEARCH_FIELD_NUMBER: _ClassVar[int]
     TRAFFIC_CATEGORIES_FIELD_NUMBER: _ClassVar[int]
+    METRIC_NAME_FIELD_NUMBER: _ClassVar[int]
+    METRIC_AGGREGATION_FIELD_NUMBER: _ClassVar[int]
+    METRIC_GROUP_BY_FIELD_NUMBER: _ClassVar[int]
+    METRIC_TAG_FILTERS_FIELD_NUMBER: _ClassVar[int]
+    METRIC_INTERVAL_FIELD_NUMBER: _ClassVar[int]
     user_id: int
     name: str
     index: int
@@ -829,7 +858,12 @@ class CreateDashboardPanelRequest(_message.Message):
     status_class: str
     logs_search: str
     traffic_categories: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, user_id: _Optional[int] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., period: _Optional[str] = ..., periodFrom: _Optional[str] = ..., periodTo: _Optional[str] = ..., type: _Optional[str] = ..., endpoint: _Optional[str] = ..., routes: _Optional[_Iterable[str]] = ..., statistic: _Optional[str] = ..., layout: _Optional[_Union[PanelLayout, _Mapping]] = ..., trace_id: _Optional[str] = ..., service_filter: _Optional[str] = ..., operation_filter: _Optional[str] = ..., min_duration_ms: _Optional[int] = ..., has_error: bool = ..., limit: _Optional[int] = ..., status_class: _Optional[str] = ..., logs_search: _Optional[str] = ..., traffic_categories: _Optional[_Iterable[str]] = ...) -> None: ...
+    metric_name: str
+    metric_aggregation: str
+    metric_group_by: _containers.RepeatedScalarFieldContainer[str]
+    metric_tag_filters: _containers.ScalarMap[str, str]
+    metric_interval: str
+    def __init__(self, user_id: _Optional[int] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., period: _Optional[str] = ..., periodFrom: _Optional[str] = ..., periodTo: _Optional[str] = ..., type: _Optional[str] = ..., endpoint: _Optional[str] = ..., routes: _Optional[_Iterable[str]] = ..., statistic: _Optional[str] = ..., layout: _Optional[_Union[PanelLayout, _Mapping]] = ..., trace_id: _Optional[str] = ..., service_filter: _Optional[str] = ..., operation_filter: _Optional[str] = ..., min_duration_ms: _Optional[int] = ..., has_error: bool = ..., limit: _Optional[int] = ..., status_class: _Optional[str] = ..., logs_search: _Optional[str] = ..., traffic_categories: _Optional[_Iterable[str]] = ..., metric_name: _Optional[str] = ..., metric_aggregation: _Optional[str] = ..., metric_group_by: _Optional[_Iterable[str]] = ..., metric_tag_filters: _Optional[_Mapping[str, str]] = ..., metric_interval: _Optional[str] = ...) -> None: ...
 
 class CreateDashboardPanelResponse(_message.Message):
     __slots__ = ("panel",)
@@ -838,7 +872,14 @@ class CreateDashboardPanelResponse(_message.Message):
     def __init__(self, panel: _Optional[_Union[Panel, _Mapping]] = ...) -> None: ...
 
 class UpdateDashboardPanelRequest(_message.Message):
-    __slots__ = ("user_id", "panel_id", "name", "index", "project_id", "period", "periodFrom", "periodTo", "type", "endpoint", "routes", "statistic", "layout", "trace_id", "service_filter", "operation_filter", "min_duration_ms", "has_error", "limit", "status_class", "logs_search", "traffic_categories")
+    __slots__ = ("user_id", "panel_id", "name", "index", "project_id", "period", "periodFrom", "periodTo", "type", "endpoint", "routes", "statistic", "layout", "trace_id", "service_filter", "operation_filter", "min_duration_ms", "has_error", "limit", "status_class", "logs_search", "traffic_categories", "metric_name", "metric_aggregation", "metric_group_by", "metric_tag_filters", "metric_interval")
+    class MetricTagFiltersEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: str
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
     USER_ID_FIELD_NUMBER: _ClassVar[int]
     PANEL_ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
@@ -861,6 +902,11 @@ class UpdateDashboardPanelRequest(_message.Message):
     STATUS_CLASS_FIELD_NUMBER: _ClassVar[int]
     LOGS_SEARCH_FIELD_NUMBER: _ClassVar[int]
     TRAFFIC_CATEGORIES_FIELD_NUMBER: _ClassVar[int]
+    METRIC_NAME_FIELD_NUMBER: _ClassVar[int]
+    METRIC_AGGREGATION_FIELD_NUMBER: _ClassVar[int]
+    METRIC_GROUP_BY_FIELD_NUMBER: _ClassVar[int]
+    METRIC_TAG_FILTERS_FIELD_NUMBER: _ClassVar[int]
+    METRIC_INTERVAL_FIELD_NUMBER: _ClassVar[int]
     user_id: int
     panel_id: str
     name: str
@@ -883,7 +929,12 @@ class UpdateDashboardPanelRequest(_message.Message):
     status_class: str
     logs_search: str
     traffic_categories: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, user_id: _Optional[int] = ..., panel_id: _Optional[str] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., period: _Optional[str] = ..., periodFrom: _Optional[str] = ..., periodTo: _Optional[str] = ..., type: _Optional[str] = ..., endpoint: _Optional[str] = ..., routes: _Optional[_Iterable[str]] = ..., statistic: _Optional[str] = ..., layout: _Optional[_Union[PanelLayout, _Mapping]] = ..., trace_id: _Optional[str] = ..., service_filter: _Optional[str] = ..., operation_filter: _Optional[str] = ..., min_duration_ms: _Optional[int] = ..., has_error: bool = ..., limit: _Optional[int] = ..., status_class: _Optional[str] = ..., logs_search: _Optional[str] = ..., traffic_categories: _Optional[_Iterable[str]] = ...) -> None: ...
+    metric_name: str
+    metric_aggregation: str
+    metric_group_by: _containers.RepeatedScalarFieldContainer[str]
+    metric_tag_filters: _containers.ScalarMap[str, str]
+    metric_interval: str
+    def __init__(self, user_id: _Optional[int] = ..., panel_id: _Optional[str] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., period: _Optional[str] = ..., periodFrom: _Optional[str] = ..., periodTo: _Optional[str] = ..., type: _Optional[str] = ..., endpoint: _Optional[str] = ..., routes: _Optional[_Iterable[str]] = ..., statistic: _Optional[str] = ..., layout: _Optional[_Union[PanelLayout, _Mapping]] = ..., trace_id: _Optional[str] = ..., service_filter: _Optional[str] = ..., operation_filter: _Optional[str] = ..., min_duration_ms: _Optional[int] = ..., has_error: bool = ..., limit: _Optional[int] = ..., status_class: _Optional[str] = ..., logs_search: _Optional[str] = ..., traffic_categories: _Optional[_Iterable[str]] = ..., metric_name: _Optional[str] = ..., metric_aggregation: _Optional[str] = ..., metric_group_by: _Optional[_Iterable[str]] = ..., metric_tag_filters: _Optional[_Mapping[str, str]] = ..., metric_interval: _Optional[str] = ...) -> None: ...
 
 class UpdateDashboardPanelResponse(_message.Message):
     __slots__ = ("panel",)

@@ -384,6 +384,11 @@ CREATE TABLE IF NOT EXISTS metric_points (
     tags            JSONB NOT NULL DEFAULT '{}'::jsonb,
     tags_hash       CHAR(16) NOT NULL,
     service_name    TEXT,
+    -- OTLP AggregationTemporality: 1 = delta, 2 = cumulative, NULL = unknown
+    -- (written before revision 022) or not applicable (gauges). A cumulative
+    -- series is a running total and has to be differenced reset-aware on read;
+    -- a delta series is already per-interval.
+    temporality     SMALLINT,
     PRIMARY KEY (project_id, name, tags_hash, ts)
 ) PARTITION BY RANGE (ts);
 
@@ -406,6 +411,7 @@ CREATE TABLE IF NOT EXISTS metric_points_1h (
     min_v        DOUBLE PRECISION,
     max_v        DOUBLE PRECISION,
     avg_v        DOUBLE PRECISION,
+    temporality  SMALLINT,
     PRIMARY KEY (project_id, name, tags_hash, bucket)
 );
 

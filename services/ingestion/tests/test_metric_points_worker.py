@@ -35,6 +35,7 @@ def _make_metric_point_dict(
     explicit_bounds: list | None = None,
     tags: dict | None = None,
     service_name: str = "test-service",
+    temporality: int | None = None,
 ) -> dict:
     ts = ts or datetime.datetime.now(datetime.timezone.utc)
     tags = tags if tags is not None else {"region": "us"}
@@ -51,6 +52,7 @@ def _make_metric_point_dict(
         "tags": tags,
         "tags_hash": _tags_hash(tags),
         "service_name": service_name,
+        "temporality": temporality,
     }
 
 
@@ -106,6 +108,29 @@ class TestMetricPointsStorageWorker(BaseIngestionTest):
             assert points[0].name == "single.gauge"
             assert points[0].value == 99.5
             assert points[0].type == 1
+
+    async def test_worker_persists_temporality(self):
+        """Cumulative and delta counters must stay distinguishable after storage:
+        the query layer differences one and sums the other."""
+        cumulative = _make_metric_point_dict(
+            name="requests.total", type_=0, value=10.0, temporality=2
+        )
+        delta = _make_metric_point_dict(
+            name="orders.count", type_=0, value=3.0, temporality=1
+        )
+        gauge = _make_metric_point_dict(name="queue.depth", type_=1, value=7.0)
+
+        worker = StorageWorker(worker_id=1)
+        await worker.process_metric_points_batch([cumulative, delta, gauge])
+
+        async with self.test_db_manager.session_factory() as session:
+            result = await session.execute(sqlalchemy.select(models.MetricPoint))
+            by_name = {point.name: point for point in result.scalars().all()}
+
+        assert by_name["requests.total"].temporality == 2
+        assert by_name["orders.count"].temporality == 1
+        # A gauge is neither cumulative nor delta - unset stays NULL, not 0.
+        assert by_name["queue.depth"].temporality is None
 
     async def test_worker_processes_metric_point_batch(self):
         """Worker bulk COPY-inserts multiple metric point payloads."""

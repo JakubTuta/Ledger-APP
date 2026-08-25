@@ -65,6 +65,7 @@ class TestDatabase:
                             tags            JSONB NOT NULL DEFAULT '{}'::jsonb,
                             tags_hash       CHAR(16) NOT NULL,
                             service_name    TEXT,
+                            temporality     SMALLINT,
                             PRIMARY KEY (project_id, name, tags_hash, ts)
                         ) PARTITION BY RANGE (ts)
                     """)
@@ -83,6 +84,7 @@ class TestDatabase:
                             min_v        DOUBLE PRECISION,
                             max_v        DOUBLE PRECISION,
                             avg_v        DOUBLE PRECISION,
+                            temporality  SMALLINT,
                             PRIMARY KEY (project_id, name, tags_hash, bucket)
                         )
                     """)

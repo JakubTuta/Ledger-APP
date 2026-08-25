@@ -77,22 +77,6 @@ class ListTracesResponse(BaseModel):
     has_more: bool
 
 
-class SpanLatencyBucketResponse(BaseModel):
-    service_name: str
-    name: str
-    bucket: str
-    calls: int
-    p50_ns: int
-    p95_ns: int
-    p99_ns: int
-    errors: int
-
-
-class SpanLatencyResponse(BaseModel):
-    project_id: int
-    data: list[SpanLatencyBucketResponse]
-
-
 @router.get(
     "/traces",
     response_model=ListTracesResponse,
