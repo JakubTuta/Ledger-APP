@@ -122,17 +122,14 @@ class DashboardService:
 
         if not self._validate_panel_type(panel_type):
             raise ValueError(
-                f"Invalid panel type '{panel_type}'. "
-                f"Must be one of: {', '.join(VALID_PANEL_TYPES)}"
+                f"Invalid panel type '{panel_type}'. Must be one of: {', '.join(VALID_PANEL_TYPES)}"
             )
 
         if panel_type == "metrics":
             if not endpoint:
                 raise ValueError("'endpoint' is required for metrics type panels")
 
-        self._validate_metric_panel(
-            panel_type, metric_name, metric_aggregation, metric_interval
-        )
+        self._validate_metric_panel(panel_type, metric_name, metric_aggregation, metric_interval)
 
         has_period = period is not None
         has_dates = period_from is not None and period_to is not None
@@ -240,17 +237,14 @@ class DashboardService:
 
         if not self._validate_panel_type(panel_type):
             raise ValueError(
-                f"Invalid panel type '{panel_type}'. "
-                f"Must be one of: {', '.join(VALID_PANEL_TYPES)}"
+                f"Invalid panel type '{panel_type}'. Must be one of: {', '.join(VALID_PANEL_TYPES)}"
             )
 
         if panel_type == "metrics":
             if not endpoint:
                 raise ValueError("'endpoint' is required for metrics type panels")
 
-        self._validate_metric_panel(
-            panel_type, metric_name, metric_aggregation, metric_interval
-        )
+        self._validate_metric_panel(panel_type, metric_name, metric_aggregation, metric_interval)
 
         has_period = period is not None
         has_dates = period_from is not None and period_to is not None

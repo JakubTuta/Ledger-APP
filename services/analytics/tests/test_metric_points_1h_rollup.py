@@ -16,10 +16,9 @@ _CUMULATIVE = 2
 
 # The job only scans back _DEFAULT_LOOKBACK from the watermark, so fixtures have
 # to sit inside that window rather than at a fixed calendar date.
-_BASE = (
-    datetime.datetime.now(datetime.timezone.utc).replace(minute=0, second=0, microsecond=0)
-    - datetime.timedelta(hours=3)
-)
+_BASE = datetime.datetime.now(datetime.timezone.utc).replace(
+    minute=0, second=0, microsecond=0
+) - datetime.timedelta(hours=3)
 
 _INSERT = sa.text("""
     INSERT INTO metric_points
@@ -88,9 +87,7 @@ class TestMetricPointsHourlyRollup:
             await _insert_point(
                 "queue_depth", _BASE + datetime.timedelta(minutes=minute), value=value
             )
-        await _insert_point(
-            "queue_depth", _BASE + datetime.timedelta(hours=1), value=100.0
-        )
+        await _insert_point("queue_depth", _BASE + datetime.timedelta(hours=1), value=100.0)
 
         await rollup_job.rollup_metric_points_1h()
 
@@ -136,9 +133,7 @@ class TestMetricPointsHourlyRollup:
         assert rows[0].type == _HISTOGRAM
 
     async def test_temporality_is_carried_into_the_rollup(self, test_dbs):
-        await _insert_point(
-            "orders", _BASE, metric_type=_SUM, value=3.0, temporality=_DELTA
-        )
+        await _insert_point("orders", _BASE, metric_type=_SUM, value=3.0, temporality=_DELTA)
         await _insert_point(
             "requests_total",
             _BASE,
@@ -200,9 +195,7 @@ class TestMetricPointsHourlyRollup:
             )
             await session.commit()
 
-        await _insert_point(
-            "queue_depth", _BASE + datetime.timedelta(minutes=5), value=30.0
-        )
+        await _insert_point("queue_depth", _BASE + datetime.timedelta(minutes=5), value=30.0)
         await rollup_job.rollup_metric_points_1h()
 
         rows = await _rollup_rows("queue_depth")

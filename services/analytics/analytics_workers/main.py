@@ -56,9 +56,7 @@ def setup_jobs() -> None:
     lv1h_rollup_cron = _parse_cron_expression(settings.ANALYTICS_LOG_VOLUME_1H_ROLLUP_CRON)
     lv1d_rollup_cron = _parse_cron_expression(settings.ANALYTICS_LOG_VOLUME_1D_ROLLUP_CRON)
     log_facets_1h_cron = _parse_cron_expression(settings.ANALYTICS_LOG_FACETS_1H_ROLLUP_CRON)
-    metric_points_1h_cron = _parse_cron_expression(
-        settings.ANALYTICS_METRIC_POINTS_1H_ROLLUP_CRON
-    )
+    metric_points_1h_cron = _parse_cron_expression(settings.ANALYTICS_METRIC_POINTS_1H_ROLLUP_CRON)
     partition_cron = _parse_cron_expression(settings.ANALYTICS_PARTITION_MANAGER_CRON)
     alert_cron = _parse_cron_expression(settings.ANALYTICS_ALERT_EVALUATOR_CRON)
     notif_cleanup_cron = _parse_cron_expression(settings.ANALYTICS_NOTIFICATION_CLEANUP_CRON)
@@ -213,9 +211,7 @@ def setup_jobs() -> None:
     logger.info(f"  - Rollup Log Volume 1h: {settings.ANALYTICS_LOG_VOLUME_1H_ROLLUP_CRON}")
     logger.info(f"  - Rollup Log Volume 1d: {settings.ANALYTICS_LOG_VOLUME_1D_ROLLUP_CRON}")
     logger.info(f"  - Rollup Log Facets 1h: {settings.ANALYTICS_LOG_FACETS_1H_ROLLUP_CRON}")
-    logger.info(
-        f"  - Rollup Metric Points 1h: {settings.ANALYTICS_METRIC_POINTS_1H_ROLLUP_CRON}"
-    )
+    logger.info(f"  - Rollup Metric Points 1h: {settings.ANALYTICS_METRIC_POINTS_1H_ROLLUP_CRON}")
     logger.info(f"  - Manage Partitions: {settings.ANALYTICS_PARTITION_MANAGER_CRON}")
     logger.info(f"  - Evaluate Alert Rules: {settings.ANALYTICS_ALERT_EVALUATOR_CRON}")
     logger.info(

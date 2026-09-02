@@ -263,7 +263,9 @@ async def query_metric_series(
                     HistogramBucketResponse(
                         # JSON has no infinity; the OTLP overflow bucket's open
                         # upper edge becomes null rather than an invalid literal.
-                        upper_bound=None if bucket.upper_bound == float("inf") else bucket.upper_bound,
+                        upper_bound=None
+                        if bucket.upper_bound == float("inf")
+                        else bucket.upper_bound,
                         count=bucket.count,
                     )
                     for bucket in histogram.buckets

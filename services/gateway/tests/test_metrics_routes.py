@@ -28,23 +28,21 @@ class TestListMetricNames(BaseGatewayTest):
         session_token = self.make_session_token(account_id=1)
         self.get_mock_auth_stub().get_projects_response = _member_project()
 
-        self.get_mock_query_stub().list_metric_names_response = (
-            query_pb2.ListMetricNamesResponse(
-                project_id=1,
-                metrics=[
-                    query_pb2.MetricNameInfo(
-                        name="orders_processed",
-                        type=0,
-                        temporality=1,
-                        tag_keys=["region"],
-                        last_seen="2026-08-25T12:00:00+00:00",
-                        series_count=3,
-                    ),
-                    query_pb2.MetricNameInfo(
-                        name="request_duration_ms", type=2, temporality=2, series_count=1
-                    ),
-                ],
-            )
+        self.get_mock_query_stub().list_metric_names_response = query_pb2.ListMetricNamesResponse(
+            project_id=1,
+            metrics=[
+                query_pb2.MetricNameInfo(
+                    name="orders_processed",
+                    type=0,
+                    temporality=1,
+                    tag_keys=["region"],
+                    last_seen="2026-08-25T12:00:00+00:00",
+                    series_count=3,
+                ),
+                query_pb2.MetricNameInfo(
+                    name="request_duration_ms", type=2, temporality=2, series_count=1
+                ),
+            ],
         )
 
         response = await self.client.get(

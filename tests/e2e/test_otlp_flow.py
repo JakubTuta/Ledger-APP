@@ -176,9 +176,7 @@ class TestOtlpMetricsFlow:
             )
             if response.status_code != 200:
                 return False
-            return any(
-                metric["name"] == metric_name for metric in response.json()["metrics"]
-            )
+            return any(metric["name"] == metric_name for metric in response.json()["metrics"])
 
         await poll_until(
             _metric_is_listed,

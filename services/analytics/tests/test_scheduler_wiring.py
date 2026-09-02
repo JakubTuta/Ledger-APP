@@ -1,9 +1,7 @@
 import ast
 import pathlib
 
-_MAIN_PATH = (
-    pathlib.Path(__file__).resolve().parents[1] / "analytics_workers" / "main.py"
-)
+_MAIN_PATH = pathlib.Path(__file__).resolve().parents[1] / "analytics_workers" / "main.py"
 
 
 def _setup_jobs_ast() -> ast.FunctionDef:

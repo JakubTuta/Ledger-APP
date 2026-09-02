@@ -115,9 +115,7 @@ class TestMetricPointsStorageWorker(BaseIngestionTest):
         cumulative = _make_metric_point_dict(
             name="requests.total", type_=0, value=10.0, temporality=2
         )
-        delta = _make_metric_point_dict(
-            name="orders.count", type_=0, value=3.0, temporality=1
-        )
+        delta = _make_metric_point_dict(name="orders.count", type_=0, value=3.0, temporality=1)
         gauge = _make_metric_point_dict(name="queue.depth", type_=1, value=7.0)
 
         worker = StorageWorker(worker_id=1)

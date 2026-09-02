@@ -163,9 +163,7 @@ class TestListMetricNames(MetricPointFixtures):
         await self._insert_point("mine", now, value=1)
         await self._insert_point("theirs", now, value=1, project_id=2)
 
-        response = await self.stub.ListMetricNames(
-            query_pb2.ListMetricNamesRequest(project_id=1)
-        )
+        response = await self.stub.ListMetricNames(query_pb2.ListMetricNamesRequest(project_id=1))
 
         assert [metric.name for metric in response.metrics] == ["mine"]
 
@@ -174,9 +172,7 @@ class TestListMetricNames(MetricPointFixtures):
         now = datetime.datetime.now(datetime.timezone.utc)
         await self._insert_point("bare", now, value=1, tags={})
 
-        response = await self.stub.ListMetricNames(
-            query_pb2.ListMetricNamesRequest(project_id=1)
-        )
+        response = await self.stub.ListMetricNames(query_pb2.ListMetricNamesRequest(project_id=1))
 
         assert list(response.metrics[0].tag_keys) == []
 
@@ -265,9 +261,7 @@ class TestQueryMetricSeriesNumeric(MetricPointFixtures):
             )
         )
 
-        by_region = {
-            series.tags["region"]: series.points[0].value for series in response.series
-        }
+        by_region = {series.tags["region"]: series.points[0].value for series in response.series}
         assert by_region == {"eu": 10.0, "us": 30.0}
 
     @pytest.mark.asyncio

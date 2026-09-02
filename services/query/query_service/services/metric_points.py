@@ -52,7 +52,9 @@ def _resolve_window(
     return start, end
 
 
-def _resolve_interval(start: datetime.datetime, end: datetime.datetime, requested: str | None) -> str:
+def _resolve_interval(
+    start: datetime.datetime, end: datetime.datetime, requested: str | None
+) -> str:
     if requested in _INTERVAL_SECONDS:
         return requested
 
@@ -203,10 +205,7 @@ def _group_by_selects(group_by: list[str]) -> tuple[str, dict]:
 
 
 def _series_tags(row, group_by: list[str]) -> dict[str, str]:
-    return {
-        key: getattr(row, f"gb{index}") or ""
-        for index, key in enumerate(group_by)
-    }
+    return {key: getattr(row, f"gb{index}") or "" for index, key in enumerate(group_by)}
 
 
 async def query_metric_series(
@@ -237,8 +236,15 @@ async def query_metric_series(
 
         if metric_type == HISTOGRAM:
             series, histograms, truncated = await _query_histogram(
-                session, project_id, name, tag_filters, group_by,
-                aggregation, start, end, resolved_interval,
+                session,
+                project_id,
+                name,
+                tag_filters,
+                group_by,
+                aggregation,
+                start,
+                end,
+                resolved_interval,
             )
             downsampled = False
         else:
@@ -246,8 +252,18 @@ async def query_metric_series(
                 start, end, resolved_interval, aggregation, metric_type, temporality
             )
             series = await _query_numeric(
-                session, project_id, name, tag_filters, group_by, aggregation,
-                start, end, resolved_interval, metric_type, temporality, downsampled,
+                session,
+                project_id,
+                name,
+                tag_filters,
+                group_by,
+                aggregation,
+                start,
+                end,
+                resolved_interval,
+                metric_type,
+                temporality,
+                downsampled,
             )
             histograms = []
             truncated = False
@@ -405,16 +421,28 @@ async def _query_numeric(
 ) -> list[dict]:
     if use_rollup:
         return await _query_numeric_rollup(
-            session, project_id, name, tag_filters, group_by,
-            aggregation, start, end, interval,
+            session,
+            project_id,
+            name,
+            tag_filters,
+            group_by,
+            aggregation,
+            start,
+            end,
+            interval,
         )
 
     inner_value, outer_value = _numeric_value_expression(aggregation, metric_type, temporality)
     group_selects, group_params = _group_by_selects(group_by)
 
     inner_projection = ", ".join(
-        part for part in [_bucket_expression("mp.ts", interval) + " AS bucket",
-                          group_selects, inner_value] if part
+        part
+        for part in [
+            _bucket_expression("mp.ts", interval) + " AS bucket",
+            group_selects,
+            inner_value,
+        ]
+        if part
     )
     outer_groups = ", ".join(["bucket"] + [f"gb{i}" for i in range(len(group_by))])
     outer_selects = ", ".join(["bucket"] + [f"gb{i}" for i in range(len(group_by))])
@@ -550,8 +578,15 @@ async def _query_histogram(
 
         bucket_key = (series_key, row.bucket)
         bucket_state = per_bucket.setdefault(
-            bucket_key, {"tags": tags, "bucket": row.bucket, "counts": [], "bounds": bounds,
-                         "count": 0, "sum": 0.0}
+            bucket_key,
+            {
+                "tags": tags,
+                "bucket": row.bucket,
+                "counts": [],
+                "bounds": bounds,
+                "count": 0,
+                "sum": 0.0,
+            },
         )
         _accumulate_counts(bucket_state, counts, bounds, row)
 
