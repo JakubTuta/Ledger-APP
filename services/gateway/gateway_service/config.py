@@ -101,10 +101,15 @@ class Settings(pydantic_settings.BaseSettings):
     def QUERY_SERVICE_URL(self) -> str:
         return f"{self.QUERY_SERVICE_HOST}:{self.QUERY_SERVICE_PORT}"
 
-    # gRPC channel pool size per service (1-2 is usually sufficient due to
-    # HTTP/2 multiplexing) + keepalive/HTTP2 tuning: constants, not expected
-    # to change per-deployment.
-    GRPC_POOL_SIZE: typing.ClassVar[int] = 2
+    GRPC_POOL_SIZE: int = pydantic.Field(
+        default=2,
+        ge=1,
+        le=32,
+        description="gRPC channels kept open per internal service (1-2 is usually sufficient "
+        "due to HTTP/2 multiplexing)",
+    )
+
+    # keepalive/HTTP2 tuning: constants, not expected to change per-deployment.
     GRPC_KEEPALIVE_TIME_MS: typing.ClassVar[int] = 300000
     GRPC_KEEPALIVE_TIMEOUT_MS: typing.ClassVar[int] = 20000
     GRPC_HTTP2_MAX_PINGS_WITHOUT_DATA: typing.ClassVar[int] = 0

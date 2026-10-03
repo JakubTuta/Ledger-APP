@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class GRPCChannelPool:
-    def __init__(self, service_name: str, address: str, pool_size: int = 10):
+    def __init__(self, service_name: str, address: str, pool_size: int):
         self.service_name = service_name
         self.address = address
         self.pool_size = pool_size
