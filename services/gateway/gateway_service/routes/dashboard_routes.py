@@ -50,6 +50,9 @@ def _panel_proto_to_response(panel) -> schemas.PanelResponse:
         metric_group_by=list(panel.metric_group_by),
         metric_tag_filters=dict(panel.metric_tag_filters),
         metric_interval=panel.metric_interval if panel.HasField("metric_interval") else None,
+        include_client_errors=panel.include_client_errors
+        if panel.HasField("include_client_errors")
+        else None,
     )
 
 
@@ -188,6 +191,8 @@ async def create_dashboard_panel(
             grpc_request_kwargs["metric_tag_filters"] = request_data.metric_tag_filters
         if request_data.metric_interval is not None:
             grpc_request_kwargs["metric_interval"] = request_data.metric_interval
+        if request_data.include_client_errors is not None:
+            grpc_request_kwargs["include_client_errors"] = request_data.include_client_errors
 
         grpc_request = auth_pb2.CreateDashboardPanelRequest(**grpc_request_kwargs)
 
@@ -307,6 +312,8 @@ async def update_dashboard_panel(
             grpc_request_kwargs["metric_tag_filters"] = request_data.metric_tag_filters
         if request_data.metric_interval is not None:
             grpc_request_kwargs["metric_interval"] = request_data.metric_interval
+        if request_data.include_client_errors is not None:
+            grpc_request_kwargs["include_client_errors"] = request_data.include_client_errors
 
         grpc_request = auth_pb2.UpdateDashboardPanelRequest(**grpc_request_kwargs)
 

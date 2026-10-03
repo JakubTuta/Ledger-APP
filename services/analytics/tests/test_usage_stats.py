@@ -1,9 +1,11 @@
 import json
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import analytics_workers.database as database
 import analytics_workers.jobs.usage_stats as usage_stats_job
 import pytest
+import sqlalchemy as sa
 
 
 def _empty_result() -> MagicMock:
@@ -255,3 +257,67 @@ async def test_generate_usage_stats_keeps_persisted_counts_outside_recompute_win
     assert cached_data[0]["log_count"] == 500
     assert cached_data[0]["span_count"] == 4_567
     assert cached_data[0]["metric_point_count"] == 89
+
+
+async def _seed_project(auth_session) -> int:
+    result = await auth_session.execute(
+        sa.text("""
+            INSERT INTO accounts
+                (email, password_hash, name, plan, status, email_verified, created_at, updated_at)
+            VALUES
+                ('usage@example.com', 'x', 'Usage Owner', 'free', 'active', TRUE, NOW(), NOW())
+            RETURNING id
+        """)
+    )
+    account_id = result.scalar()
+
+    result = await auth_session.execute(
+        sa.text("""
+            INSERT INTO projects
+                (account_id, name, slug, environment, retention_days, logs_daily_quota,
+                 spans_daily_quota, metrics_daily_quota, created_at, updated_at)
+            VALUES
+                (:account_id, 'Usage Project', 'usage-project', 'production', 30, 100000,
+                 300000, 100000, NOW(), NOW())
+            RETURNING id
+        """),
+        {"account_id": account_id},
+    )
+    project_id = result.scalar()
+    await auth_session.commit()
+    return project_id
+
+
+@pytest.mark.asyncio
+async def test_generate_usage_stats_caches_counts_read_from_the_real_rollup(test_dbs):
+    """
+    SUM() over the BIGINT rollup column reaches Python as Decimal, which json
+    cannot encode. The job used to raise on every run, so the cache was never
+    written and the usage history stayed empty. Mocked rows are plain ints and
+    could never catch it, hence a real database here.
+    """
+    async with database.get_auth_session() as auth_session:
+        project_id = await _seed_project(auth_session)
+
+    day = (datetime.now(timezone.utc) - timedelta(days=3)).date()
+    async with database.get_logs_session() as logs_session:
+        await logs_session.execute(
+            sa.text(
+                "INSERT INTO log_volume_1d (project_id, level, bucket, count) "
+                "VALUES (:p, 'info', :d, 700), (:p, 'error', :d, 42)"
+            ),
+            {"p": project_id, "d": day},
+        )
+        await logs_session.commit()
+
+    mock_redis = AsyncMock()
+    with patch("analytics_workers.redis_client.get_redis", return_value=mock_redis):
+        await usage_stats_job.generate_usage_stats()
+
+    cache_key, _ttl, payload = mock_redis.setex.call_args[0]
+    assert cache_key == f"metrics:usage_stats:{project_id}"
+
+    [entry] = json.loads(payload)
+    assert entry["date"] == day.isoformat()
+    assert entry["log_count"] == 742
+    assert entry["logs_quota_used_percent"] == 0.74

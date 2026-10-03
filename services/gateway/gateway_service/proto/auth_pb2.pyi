@@ -134,59 +134,6 @@ class ChangePasswordResponse(_message.Message):
     success: bool
     def __init__(self, success: bool = ...) -> None: ...
 
-class GetNotificationPreferencesRequest(_message.Message):
-    __slots__ = ("account_id",)
-    ACCOUNT_ID_FIELD_NUMBER: _ClassVar[int]
-    account_id: int
-    def __init__(self, account_id: _Optional[int] = ...) -> None: ...
-
-class NotificationPreferences(_message.Message):
-    __slots__ = ("enabled", "projects")
-    class ProjectsEntry(_message.Message):
-        __slots__ = ("key", "value")
-        KEY_FIELD_NUMBER: _ClassVar[int]
-        VALUE_FIELD_NUMBER: _ClassVar[int]
-        key: int
-        value: ProjectNotificationSettings
-        def __init__(self, key: _Optional[int] = ..., value: _Optional[_Union[ProjectNotificationSettings, _Mapping]] = ...) -> None: ...
-    ENABLED_FIELD_NUMBER: _ClassVar[int]
-    PROJECTS_FIELD_NUMBER: _ClassVar[int]
-    enabled: bool
-    projects: _containers.MessageMap[int, ProjectNotificationSettings]
-    def __init__(self, enabled: bool = ..., projects: _Optional[_Mapping[int, ProjectNotificationSettings]] = ...) -> None: ...
-
-class ProjectNotificationSettings(_message.Message):
-    __slots__ = ("enabled", "levels", "types")
-    ENABLED_FIELD_NUMBER: _ClassVar[int]
-    LEVELS_FIELD_NUMBER: _ClassVar[int]
-    TYPES_FIELD_NUMBER: _ClassVar[int]
-    enabled: bool
-    levels: _containers.RepeatedScalarFieldContainer[str]
-    types: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, enabled: bool = ..., levels: _Optional[_Iterable[str]] = ..., types: _Optional[_Iterable[str]] = ...) -> None: ...
-
-class GetNotificationPreferencesResponse(_message.Message):
-    __slots__ = ("preferences",)
-    PREFERENCES_FIELD_NUMBER: _ClassVar[int]
-    preferences: NotificationPreferences
-    def __init__(self, preferences: _Optional[_Union[NotificationPreferences, _Mapping]] = ...) -> None: ...
-
-class UpdateNotificationPreferencesRequest(_message.Message):
-    __slots__ = ("account_id", "preferences")
-    ACCOUNT_ID_FIELD_NUMBER: _ClassVar[int]
-    PREFERENCES_FIELD_NUMBER: _ClassVar[int]
-    account_id: int
-    preferences: NotificationPreferences
-    def __init__(self, account_id: _Optional[int] = ..., preferences: _Optional[_Union[NotificationPreferences, _Mapping]] = ...) -> None: ...
-
-class UpdateNotificationPreferencesResponse(_message.Message):
-    __slots__ = ("success", "preferences")
-    SUCCESS_FIELD_NUMBER: _ClassVar[int]
-    PREFERENCES_FIELD_NUMBER: _ClassVar[int]
-    success: bool
-    preferences: NotificationPreferences
-    def __init__(self, success: bool = ..., preferences: _Optional[_Union[NotificationPreferences, _Mapping]] = ...) -> None: ...
-
 class VerifyEmailRequest(_message.Message):
     __slots__ = ("token",)
     TOKEN_FIELD_NUMBER: _ClassVar[int]
@@ -728,7 +675,7 @@ class PanelLayout(_message.Message):
     def __init__(self, x: _Optional[int] = ..., y: _Optional[int] = ..., w: _Optional[int] = ..., h: _Optional[int] = ...) -> None: ...
 
 class Panel(_message.Message):
-    __slots__ = ("id", "name", "index", "project_id", "period", "periodFrom", "periodTo", "type", "endpoint", "routes", "statistic", "layout", "trace_id", "service_filter", "operation_filter", "min_duration_ms", "has_error", "limit", "status_class", "logs_search", "traffic_categories", "metric_name", "metric_aggregation", "metric_group_by", "metric_tag_filters", "metric_interval")
+    __slots__ = ("id", "name", "index", "project_id", "period", "periodFrom", "periodTo", "type", "endpoint", "routes", "statistic", "layout", "trace_id", "service_filter", "operation_filter", "min_duration_ms", "has_error", "limit", "status_class", "logs_search", "traffic_categories", "metric_name", "metric_aggregation", "metric_group_by", "metric_tag_filters", "metric_interval", "include_client_errors")
     class MetricTagFiltersEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -762,6 +709,7 @@ class Panel(_message.Message):
     METRIC_GROUP_BY_FIELD_NUMBER: _ClassVar[int]
     METRIC_TAG_FILTERS_FIELD_NUMBER: _ClassVar[int]
     METRIC_INTERVAL_FIELD_NUMBER: _ClassVar[int]
+    INCLUDE_CLIENT_ERRORS_FIELD_NUMBER: _ClassVar[int]
     id: str
     name: str
     index: int
@@ -788,7 +736,8 @@ class Panel(_message.Message):
     metric_group_by: _containers.RepeatedScalarFieldContainer[str]
     metric_tag_filters: _containers.ScalarMap[str, str]
     metric_interval: str
-    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., period: _Optional[str] = ..., periodFrom: _Optional[str] = ..., periodTo: _Optional[str] = ..., type: _Optional[str] = ..., endpoint: _Optional[str] = ..., routes: _Optional[_Iterable[str]] = ..., statistic: _Optional[str] = ..., layout: _Optional[_Union[PanelLayout, _Mapping]] = ..., trace_id: _Optional[str] = ..., service_filter: _Optional[str] = ..., operation_filter: _Optional[str] = ..., min_duration_ms: _Optional[int] = ..., has_error: bool = ..., limit: _Optional[int] = ..., status_class: _Optional[str] = ..., logs_search: _Optional[str] = ..., traffic_categories: _Optional[_Iterable[str]] = ..., metric_name: _Optional[str] = ..., metric_aggregation: _Optional[str] = ..., metric_group_by: _Optional[_Iterable[str]] = ..., metric_tag_filters: _Optional[_Mapping[str, str]] = ..., metric_interval: _Optional[str] = ...) -> None: ...
+    include_client_errors: bool
+    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., period: _Optional[str] = ..., periodFrom: _Optional[str] = ..., periodTo: _Optional[str] = ..., type: _Optional[str] = ..., endpoint: _Optional[str] = ..., routes: _Optional[_Iterable[str]] = ..., statistic: _Optional[str] = ..., layout: _Optional[_Union[PanelLayout, _Mapping]] = ..., trace_id: _Optional[str] = ..., service_filter: _Optional[str] = ..., operation_filter: _Optional[str] = ..., min_duration_ms: _Optional[int] = ..., has_error: bool = ..., limit: _Optional[int] = ..., status_class: _Optional[str] = ..., logs_search: _Optional[str] = ..., traffic_categories: _Optional[_Iterable[str]] = ..., metric_name: _Optional[str] = ..., metric_aggregation: _Optional[str] = ..., metric_group_by: _Optional[_Iterable[str]] = ..., metric_tag_filters: _Optional[_Mapping[str, str]] = ..., metric_interval: _Optional[str] = ..., include_client_errors: bool = ...) -> None: ...
 
 class GetDashboardPanelsRequest(_message.Message):
     __slots__ = ("user_id",)
@@ -803,7 +752,7 @@ class GetDashboardPanelsResponse(_message.Message):
     def __init__(self, panels: _Optional[_Iterable[_Union[Panel, _Mapping]]] = ...) -> None: ...
 
 class CreateDashboardPanelRequest(_message.Message):
-    __slots__ = ("user_id", "name", "index", "project_id", "period", "periodFrom", "periodTo", "type", "endpoint", "routes", "statistic", "layout", "trace_id", "service_filter", "operation_filter", "min_duration_ms", "has_error", "limit", "status_class", "logs_search", "traffic_categories", "metric_name", "metric_aggregation", "metric_group_by", "metric_tag_filters", "metric_interval")
+    __slots__ = ("user_id", "name", "index", "project_id", "period", "periodFrom", "periodTo", "type", "endpoint", "routes", "statistic", "layout", "trace_id", "service_filter", "operation_filter", "min_duration_ms", "has_error", "limit", "status_class", "logs_search", "traffic_categories", "metric_name", "metric_aggregation", "metric_group_by", "metric_tag_filters", "metric_interval", "include_client_errors")
     class MetricTagFiltersEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -837,6 +786,7 @@ class CreateDashboardPanelRequest(_message.Message):
     METRIC_GROUP_BY_FIELD_NUMBER: _ClassVar[int]
     METRIC_TAG_FILTERS_FIELD_NUMBER: _ClassVar[int]
     METRIC_INTERVAL_FIELD_NUMBER: _ClassVar[int]
+    INCLUDE_CLIENT_ERRORS_FIELD_NUMBER: _ClassVar[int]
     user_id: int
     name: str
     index: int
@@ -863,7 +813,8 @@ class CreateDashboardPanelRequest(_message.Message):
     metric_group_by: _containers.RepeatedScalarFieldContainer[str]
     metric_tag_filters: _containers.ScalarMap[str, str]
     metric_interval: str
-    def __init__(self, user_id: _Optional[int] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., period: _Optional[str] = ..., periodFrom: _Optional[str] = ..., periodTo: _Optional[str] = ..., type: _Optional[str] = ..., endpoint: _Optional[str] = ..., routes: _Optional[_Iterable[str]] = ..., statistic: _Optional[str] = ..., layout: _Optional[_Union[PanelLayout, _Mapping]] = ..., trace_id: _Optional[str] = ..., service_filter: _Optional[str] = ..., operation_filter: _Optional[str] = ..., min_duration_ms: _Optional[int] = ..., has_error: bool = ..., limit: _Optional[int] = ..., status_class: _Optional[str] = ..., logs_search: _Optional[str] = ..., traffic_categories: _Optional[_Iterable[str]] = ..., metric_name: _Optional[str] = ..., metric_aggregation: _Optional[str] = ..., metric_group_by: _Optional[_Iterable[str]] = ..., metric_tag_filters: _Optional[_Mapping[str, str]] = ..., metric_interval: _Optional[str] = ...) -> None: ...
+    include_client_errors: bool
+    def __init__(self, user_id: _Optional[int] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., period: _Optional[str] = ..., periodFrom: _Optional[str] = ..., periodTo: _Optional[str] = ..., type: _Optional[str] = ..., endpoint: _Optional[str] = ..., routes: _Optional[_Iterable[str]] = ..., statistic: _Optional[str] = ..., layout: _Optional[_Union[PanelLayout, _Mapping]] = ..., trace_id: _Optional[str] = ..., service_filter: _Optional[str] = ..., operation_filter: _Optional[str] = ..., min_duration_ms: _Optional[int] = ..., has_error: bool = ..., limit: _Optional[int] = ..., status_class: _Optional[str] = ..., logs_search: _Optional[str] = ..., traffic_categories: _Optional[_Iterable[str]] = ..., metric_name: _Optional[str] = ..., metric_aggregation: _Optional[str] = ..., metric_group_by: _Optional[_Iterable[str]] = ..., metric_tag_filters: _Optional[_Mapping[str, str]] = ..., metric_interval: _Optional[str] = ..., include_client_errors: bool = ...) -> None: ...
 
 class CreateDashboardPanelResponse(_message.Message):
     __slots__ = ("panel",)
@@ -872,7 +823,7 @@ class CreateDashboardPanelResponse(_message.Message):
     def __init__(self, panel: _Optional[_Union[Panel, _Mapping]] = ...) -> None: ...
 
 class UpdateDashboardPanelRequest(_message.Message):
-    __slots__ = ("user_id", "panel_id", "name", "index", "project_id", "period", "periodFrom", "periodTo", "type", "endpoint", "routes", "statistic", "layout", "trace_id", "service_filter", "operation_filter", "min_duration_ms", "has_error", "limit", "status_class", "logs_search", "traffic_categories", "metric_name", "metric_aggregation", "metric_group_by", "metric_tag_filters", "metric_interval")
+    __slots__ = ("user_id", "panel_id", "name", "index", "project_id", "period", "periodFrom", "periodTo", "type", "endpoint", "routes", "statistic", "layout", "trace_id", "service_filter", "operation_filter", "min_duration_ms", "has_error", "limit", "status_class", "logs_search", "traffic_categories", "metric_name", "metric_aggregation", "metric_group_by", "metric_tag_filters", "metric_interval", "include_client_errors")
     class MetricTagFiltersEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -907,6 +858,7 @@ class UpdateDashboardPanelRequest(_message.Message):
     METRIC_GROUP_BY_FIELD_NUMBER: _ClassVar[int]
     METRIC_TAG_FILTERS_FIELD_NUMBER: _ClassVar[int]
     METRIC_INTERVAL_FIELD_NUMBER: _ClassVar[int]
+    INCLUDE_CLIENT_ERRORS_FIELD_NUMBER: _ClassVar[int]
     user_id: int
     panel_id: str
     name: str
@@ -934,7 +886,8 @@ class UpdateDashboardPanelRequest(_message.Message):
     metric_group_by: _containers.RepeatedScalarFieldContainer[str]
     metric_tag_filters: _containers.ScalarMap[str, str]
     metric_interval: str
-    def __init__(self, user_id: _Optional[int] = ..., panel_id: _Optional[str] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., period: _Optional[str] = ..., periodFrom: _Optional[str] = ..., periodTo: _Optional[str] = ..., type: _Optional[str] = ..., endpoint: _Optional[str] = ..., routes: _Optional[_Iterable[str]] = ..., statistic: _Optional[str] = ..., layout: _Optional[_Union[PanelLayout, _Mapping]] = ..., trace_id: _Optional[str] = ..., service_filter: _Optional[str] = ..., operation_filter: _Optional[str] = ..., min_duration_ms: _Optional[int] = ..., has_error: bool = ..., limit: _Optional[int] = ..., status_class: _Optional[str] = ..., logs_search: _Optional[str] = ..., traffic_categories: _Optional[_Iterable[str]] = ..., metric_name: _Optional[str] = ..., metric_aggregation: _Optional[str] = ..., metric_group_by: _Optional[_Iterable[str]] = ..., metric_tag_filters: _Optional[_Mapping[str, str]] = ..., metric_interval: _Optional[str] = ...) -> None: ...
+    include_client_errors: bool
+    def __init__(self, user_id: _Optional[int] = ..., panel_id: _Optional[str] = ..., name: _Optional[str] = ..., index: _Optional[int] = ..., project_id: _Optional[str] = ..., period: _Optional[str] = ..., periodFrom: _Optional[str] = ..., periodTo: _Optional[str] = ..., type: _Optional[str] = ..., endpoint: _Optional[str] = ..., routes: _Optional[_Iterable[str]] = ..., statistic: _Optional[str] = ..., layout: _Optional[_Union[PanelLayout, _Mapping]] = ..., trace_id: _Optional[str] = ..., service_filter: _Optional[str] = ..., operation_filter: _Optional[str] = ..., min_duration_ms: _Optional[int] = ..., has_error: bool = ..., limit: _Optional[int] = ..., status_class: _Optional[str] = ..., logs_search: _Optional[str] = ..., traffic_categories: _Optional[_Iterable[str]] = ..., metric_name: _Optional[str] = ..., metric_aggregation: _Optional[str] = ..., metric_group_by: _Optional[_Iterable[str]] = ..., metric_tag_filters: _Optional[_Mapping[str, str]] = ..., metric_interval: _Optional[str] = ..., include_client_errors: bool = ...) -> None: ...
 
 class UpdateDashboardPanelResponse(_message.Message):
     __slots__ = ("panel",)

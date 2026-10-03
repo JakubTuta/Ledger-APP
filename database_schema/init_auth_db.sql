@@ -25,7 +25,6 @@ CREATE TABLE IF NOT EXISTS accounts (
     name VARCHAR(255) NOT NULL,
     plan VARCHAR(20) DEFAULT 'free' NOT NULL,
     status VARCHAR(20) DEFAULT 'active' NOT NULL,
-    notification_preferences JSONB NOT NULL DEFAULT '{"enabled": true, "projects": {}}'::jsonb,
     email_verified BOOLEAN NOT NULL DEFAULT FALSE,
     email_verification_token CHAR(64),
     email_verification_sent_at TIMESTAMPTZ,

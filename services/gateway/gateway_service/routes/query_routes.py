@@ -1357,7 +1357,7 @@ async def get_aggregated_metrics(
     "/errors/list",
     status_code=200,
     summary="Get error list for dashboard panel",
-    description="Retrieve individual error/critical log entries for a specified time period. Returns error data matching the SSE notification format for dashboard panels.",
+    description="Retrieve grouped error entries for a specified time period: error/critical logs plus failed HTTP responses (5xx, and 4xx unless include_client_errors is false). Returns error data matching the SSE notification format for dashboard panels.",
     response_description="List of error entries",
     response_model=schemas.ErrorListResponse,
     responses={
@@ -1424,6 +1424,10 @@ async def get_error_list(
         None,
         description="Filter by caller channel (browser_navigation, browser_xhr, api_client, bot, unknown). Can be repeated.",
     ),
+    include_client_errors: bool = fastapi.Query(
+        True,
+        description="Also list 4xx responses next to error/critical logs and 5xx. Set false for server-side failures only.",
+    ),
     limit: int = fastapi.Query(
         100,
         description="Maximum number of errors to return",
@@ -1447,6 +1451,7 @@ async def get_error_list(
             period=period if period else "",
             period_from=periodFrom if periodFrom else "",
             period_to=periodTo if periodTo else "",
+            include_client_errors=include_client_errors,
             limit=limit,
             offset=offset,
         )

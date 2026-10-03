@@ -19,6 +19,8 @@ async def rollup_log_volume_1d() -> None:
         async with database.get_logs_session() as session:
             last_bucket = await rollup_state.get_last_bucket(session, _JOB_NAME, _DEFAULT_LOOKBACK)
 
+            # Same reasoning as the hourly rollup: ON CONFLICT overwrites the
+            # day, so the scan has to start at the top of the watermark's day.
             upsert = sa.text(
                 """
                 INSERT INTO log_volume_1d (project_id, level, bucket, count)
@@ -28,7 +30,7 @@ async def rollup_log_volume_1d() -> None:
                     bucket::date AS bucket,
                     SUM(count)  AS count
                 FROM log_volume_1h
-                WHERE bucket >= :since
+                WHERE bucket >= date_trunc('day', CAST(:since AS timestamptz))
                 GROUP BY project_id, level, bucket::date
                 ON CONFLICT (project_id, level, bucket)
                 DO UPDATE SET count = EXCLUDED.count

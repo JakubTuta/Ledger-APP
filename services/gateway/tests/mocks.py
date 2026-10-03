@@ -274,6 +274,23 @@ class MockGRPCPool:
         pass
 
 
+def _echo_panel(panel_id: str, request) -> auth_pb2.Panel:
+    """The panel the auth service would store for a create/update request."""
+    panel = auth_pb2.Panel(
+        id=panel_id,
+        name=request.name,
+        index=request.index,
+        project_id=request.project_id,
+        type=request.type,
+        period=request.period if request.HasField("period") else None,
+    )
+    if request.HasField("metric_name"):
+        panel.metric_name = request.metric_name
+    if request.HasField("include_client_errors"):
+        panel.include_client_errors = request.include_client_errors
+    return panel
+
+
 class MockAuthStub:
     def __init__(self):
         self.register_response = None
@@ -288,6 +305,8 @@ class MockAuthStub:
         self.create_api_key_response = None
         self.revoke_api_key_response = None
         self.get_account_response = None
+        self.last_create_dashboard_panel_request = None
+        self.last_update_dashboard_panel_request = None
 
     async def Register(self, request, timeout=None):
         if self.register_response:
@@ -437,6 +456,14 @@ class MockAuthStub:
             return self.get_project_role_response
         return auth_pb2.GetProjectRoleResponse(is_member=True, role="owner")
 
+    async def CreateDashboardPanel(self, request, timeout=None):
+        self.last_create_dashboard_panel_request = request
+        return auth_pb2.CreateDashboardPanelResponse(panel=_echo_panel("panel-1", request))
+
+    async def UpdateDashboardPanel(self, request, timeout=None):
+        self.last_update_dashboard_panel_request = request
+        return auth_pb2.UpdateDashboardPanelResponse(panel=_echo_panel(request.panel_id, request))
+
 
 class MockIngestionStub:
     def __init__(self):
@@ -494,6 +521,7 @@ class MockQueryStub:
         self.last_get_log_facets_request = None
         self.last_list_log_services_request = None
         self.list_log_services_response = None
+        self.last_get_error_list_request = None
 
     async def QueryLogs(self, request, timeout=None):
         self.last_query_logs_request = request
@@ -508,6 +536,12 @@ class MockQueryStub:
         if self.list_log_services_response:
             return self.list_log_services_response
         return query_pb2.ListLogServicesResponse(project_id=request.project_id, services=[])
+
+    async def GetErrorList(self, request, timeout=None):
+        self.last_get_error_list_request = request
+        return query_pb2.GetErrorListResponse(
+            project_id=request.project_id, errors=[], total=0, has_more=False
+        )
 
     async def GetUsageStats(self, request, timeout=None):
         if self.get_usage_stats_response:

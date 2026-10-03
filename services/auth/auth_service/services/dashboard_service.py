@@ -117,6 +117,7 @@ class DashboardService:
         metric_group_by: list[str] | None = None,
         metric_tag_filters: dict[str, str] | None = None,
         metric_interval: str | None = None,
+        include_client_errors: bool | None = None,
     ) -> dict:
         """Create a new dashboard panel."""
 
@@ -129,7 +130,7 @@ class DashboardService:
             if not endpoint:
                 raise ValueError("'endpoint' is required for metrics type panels")
 
-        self._validate_metric_panel(panel_type, metric_name, metric_aggregation, metric_interval)
+        self._validate_metric_panel(panel_type, metric_aggregation, metric_interval)
 
         has_period = period is not None
         has_dates = period_from is not None and period_to is not None
@@ -176,6 +177,7 @@ class DashboardService:
             "metric_group_by": metric_group_by if metric_group_by else [],
             "metric_tag_filters": metric_tag_filters if metric_tag_filters else {},
             "metric_interval": metric_interval,
+            "include_client_errors": include_client_errors,
         }
 
         result = await session.execute(
@@ -232,6 +234,7 @@ class DashboardService:
         metric_group_by: list[str] | None = None,
         metric_tag_filters: dict[str, str] | None = None,
         metric_interval: str | None = None,
+        include_client_errors: bool | None = None,
     ) -> dict:
         """Update an existing dashboard panel."""
 
@@ -244,7 +247,7 @@ class DashboardService:
             if not endpoint:
                 raise ValueError("'endpoint' is required for metrics type panels")
 
-        self._validate_metric_panel(panel_type, metric_name, metric_aggregation, metric_interval)
+        self._validate_metric_panel(panel_type, metric_aggregation, metric_interval)
 
         has_period = period is not None
         has_dates = period_from is not None and period_to is not None
@@ -302,6 +305,7 @@ class DashboardService:
                     "metric_group_by": metric_group_by if metric_group_by else [],
                     "metric_tag_filters": metric_tag_filters if metric_tag_filters else {},
                     "metric_interval": metric_interval,
+                    "include_client_errors": include_client_errors,
                 }
                 panel_found = True
                 break
@@ -403,15 +407,12 @@ class DashboardService:
     def _validate_metric_panel(
         self,
         panel_type: str,
-        metric_name: str | None,
         metric_aggregation: str | None,
         metric_interval: str | None,
     ) -> None:
+        """A metric panel may exist before its metric is chosen; the card prompts for one."""
         if panel_type != "metric_series":
             return
-
-        if not metric_name:
-            raise ValueError("'metric_name' is required for metric_series type panels")
 
         if metric_aggregation and metric_aggregation not in VALID_METRIC_AGGREGATIONS:
             raise ValueError(

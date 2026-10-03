@@ -40,13 +40,6 @@ class Account(database.Base):
     plan: Mapped[str] = mapped_column(VARCHAR(20), default="free", nullable=False)
     status: Mapped[str] = mapped_column(VARCHAR(20), default="active", nullable=False)
 
-    notification_preferences: Mapped[dict] = mapped_column(
-        JSONB,
-        default=dict,
-        nullable=False,
-        server_default='{"enabled": true, "projects": {}}',
-    )
-
     # Email verification. New registrations start unverified; accounts that
     # existed before this column was added were backfilled to TRUE by the
     # e5f6a7b8c9d0 migration so nobody already using the product got locked

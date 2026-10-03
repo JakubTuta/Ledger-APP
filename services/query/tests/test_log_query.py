@@ -694,6 +694,70 @@ class TestGetErrorList(_LogFactoryMixin, test_base.BaseQueryTest):
 
         assert len(response.errors) == 2
 
+    async def _seed_http_failures(self) -> None:
+        await self.create_test_log(
+            project_id=1,
+            level="warning",
+            log_type="endpoint",
+            message="GET /missing - 404",
+            path="/missing",
+            status_code=404,
+        )
+        await self.create_test_log(
+            project_id=1,
+            level="error",
+            log_type="endpoint",
+            message="GET /boom - 500",
+            path="/boom",
+            status_code=500,
+        )
+        await self.create_test_log(
+            project_id=1,
+            level="info",
+            log_type="endpoint",
+            message="GET /ok - 200",
+            path="/ok",
+            status_code=200,
+        )
+
+    @pytest.mark.asyncio
+    async def test_error_list_includes_client_errors_by_default(self):
+        await self._seed_http_failures()
+
+        response = await self.stub.GetErrorList(
+            query_pb2.GetErrorListRequest(project_id=1, period="last7days")
+        )
+
+        assert sorted(e.status_code for e in response.errors) == [404, 500]
+
+    @pytest.mark.asyncio
+    async def test_error_list_can_exclude_client_errors(self):
+        await self._seed_http_failures()
+
+        response = await self.stub.GetErrorList(
+            query_pb2.GetErrorListRequest(
+                project_id=1, period="last7days", include_client_errors=False
+            )
+        )
+
+        assert [e.status_code for e in response.errors] == [500]
+
+    @pytest.mark.asyncio
+    async def test_excluding_client_errors_keeps_error_level_logs_without_a_status(self):
+        await self._seed_http_failures()
+        await self.create_test_error_log(project_id=1, message="unhandled exception")
+
+        response = await self.stub.GetErrorList(
+            query_pb2.GetErrorListRequest(
+                project_id=1, period="last7days", include_client_errors=False
+            )
+        )
+
+        assert sorted(e.message for e in response.errors) == [
+            "GET /boom - 500",
+            "unhandled exception",
+        ]
+
 
 class TestGetCountryBreakdown(_LogFactoryMixin, test_base.BaseQueryTest):
     @pytest.mark.asyncio

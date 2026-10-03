@@ -512,6 +512,11 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
                 period_to=period_to,
                 search=request.search if request.HasField("search") else None,
                 client_channel=list(request.client_channel) if request.client_channel else None,
+                include_client_errors=(
+                    request.include_client_errors
+                    if request.HasField("include_client_errors")
+                    else True
+                ),
                 pagination=pagination,
             )
 

@@ -53,6 +53,8 @@ def _panel_dict_to_proto(panel: dict) -> auth_pb2.Panel:
         kwargs["metric_aggregation"] = panel["metric_aggregation"]
     if panel.get("metric_interval") is not None:
         kwargs["metric_interval"] = panel["metric_interval"]
+    if panel.get("include_client_errors") is not None:
+        kwargs["include_client_errors"] = panel["include_client_errors"]
     return auth_pb2.Panel(**kwargs)
 
 
@@ -318,94 +320,6 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f"Internal error: {str(e)}")
             return auth_pb2.ChangePasswordResponse(success=False)
-
-    async def GetNotificationPreferences(
-        self,
-        request: auth_pb2.GetNotificationPreferencesRequest,
-        context: grpc.aio.ServicerContext,
-    ) -> auth_pb2.GetNotificationPreferencesResponse:
-        """Get notification preferences for account."""
-        try:
-            async with database.get_session() as session:
-                preferences = await self.auth_service.get_notification_preferences(
-                    session=session,
-                    account_id=request.account_id,
-                )
-
-                proto_preferences = self._convert_to_proto_preferences(preferences)
-
-                return auth_pb2.GetNotificationPreferencesResponse(preferences=proto_preferences)
-
-        except ValueError as e:
-            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-            context.set_details(str(e))
-            return auth_pb2.GetNotificationPreferencesResponse()
-
-        except Exception as e:
-            context.set_code(grpc.StatusCode.INTERNAL)
-            context.set_details(f"Internal error: {str(e)}")
-            return auth_pb2.GetNotificationPreferencesResponse()
-
-    async def UpdateNotificationPreferences(
-        self,
-        request: auth_pb2.UpdateNotificationPreferencesRequest,
-        context: grpc.aio.ServicerContext,
-    ) -> auth_pb2.UpdateNotificationPreferencesResponse:
-        """Update notification preferences for account."""
-        try:
-            async with database.get_session() as session:
-                preferences_dict = self._convert_from_proto_preferences(request.preferences)
-
-                updated_preferences = await self.auth_service.update_notification_preferences(
-                    session=session,
-                    account_id=request.account_id,
-                    preferences=preferences_dict,
-                )
-
-                proto_preferences = self._convert_to_proto_preferences(updated_preferences)
-
-                return auth_pb2.UpdateNotificationPreferencesResponse(
-                    success=True, preferences=proto_preferences
-                )
-
-        except ValueError as e:
-            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-            context.set_details(str(e))
-            return auth_pb2.UpdateNotificationPreferencesResponse(success=False)
-
-        except Exception as e:
-            context.set_code(grpc.StatusCode.INTERNAL)
-            context.set_details(f"Internal error: {str(e)}")
-            return auth_pb2.UpdateNotificationPreferencesResponse(success=False)
-
-    def _convert_to_proto_preferences(self, preferences: dict) -> auth_pb2.NotificationPreferences:
-        """Convert dict preferences to protobuf NotificationPreferences."""
-        projects_map = {}
-        for project_id_str, settings in preferences.get("projects", {}).items():
-            project_id = int(project_id_str)
-            projects_map[project_id] = auth_pb2.ProjectNotificationSettings(
-                enabled=settings.get("enabled", True),
-                levels=settings.get("levels", []),
-                types=settings.get("types", []),
-            )
-
-        return auth_pb2.NotificationPreferences(
-            enabled=preferences.get("enabled", True), projects=projects_map
-        )
-
-    def _convert_from_proto_preferences(
-        self, proto_preferences: auth_pb2.NotificationPreferences
-    ) -> dict:
-        """Convert protobuf NotificationPreferences to dict."""
-        projects = {}
-        for project_id, settings in proto_preferences.projects.items():
-            projects[str(project_id)] = {
-                "enabled": settings.enabled,
-                "levels": list(settings.levels),
-                "types": list(settings.types),
-            }
-
-        return {"enabled": proto_preferences.enabled, "projects": projects}
 
     async def VerifyEmail(
         self,
@@ -1231,6 +1145,9 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     metric_interval=request.metric_interval
                     if request.HasField("metric_interval")
                     else None,
+                    include_client_errors=request.include_client_errors
+                    if request.HasField("include_client_errors")
+                    else None,
                 )
 
                 return auth_pb2.CreateDashboardPanelResponse(panel=_panel_dict_to_proto(panel))
@@ -1299,6 +1216,9 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     metric_tag_filters=dict(request.metric_tag_filters),
                     metric_interval=request.metric_interval
                     if request.HasField("metric_interval")
+                    else None,
+                    include_client_errors=request.include_client_errors
+                    if request.HasField("include_client_errors")
                     else None,
                 )
 

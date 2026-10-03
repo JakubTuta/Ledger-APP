@@ -601,6 +601,10 @@ def _calculate_time_range_for_period(
     return start_time, end_time
 
 
+_CLIENT_ERROR_STATUS_FLOOR = 400
+_SERVER_ERROR_STATUS_FLOOR = 500
+
+
 async def get_error_list(
     project_id: int,
     period: str | None = None,
@@ -608,6 +612,7 @@ async def get_error_list(
     period_to: datetime.datetime | None = None,
     search: str | None = None,
     client_channel: list[str] | None = None,
+    include_client_errors: bool = True,
     pagination: schemas.Pagination = schemas.Pagination(),
 ) -> schemas.ErrorListResponse:
     if period:
@@ -617,6 +622,10 @@ async def get_error_list(
         end_time = period_to
     else:
         start_time, end_time = _calculate_time_range_for_period("today")
+
+    min_status_code = (
+        _CLIENT_ERROR_STATUS_FLOOR if include_client_errors else _SERVER_ERROR_STATUS_FLOOR
+    )
 
     async with database.get_logs_session() as session:
         # Build group_key expression: fingerprint or hash(error_type|message)
@@ -635,7 +644,7 @@ async def get_error_list(
             models.Log.timestamp <= end_time,
             sa.or_(
                 models.Log.level.in_(["error", "critical"]),
-                models.Log.status_code >= 400,
+                models.Log.status_code >= min_status_code,
             ),
         ]
 

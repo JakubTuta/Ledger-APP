@@ -461,7 +461,7 @@ class GetAggregatedMetricsResponse(_message.Message):
     def __init__(self, project_id: _Optional[int] = ..., metric_type: _Optional[str] = ..., granularity: _Optional[str] = ..., start_date: _Optional[str] = ..., end_date: _Optional[str] = ..., data: _Optional[_Iterable[_Union[AggregatedMetricData, _Mapping]]] = ...) -> None: ...
 
 class GetErrorListRequest(_message.Message):
-    __slots__ = ("project_id", "period", "period_from", "period_to", "limit", "offset", "search", "client_channel")
+    __slots__ = ("project_id", "period", "period_from", "period_to", "limit", "offset", "search", "client_channel", "include_client_errors")
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
     PERIOD_FIELD_NUMBER: _ClassVar[int]
     PERIOD_FROM_FIELD_NUMBER: _ClassVar[int]
@@ -470,6 +470,7 @@ class GetErrorListRequest(_message.Message):
     OFFSET_FIELD_NUMBER: _ClassVar[int]
     SEARCH_FIELD_NUMBER: _ClassVar[int]
     CLIENT_CHANNEL_FIELD_NUMBER: _ClassVar[int]
+    INCLUDE_CLIENT_ERRORS_FIELD_NUMBER: _ClassVar[int]
     project_id: int
     period: str
     period_from: str
@@ -478,7 +479,8 @@ class GetErrorListRequest(_message.Message):
     offset: int
     search: str
     client_channel: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, project_id: _Optional[int] = ..., period: _Optional[str] = ..., period_from: _Optional[str] = ..., period_to: _Optional[str] = ..., limit: _Optional[int] = ..., offset: _Optional[int] = ..., search: _Optional[str] = ..., client_channel: _Optional[_Iterable[str]] = ...) -> None: ...
+    include_client_errors: bool
+    def __init__(self, project_id: _Optional[int] = ..., period: _Optional[str] = ..., period_from: _Optional[str] = ..., period_to: _Optional[str] = ..., limit: _Optional[int] = ..., offset: _Optional[int] = ..., search: _Optional[str] = ..., client_channel: _Optional[_Iterable[str]] = ..., include_client_errors: bool = ...) -> None: ...
 
 class ErrorListEntry(_message.Message):
     __slots__ = ("log_id", "project_id", "level", "log_type", "message", "error_type", "timestamp", "error_fingerprint", "attributes", "sdk_version", "platform", "group_key", "occurrence_count", "first_seen", "last_seen", "status_code", "path", "stack_trace", "latest_log_id")

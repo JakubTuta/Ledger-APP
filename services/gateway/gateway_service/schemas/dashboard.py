@@ -9,6 +9,11 @@ TRAFFIC_CATEGORIES_DESCRIPTION = (
     "(logs, error_list, country_map). Omit or send an empty list for all traffic."
 )
 
+INCLUDE_CLIENT_ERRORS_DESCRIPTION = (
+    "error_list panels: also list 4xx responses next to error/critical logs and 5xx. "
+    "Omit for the default, which is to include them."
+)
+
 
 class PanelLayout(pydantic.BaseModel):
     x: int = pydantic.Field(..., ge=0, description="Grid column position (0-based)")
@@ -100,7 +105,7 @@ class PanelRequest(pydantic.BaseModel):
     metric_name: str | None = pydantic.Field(
         None,
         max_length=255,
-        description="Metric name to chart (required for metric_series panels)",
+        description="Metric name to chart (metric_series panels); may be left empty and chosen later",
         examples=["orders_processed"],
     )
     metric_aggregation: str | None = pydantic.Field(
@@ -124,6 +129,10 @@ class PanelRequest(pydantic.BaseModel):
         pattern=r"^(1m|5m|1h|1d)$",
         description="Bucket width; omit to resolve from the panel's time range",
         examples=["5m"],
+    )
+    include_client_errors: bool | None = pydantic.Field(
+        None,
+        description=INCLUDE_CLIENT_ERRORS_DESCRIPTION,
     )
 
     @pydantic.model_validator(mode="after")
@@ -211,6 +220,9 @@ class PanelResponse(pydantic.BaseModel):
     metric_group_by: list[str] = pydantic.Field(default_factory=list)
     metric_tag_filters: dict[str, str] = pydantic.Field(default_factory=dict)
     metric_interval: str | None = pydantic.Field(None)
+    include_client_errors: bool | None = pydantic.Field(
+        None, description=INCLUDE_CLIENT_ERRORS_DESCRIPTION
+    )
 
     model_config = pydantic.ConfigDict(
         json_schema_extra={
@@ -371,7 +383,7 @@ class UpdatePanelRequest(pydantic.BaseModel):
     metric_name: str | None = pydantic.Field(
         None,
         max_length=255,
-        description="Metric name to chart (required for metric_series panels)",
+        description="Metric name to chart (metric_series panels); may be left empty and chosen later",
         examples=["orders_processed"],
     )
     metric_aggregation: str | None = pydantic.Field(
@@ -395,6 +407,10 @@ class UpdatePanelRequest(pydantic.BaseModel):
         pattern=r"^(1m|5m|1h|1d)$",
         description="Bucket width; omit to resolve from the panel's time range",
         examples=["5m"],
+    )
+    include_client_errors: bool | None = pydantic.Field(
+        None,
+        description=INCLUDE_CLIENT_ERRORS_DESCRIPTION,
     )
 
     @pydantic.model_validator(mode="after")

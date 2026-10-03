@@ -298,6 +298,8 @@ message GetErrorListRequest {
     int32 offset = 6;
     optional string search = 7;
     repeated string client_channel = 8;
+    // absent means include 4xx responses alongside error/critical logs and 5xx
+    optional bool include_client_errors = 9;
 }
 
 message ErrorListEntry {

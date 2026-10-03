@@ -149,6 +149,9 @@ async def _fetch_log_counts() -> list[tuple]:
     Per-project daily log counts over the retained window, read from the
     log_volume_1d rollup rather than re-aggregating 30 days of raw `logs` on
     every run (this job runs every 10 minutes).
+
+    SUM() over a BIGINT is NUMERIC, which asyncpg returns as Decimal and json
+    cannot encode - the cast keeps the counts plain ints for the Redis payload.
     """
     async with database.get_logs_session() as session:
         query = sa.text(
@@ -156,7 +159,7 @@ async def _fetch_log_counts() -> list[tuple]:
             SELECT
                 project_id,
                 bucket AS date,
-                SUM(count) AS log_count
+                CAST(SUM(count) AS BIGINT) AS log_count
             FROM log_volume_1d
             WHERE bucket > (NOW() - INTERVAL '30 days')::date
             GROUP BY project_id, bucket
