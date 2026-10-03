@@ -19,6 +19,7 @@ class LogFilters(pydantic.BaseModel):
     status_class: list[str] | None = None  # ["2xx", "4xx", "5xx"]
     search: str | None = None  # substring match on method or path
     client_channel: list[str] | None = None
+    service: str | None = None  # exact match on the service.name resource attribute
 
 
 class Pagination(pydantic.BaseModel):
@@ -83,6 +84,11 @@ class LogFacetsResponse(pydantic.BaseModel):
     status_class: list[LogFacetValue]
     environment: list[LogFacetValue]
     client_channel: list[LogFacetValue]
+
+
+class LogServicesResponse(pydantic.BaseModel):
+    project_id: int
+    services: list[str]
 
 
 class CountryBreakdownEntry(pydantic.BaseModel):

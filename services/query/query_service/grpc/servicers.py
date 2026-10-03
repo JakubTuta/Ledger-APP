@@ -99,6 +99,7 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
                 status_class=list(request.status_class) if request.status_class else None,
                 search=request.search if request.search else None,
                 client_channel=list(request.client_channel) if request.client_channel else None,
+                service=request.service if request.service else None,
             )
 
             pagination = schemas.Pagination(
@@ -147,6 +148,7 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
                 status_class=list(request.status_class) if request.status_class else None,
                 search=request.search if request.search else None,
                 client_channel=list(request.client_channel) if request.client_channel else None,
+                service=request.service if request.service else None,
             )
 
             result = await log_query.get_log_facets(project_id=request.project_id, filters=filters)
@@ -208,6 +210,32 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
 
         except Exception as e:
             await context.abort(grpc.StatusCode.INTERNAL, f"Get country breakdown failed: {str(e)}")
+
+    async def ListLogServices(
+        self,
+        request: query_pb2.ListLogServicesRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> query_pb2.ListLogServicesResponse:
+        try:
+            result = await log_query.list_log_services(
+                project_id=request.project_id,
+                start_time=(
+                    datetime.datetime.fromisoformat(request.start_time)
+                    if request.start_time
+                    else None
+                ),
+                end_time=(
+                    datetime.datetime.fromisoformat(request.end_time) if request.end_time else None
+                ),
+                limit=request.limit if request.limit > 0 else 50,
+            )
+
+            return query_pb2.ListLogServicesResponse(
+                project_id=result.project_id, services=result.services
+            )
+
+        except Exception as e:
+            await context.abort(grpc.StatusCode.INTERNAL, f"List log services failed: {str(e)}")
 
     async def SearchLogs(
         self, request: query_pb2.SearchLogsRequest, context: grpc.aio.ServicerContext

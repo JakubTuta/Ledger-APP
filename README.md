@@ -25,7 +25,7 @@ traces in milliseconds, with a real-time web dashboard included.
 ```python
 from ledger import LedgerClient
 
-ledger = LedgerClient(api_key="your_key", base_url="http://localhost:8020")
+ledger = LedgerClient(api_key="ledger_your_api_key", base_url="http://localhost:8020")
 ledger.log_info("User signed up", attributes={"user_id": "123"})
 ```
 
@@ -61,24 +61,22 @@ Open `.env` and set `JWT_SECRET` (and the SMTP/`FRONTEND_URL` settings if you wa
 Everything else has a working default.
 
 ```bash
-# Windows
+# Windows (PowerShell, from the repo root)
 ./scripts/Make.ps1 up
 
-# Linux/Mac
-make -C scripts up
+# Linux/Mac (from the repo root - the Makefile expects .env and docker-compose.yaml in the
+# current directory, so use -f rather than -C)
+make -f scripts/Makefile up
 ```
 
 Verify everything is running:
 
 ```bash
-# Windows
-./scripts/Make.ps1 health
-
-# Linux/Mac
-make -C scripts health
+curl http://localhost:8020/health
+# {"status":"healthy"}
 ```
 
-API is live at `http://localhost:8020`.
+The API is live at `http://localhost:8020` and the web dashboard at `http://localhost:3020`.
 
 ### Send Your First Log
 
@@ -95,7 +93,7 @@ pip install ledger-sdk
 from ledger import LedgerClient
 
 ledger = LedgerClient(
-    api_key="your_api_key",  # Get this from the dashboard
+    api_key="ledger_your_api_key",  # Created under Settings > API keys in the dashboard
     base_url="http://localhost:8020"
 )
 
@@ -124,7 +122,8 @@ export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer YOUR_API_KEY"
 
 Then use your language's normal OTel SDK setup — traces go to `POST /v1/traces`, logs go to
 `POST /v1/logs`, metrics go to `POST /v1/metrics` (all three accept `application/x-protobuf` or
-`application/json`, gzip optional).
+`application/json`, gzip optional). Sums, gauges and explicit-bucket histograms are stored;
+exponential histograms and summaries are not supported yet and are skipped.
 
 **Option 3: Account/project setup via REST API**
 
@@ -193,20 +192,37 @@ Similar errors are automatically grouped together — like Sentry, but free:
 
 ### Query Your Logs
 
+These endpoints take the `access_token` from `/accounts/login` as `Authorization: Bearer ...`, and
+a `project_id` you belong to. Log queries need a time window: either `period` (`today`,
+`last7days`, `last30days`, `currentWeek`, `currentMonth`, `currentYear`) or both `periodFrom` and
+`periodTo` (ISO 8601) - not both forms at once.
+
 ```bash
-# All errors from the last hour
-GET /api/v1/logs?project_id=1&level=error&start_time=2025-11-14T09:00:00Z
+# Error-level logs from the last 7 days
+GET /api/v1/logs?project_id=1&level=error&period=last7days
 
-# Error rate right now
-GET /api/v1/metrics/error-rate?project_id=1
+# The same, for an explicit window
+GET /api/v1/logs?project_id=1&level=error&periodFrom=2025-11-14T09:00:00Z&periodTo=2025-11-14T10:00:00Z
 
-# Most common errors
-GET /api/v1/metrics/top-errors?project_id=1
+# Logs from one service (the service.name your SDK reported)
+GET /api/v1/logs?project_id=1&period=last7days&service=my-service
+
+# Which service names has this project logged recently?
+GET /api/v1/logs/services?project_id=1&period=last7days
+
+# Unresolved error groups
+GET /api/v1/error-groups?project_id=1&status=unresolved
 ```
+
+`service` is an exact match and, like `search`, is evaluated against the log rows rather than the
+pre-aggregated facet rollup, so keep the time window bounded. `/logs/services` reads names from the
+newest rows of the window (a suggestion list, not a census).
 
 ### Query Your Metrics
 
-Counters, gauges and histograms sent over OTLP read back by name, tag and time bucket:
+Counters, gauges and histograms sent over OTLP read back by name, tag and time bucket (same
+`Authorization: Bearer ...` and `project_id` as above; `interval` is one of `1m`, `5m`, `1h`, `1d`,
+and `aggregation` one of `avg`, `sum`, `min`, `max`, `count`, `p50`, `p95`, `p99`):
 
 ```bash
 # What metrics has this project sent?

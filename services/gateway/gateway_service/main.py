@@ -50,19 +50,16 @@ class GatewayApp:
         await self.grpc_pool.add_service(
             service_name="auth",
             address=config.settings.AUTH_SERVICE_URL,
-            pool_size=10,
         )
 
         await self.grpc_pool.add_service(
             service_name="ingestion",
             address=config.settings.INGESTION_SERVICE_URL,
-            pool_size=10,
         )
 
         await self.grpc_pool.add_service(
             service_name="query",
             address=config.settings.QUERY_SERVICE_URL,
-            pool_size=10,
         )
 
     async def shutdown(self):
@@ -95,7 +92,7 @@ Production-ready, OpenTelemetry-native API for ingesting, storing, and querying 
 
 ### Features
 
-* **OTLP-native ingestion** - Accepts standard OpenTelemetry traces and logs (OTLP/HTTP, protobuf or JSON) at `/v1/traces` and `/v1/logs` from any language's OTel SDK
+* **OTLP-native ingestion** - Accepts standard OpenTelemetry traces, logs and metrics (OTLP/HTTP, protobuf or JSON) at `/v1/traces`, `/v1/logs` and `/v1/metrics` from any language's OTel SDK
 * **High-throughput ingestion** - Process 10K+ requests per second
 * **Multi-tenant architecture** - Project-based isolation with API key authentication
 * **Rate limiting** - Automatic rate limiting per API key (per-minute and per-hour)
@@ -171,7 +168,7 @@ def custom_openapi():
         },
         {
             "name": "OTLP",
-            "description": "OpenTelemetry Protocol (OTLP/HTTP) ingestion for traces and logs, compatible with any language's OTel SDK",
+            "description": "OpenTelemetry Protocol (OTLP/HTTP) ingestion for traces, logs and metrics, compatible with any language's OTel SDK",
         },
         {
             "name": "Query",
@@ -256,13 +253,13 @@ async def health_check():
                             "redis": "healthy",
                             "grpc": {
                                 "auth": {
-                                    "pool_size": 10,
-                                    "active_channels": 10,
+                                    "pool_size": 2,
+                                    "active_channels": 2,
                                     "address": "ledger-auth-service:50051",
                                 },
                                 "ingestion": {
-                                    "pool_size": 10,
-                                    "active_channels": 10,
+                                    "pool_size": 2,
+                                    "active_channels": 2,
                                     "address": "ledger-ingestion:50052",
                                 },
                             },

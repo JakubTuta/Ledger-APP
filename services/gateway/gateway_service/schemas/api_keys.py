@@ -36,8 +36,8 @@ class CreateApiKeyResponse(pydantic.BaseModel):
             "examples": [
                 {
                     "key_id": 789,
-                    "full_key": "ledger_prod_1a2b3c4d5e6f7g8h9i0j",
-                    "key_prefix": "ledger_prod_1a2b",
+                    "full_key": "ledger_Yw3kP9xQ2mVbT7nLr4sHdJ8fZcA6uEoGiK1tNpXqRw0",
+                    "key_prefix": "ledger_Yw3kP9xQ2mVbT",
                     "warning": "Save this key now! It will not be shown again.",
                 }
             ]

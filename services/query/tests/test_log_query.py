@@ -762,3 +762,139 @@ class TestGetCountryBreakdown(_LogFactoryMixin, test_base.BaseQueryTest):
 
         assert len(response.countries) == 1
         assert response.countries[0].country == "US"
+
+
+def _service(name: str | None) -> dict:
+    return {"service.name": name} if name is not None else {"other": "attr"}
+
+
+class TestServiceFilter(_LogFactoryMixin, test_base.BaseQueryTest):
+    @pytest.mark.asyncio
+    async def test_query_logs_matches_service_name_exactly(self):
+        await self.create_test_log(project_id=1, message="a", attributes=_service("api"))
+        await self.create_test_log(project_id=1, message="b", attributes=_service("api-gateway"))
+        await self.create_test_log(project_id=1, message="c", attributes=_service(None))
+        await self.create_test_log(project_id=1, message="d")
+
+        response = await self.stub.QueryLogs(
+            query_pb2.QueryLogsRequest(project_id=1, service="api", limit=10)
+        )
+
+        assert [log.message for log in response.logs] == ["a"]
+
+    @pytest.mark.asyncio
+    async def test_service_filter_combines_with_other_filters(self):
+        await self.create_test_log(
+            project_id=1, level="error", message="a", attributes=_service("api")
+        )
+        await self.create_test_log(
+            project_id=1, level="info", message="b", attributes=_service("api")
+        )
+        await self.create_test_log(
+            project_id=1, level="error", message="c", attributes=_service("worker")
+        )
+
+        response = await self.stub.QueryLogs(
+            query_pb2.QueryLogsRequest(project_id=1, service="api", level="error", limit=10)
+        )
+
+        assert [log.message for log in response.logs] == ["a"]
+
+    @pytest.mark.asyncio
+    async def test_facets_under_a_service_filter_skip_the_rollup(self):
+        # The rollup has no service dimension, so counting it here would report
+        # the 99 rolled-up logs of every service as belonging to the selected one.
+        base = datetime.datetime.now(datetime.timezone.utc).replace(
+            minute=0, second=0, microsecond=0
+        ) - datetime.timedelta(hours=3)
+
+        async with self.test_db_manager.session_factory() as session:
+            await session.execute(
+                models.log_facets_1h.insert().values(
+                    project_id=1,
+                    bucket=base,
+                    level="info",
+                    log_type="logger",
+                    status_class="",
+                    environment="",
+                    client_channel="",
+                    count=99,
+                )
+            )
+            await session.commit()
+
+        at = base + datetime.timedelta(minutes=20)
+        await self.create_test_log(
+            project_id=1, level="info", timestamp=at, attributes=_service("api")
+        )
+        await self.create_test_log(
+            project_id=1, level="error", timestamp=at, attributes=_service("api")
+        )
+        await self.create_test_log(
+            project_id=1, level="warning", timestamp=at, attributes=_service("worker")
+        )
+
+        response = await self.stub.GetLogFacets(
+            query_pb2.GetLogFacetsRequest(
+                project_id=1,
+                start_time=base.isoformat(),
+                end_time=(base + datetime.timedelta(hours=1)).isoformat(),
+                service="api",
+            )
+        )
+
+        assert {v.value: v.count for v in response.level} == {"info": 1, "error": 1}
+
+
+class TestListLogServices(_LogFactoryMixin, test_base.BaseQueryTest):
+    @pytest.mark.asyncio
+    async def test_lists_names_most_frequent_first(self):
+        for name in ("worker", "api", "api", "api", "worker"):
+            await self.create_test_log(project_id=1, attributes=_service(name))
+
+        response = await self.stub.ListLogServices(query_pb2.ListLogServicesRequest(project_id=1))
+
+        assert list(response.services) == ["api", "worker"]
+
+    @pytest.mark.asyncio
+    async def test_skips_logs_without_a_service_name(self):
+        await self.create_test_log(project_id=1, attributes=_service("api"))
+        await self.create_test_log(project_id=1, attributes=_service(None))
+        await self.create_test_log(project_id=1, attributes=_service(""))
+        await self.create_test_log(project_id=1)
+
+        response = await self.stub.ListLogServices(query_pb2.ListLogServicesRequest(project_id=1))
+
+        assert list(response.services) == ["api"]
+
+    @pytest.mark.asyncio
+    async def test_scoped_to_project_and_window(self):
+        now = datetime.datetime.now(datetime.timezone.utc)
+        await self.create_test_log(project_id=1, attributes=_service("api"), timestamp=now)
+        await self.create_test_log(project_id=2, attributes=_service("other-project"))
+        await self.create_test_log(
+            project_id=1,
+            attributes=_service("too-old"),
+            timestamp=now - datetime.timedelta(days=10),
+        )
+
+        response = await self.stub.ListLogServices(
+            query_pb2.ListLogServicesRequest(
+                project_id=1,
+                start_time=(now - datetime.timedelta(days=1)).isoformat(),
+                end_time=(now + datetime.timedelta(minutes=1)).isoformat(),
+            )
+        )
+
+        assert list(response.services) == ["api"]
+
+    @pytest.mark.asyncio
+    async def test_respects_limit(self):
+        for name in ("a", "b", "c"):
+            await self.create_test_log(project_id=1, attributes=_service(name))
+
+        response = await self.stub.ListLogServices(
+            query_pb2.ListLogServicesRequest(project_id=1, limit=2)
+        )
+
+        assert len(response.services) == 2

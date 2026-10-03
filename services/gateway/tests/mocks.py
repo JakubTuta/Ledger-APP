@@ -490,6 +490,24 @@ class MockQueryStub:
         self.query_metric_series_response = None
         self.query_metric_series_error = None
         self.last_query_metric_series_request = None
+        self.last_query_logs_request = None
+        self.last_get_log_facets_request = None
+        self.last_list_log_services_request = None
+        self.list_log_services_response = None
+
+    async def QueryLogs(self, request, timeout=None):
+        self.last_query_logs_request = request
+        return query_pb2.QueryLogsResponse(logs=[], total=0, has_more=False)
+
+    async def GetLogFacets(self, request, timeout=None):
+        self.last_get_log_facets_request = request
+        return query_pb2.GetLogFacetsResponse(project_id=request.project_id)
+
+    async def ListLogServices(self, request, timeout=None):
+        self.last_list_log_services_request = request
+        if self.list_log_services_response:
+            return self.list_log_services_response
+        return query_pb2.ListLogServicesResponse(project_id=request.project_id, services=[])
 
     async def GetUsageStats(self, request, timeout=None):
         if self.get_usage_stats_response:

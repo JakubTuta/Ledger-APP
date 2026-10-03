@@ -16,6 +16,7 @@ service QueryService {
     rpc GetBottleneckList(GetBottleneckListRequest) returns (GetBottleneckListResponse);
     rpc GetHealthSummary(GetHealthSummaryRequest) returns (GetHealthSummaryResponse);
     rpc GetCountryBreakdown(GetCountryBreakdownRequest) returns (GetCountryBreakdownResponse);
+    rpc ListLogServices(ListLogServicesRequest) returns (ListLogServicesResponse);
 
     // Error group workflow (resolve/ignore/mute/reopen, assignment)
     rpc ListErrorGroups(ListErrorGroupsRequest) returns (ListErrorGroupsResponse);
@@ -47,6 +48,7 @@ message QueryLogsRequest {
     optional string search = 11;        // substring match on method, path, message, or error_message
     optional string cursor = 12;        // keyset cursor from a prior response's next_cursor; takes precedence over offset
     repeated string client_channel = 13;
+    optional string service = 14;       // exact match on the service.name resource attribute
 }
 
 message GetLogFacetsRequest {
@@ -60,6 +62,19 @@ message GetLogFacetsRequest {
     repeated string status_class = 8;   // "2xx", "4xx", "5xx"
     optional string search = 9;         // substring match on method, path, message, or error_message
     repeated string client_channel = 10;
+    optional string service = 11;       // exact match on the service.name resource attribute
+}
+
+message ListLogServicesRequest {
+    int64 project_id = 1;
+    optional string start_time = 2;
+    optional string end_time = 3;
+    int32 limit = 4;
+}
+
+message ListLogServicesResponse {
+    int64 project_id = 1;
+    repeated string services = 2;
 }
 
 message LogFacetValue {

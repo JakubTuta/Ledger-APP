@@ -78,6 +78,7 @@ from gateway_service.schemas.query import (
     LogEntryResponse,
     LogFacetsResponse,
     LogFacetValueResponse,
+    LogServicesResponse,
     LogsListResponse,
 )
 from gateway_service.schemas.sharing import (
@@ -166,6 +167,7 @@ __all__ = [
     "LogsListResponse",
     "LogFacetValueResponse",
     "LogFacetsResponse",
+    "LogServicesResponse",
     "CountryBreakdownEntryResponse",
     "CountryBreakdownResponse",
     "BottleneckListEntryResponse",

@@ -7,7 +7,7 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class QueryLogsRequest(_message.Message):
-    __slots__ = ("project_id", "start_time", "end_time", "level", "log_type", "environment", "error_fingerprint", "limit", "offset", "status_class", "search", "cursor", "client_channel")
+    __slots__ = ("project_id", "start_time", "end_time", "level", "log_type", "environment", "error_fingerprint", "limit", "offset", "status_class", "search", "cursor", "client_channel", "service")
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
     START_TIME_FIELD_NUMBER: _ClassVar[int]
     END_TIME_FIELD_NUMBER: _ClassVar[int]
@@ -21,6 +21,7 @@ class QueryLogsRequest(_message.Message):
     SEARCH_FIELD_NUMBER: _ClassVar[int]
     CURSOR_FIELD_NUMBER: _ClassVar[int]
     CLIENT_CHANNEL_FIELD_NUMBER: _ClassVar[int]
+    SERVICE_FIELD_NUMBER: _ClassVar[int]
     project_id: int
     start_time: str
     end_time: str
@@ -34,10 +35,11 @@ class QueryLogsRequest(_message.Message):
     search: str
     cursor: str
     client_channel: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, project_id: _Optional[int] = ..., start_time: _Optional[str] = ..., end_time: _Optional[str] = ..., level: _Optional[str] = ..., log_type: _Optional[str] = ..., environment: _Optional[str] = ..., error_fingerprint: _Optional[str] = ..., limit: _Optional[int] = ..., offset: _Optional[int] = ..., status_class: _Optional[_Iterable[str]] = ..., search: _Optional[str] = ..., cursor: _Optional[str] = ..., client_channel: _Optional[_Iterable[str]] = ...) -> None: ...
+    service: str
+    def __init__(self, project_id: _Optional[int] = ..., start_time: _Optional[str] = ..., end_time: _Optional[str] = ..., level: _Optional[str] = ..., log_type: _Optional[str] = ..., environment: _Optional[str] = ..., error_fingerprint: _Optional[str] = ..., limit: _Optional[int] = ..., offset: _Optional[int] = ..., status_class: _Optional[_Iterable[str]] = ..., search: _Optional[str] = ..., cursor: _Optional[str] = ..., client_channel: _Optional[_Iterable[str]] = ..., service: _Optional[str] = ...) -> None: ...
 
 class GetLogFacetsRequest(_message.Message):
-    __slots__ = ("project_id", "start_time", "end_time", "level", "log_type", "environment", "error_fingerprint", "status_class", "search", "client_channel")
+    __slots__ = ("project_id", "start_time", "end_time", "level", "log_type", "environment", "error_fingerprint", "status_class", "search", "client_channel", "service")
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
     START_TIME_FIELD_NUMBER: _ClassVar[int]
     END_TIME_FIELD_NUMBER: _ClassVar[int]
@@ -48,6 +50,7 @@ class GetLogFacetsRequest(_message.Message):
     STATUS_CLASS_FIELD_NUMBER: _ClassVar[int]
     SEARCH_FIELD_NUMBER: _ClassVar[int]
     CLIENT_CHANNEL_FIELD_NUMBER: _ClassVar[int]
+    SERVICE_FIELD_NUMBER: _ClassVar[int]
     project_id: int
     start_time: str
     end_time: str
@@ -58,7 +61,28 @@ class GetLogFacetsRequest(_message.Message):
     status_class: _containers.RepeatedScalarFieldContainer[str]
     search: str
     client_channel: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, project_id: _Optional[int] = ..., start_time: _Optional[str] = ..., end_time: _Optional[str] = ..., level: _Optional[str] = ..., log_type: _Optional[str] = ..., environment: _Optional[str] = ..., error_fingerprint: _Optional[str] = ..., status_class: _Optional[_Iterable[str]] = ..., search: _Optional[str] = ..., client_channel: _Optional[_Iterable[str]] = ...) -> None: ...
+    service: str
+    def __init__(self, project_id: _Optional[int] = ..., start_time: _Optional[str] = ..., end_time: _Optional[str] = ..., level: _Optional[str] = ..., log_type: _Optional[str] = ..., environment: _Optional[str] = ..., error_fingerprint: _Optional[str] = ..., status_class: _Optional[_Iterable[str]] = ..., search: _Optional[str] = ..., client_channel: _Optional[_Iterable[str]] = ..., service: _Optional[str] = ...) -> None: ...
+
+class ListLogServicesRequest(_message.Message):
+    __slots__ = ("project_id", "start_time", "end_time", "limit")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    START_TIME_FIELD_NUMBER: _ClassVar[int]
+    END_TIME_FIELD_NUMBER: _ClassVar[int]
+    LIMIT_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    start_time: str
+    end_time: str
+    limit: int
+    def __init__(self, project_id: _Optional[int] = ..., start_time: _Optional[str] = ..., end_time: _Optional[str] = ..., limit: _Optional[int] = ...) -> None: ...
+
+class ListLogServicesResponse(_message.Message):
+    __slots__ = ("project_id", "services")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    SERVICES_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    services: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, project_id: _Optional[int] = ..., services: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class LogFacetValue(_message.Message):
     __slots__ = ("value", "count")

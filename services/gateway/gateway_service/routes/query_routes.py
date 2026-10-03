@@ -223,6 +223,11 @@ async def get_log_facets(
         None,
         description="Filter by caller channel (browser_navigation, browser_xhr, api_client, bot, unknown). Can be repeated.",
     ),
+    service: str | None = fastapi.Query(
+        None,
+        description="Filter by service name (the service.name resource attribute), exact match.",
+        max_length=255,
+    ),
 ) -> schemas.LogFacetsResponse:
     """
     Get facet counts (level, log_type, status_class, environment,
@@ -261,6 +266,8 @@ async def get_log_facets(
             grpc_request.search = search
         if client_channel:
             grpc_request.client_channel.extend(client_channel)
+        if service:
+            grpc_request.service = service
 
         async with grpc_pool.get_query_stub() as stub:
             response = await stub.GetLogFacets(
@@ -313,6 +320,106 @@ async def get_log_facets(
             status_code=500,
             detail="Failed to retrieve log facets",
         )
+
+
+@router.get(
+    "/logs/services",
+    status_code=200,
+    summary="List service names seen in a project's logs",
+    description="Service names (the service.name resource attribute) found in the newest logs of the "
+    "time window, most frequent first. Feeds the Explore service filter; the list is read from a "
+    "bounded sample of recent rows, so a service with no recent logs in the window may be absent.",
+    response_description="Service names",
+    response_model=schemas.LogServicesResponse,
+    responses={
+        400: {
+            "description": "Invalid parameters",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Either 'period' or both 'periodFrom' and 'periodTo' must be provided"
+                    }
+                }
+            },
+        },
+        500: {
+            "description": "Server error",
+            "content": {
+                "application/json": {"example": {"detail": "Failed to retrieve log services"}}
+            },
+        },
+    },
+)
+async def list_log_services(
+    request: fastapi.Request,
+    project_id: int = fastapi.Depends(dependencies.require_project_member),
+    period: typing.Literal[
+        "today",
+        "last7days",
+        "last30days",
+        "currentWeek",
+        "currentMonth",
+        "currentYear",
+    ]
+    | None = fastapi.Query(
+        None,
+        description="Predefined time period. Mutually exclusive with periodFrom/periodTo.",
+    ),
+    periodFrom: str | None = fastapi.Query(
+        None,
+        description="Start date in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ). Must be used with periodTo.",
+    ),
+    periodTo: str | None = fastapi.Query(
+        None,
+        description="End date in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ). Must be used with periodFrom.",
+    ),
+    limit: int = fastapi.Query(50, ge=1, le=100, description="Maximum number of names to return"),
+) -> schemas.LogServicesResponse:
+    grpc_pool = request.app.state.grpc_pool
+
+    _require_period_params(period, periodFrom, periodTo)
+    _reject_conflicting_period_params(period, periodFrom, periodTo)
+
+    try:
+        if period:
+            start_time, end_time = _calculate_time_range_for_period(period)
+        else:
+            try:
+                start_time = datetime.datetime.fromisoformat(periodFrom.replace("Z", "+00:00"))
+                end_time = datetime.datetime.fromisoformat(periodTo.replace("Z", "+00:00"))
+            except (ValueError, AttributeError) as e:
+                raise fastapi.HTTPException(
+                    status_code=400,
+                    detail=f"Invalid date format. Use ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ): {str(e)}",
+                )
+
+        async with grpc_pool.get_query_stub() as stub:
+            response = await stub.ListLogServices(
+                query_pb2.ListLogServicesRequest(
+                    project_id=project_id,
+                    start_time=start_time.isoformat(),
+                    end_time=end_time.isoformat(),
+                    limit=limit,
+                ),
+                timeout=10.0,
+            )
+
+        return schemas.LogServicesResponse(
+            project_id=response.project_id, services=list(response.services)
+        )
+
+    except grpc.RpcError as e:
+        if e.code() == grpc.StatusCode.INVALID_ARGUMENT:
+            raise fastapi.HTTPException(status_code=400, detail=e.details())
+        logger.error(f"gRPC error retrieving log services: {e.code()} - {e.details()}")
+        raise fastapi.HTTPException(status_code=500, detail="Failed to retrieve log services")
+
+    except fastapi.HTTPException:
+        raise
+
+    except Exception as e:
+        logger.error(f"Failed to retrieve log services: {e}", exc_info=True)
+        raise fastapi.HTTPException(status_code=500, detail="Failed to retrieve log services")
 
 
 @router.get(
@@ -721,6 +828,11 @@ async def query_logs(
         None,
         description="Filter by caller channel (browser_navigation, browser_xhr, api_client, bot, unknown). Can be repeated.",
     ),
+    service: str | None = fastapi.Query(
+        None,
+        description="Filter by service name (the service.name resource attribute), exact match.",
+        max_length=255,
+    ),
 ) -> schemas.LogsListResponse:
     """
     Query logs for dashboard panels.
@@ -843,6 +955,8 @@ async def query_logs(
             grpc_request.cursor = cursor
         if client_channel:
             grpc_request.client_channel.extend(client_channel)
+        if service:
+            grpc_request.service = service
 
         async with grpc_pool.get_query_stub() as stub:
             response = await stub.QueryLogs(

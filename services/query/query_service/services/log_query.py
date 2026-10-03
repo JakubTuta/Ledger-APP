@@ -44,6 +44,11 @@ def _search_predicate(term: str) -> sa.ColumnElement[bool]:
     )
 
 
+def _service_name_expression() -> sa.ColumnElement[str]:
+    """`service.name` lives only in the attributes JSONB, merged in from the OTLP resource."""
+    return models.Log.attributes["service.name"].astext
+
+
 def _apply_log_dimension_filters(query: sa.Select, filters: schemas.LogFilters) -> sa.Select:
     """
     Apply every LogFilters where-clause except the time window, to a select()
@@ -72,6 +77,8 @@ def _apply_log_dimension_filters(query: sa.Select, filters: schemas.LogFilters) 
                 status_conditions.append(models.Log.status_code.between(500, 599))
         if status_conditions:
             query = query.where(sa.or_(*status_conditions))
+    if filters.service:
+        query = query.where(_service_name_expression() == filters.service)
     if filters.search:
         query = query.where(_search_predicate(filters.search))
     return query
@@ -350,11 +357,11 @@ def _split_facet_window(
 
 def _rollup_can_serve(filters: schemas.LogFilters) -> bool:
     """
-    log_facets_1h only carries the five facet dimensions. A free-text search
-    or an error_fingerprint filter has to be evaluated against the log rows
-    themselves, so those fall back to a full raw pass.
+    log_facets_1h only carries the five facet dimensions. A free-text search,
+    an error_fingerprint filter or a service filter has to be evaluated against
+    the log rows themselves, so those fall back to a full raw pass.
     """
-    return not filters.search and not filters.error_fingerprint
+    return not filters.search and not filters.error_fingerprint and not filters.service
 
 
 async def _facet_pass(
@@ -477,6 +484,54 @@ async def get_country_breakdown(
                 schemas.CountryBreakdownEntry(country=row.client_country, count=row.count)
                 for row in result.all()
             ],
+        )
+
+
+_DEFAULT_LOG_SERVICES_LIMIT = 50
+
+# Upper bound on rows read to discover service names. service.name is only in
+# the attributes JSONB, so a DISTINCT over the whole window would detoast every
+# row; reading just the newest rows keeps this an ordered scan of
+# idx_logs_project_timestamp that stops early, at the cost of missing a service
+# that logged nothing in the window's most recent rows.
+_LOG_SERVICES_SAMPLE_ROWS = 20_000
+
+
+async def list_log_services(
+    project_id: int,
+    start_time: datetime.datetime | None,
+    end_time: datetime.datetime | None,
+    limit: int = _DEFAULT_LOG_SERVICES_LIMIT,
+) -> schemas.LogServicesResponse:
+    """
+    Service names seen in the newest logs of a window, most frequent first, for
+    the Explore service filter. Names come from a bounded sample (see
+    _LOG_SERVICES_SAMPLE_ROWS), so this is a suggestion list, not a census.
+    """
+    async with database.get_logs_session() as session:
+        sample = sa.select(_service_name_expression().label("service")).where(
+            models.Log.project_id == project_id
+        )
+        if start_time:
+            sample = sample.where(models.Log.timestamp >= start_time)
+        if end_time:
+            sample = sample.where(models.Log.timestamp <= end_time)
+        sample = sample.order_by(models.Log.timestamp.desc()).limit(_LOG_SERVICES_SAMPLE_ROWS)
+        sample = sample.subquery()
+
+        query = (
+            sa.select(sample.c.service)
+            .where(sample.c.service.is_not(None), sample.c.service != "")
+            .group_by(sample.c.service)
+            .order_by(sa.func.count().desc(), sample.c.service)
+            .limit(limit)
+        )
+
+        result = await session.execute(query)
+
+        return schemas.LogServicesResponse(
+            project_id=project_id,
+            services=[row.service for row in result.all()],
         )
 
 

@@ -186,6 +186,13 @@ class LogFacetsResponse(pydantic.BaseModel):
     )
 
 
+class LogServicesResponse(pydantic.BaseModel):
+    project_id: int = pydantic.Field(description="Project ID")
+    services: list[str] = pydantic.Field(
+        description="Service names found in the newest logs of the window, most frequent first"
+    )
+
+
 class CountryBreakdownEntryResponse(pydantic.BaseModel):
     country: str = pydantic.Field(description="ISO 3166-1 alpha-2 country code")
     count: int = pydantic.Field(
