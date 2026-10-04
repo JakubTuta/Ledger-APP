@@ -976,16 +976,24 @@ class NotificationItem(_message.Message):
     def __init__(self, id: _Optional[int] = ..., user_id: _Optional[int] = ..., project_id: _Optional[int] = ..., kind: _Optional[str] = ..., severity: _Optional[int] = ..., payload: _Optional[str] = ..., created_at: _Optional[str] = ..., read_at: _Optional[str] = ..., expires_at: _Optional[str] = ...) -> None: ...
 
 class ListNotificationsRequest(_message.Message):
-    __slots__ = ("user_id", "unread_only", "limit", "before_id")
+    __slots__ = ("user_id", "unread_only", "limit", "before_id", "project_id", "kind", "created_after", "created_before")
     USER_ID_FIELD_NUMBER: _ClassVar[int]
     UNREAD_ONLY_FIELD_NUMBER: _ClassVar[int]
     LIMIT_FIELD_NUMBER: _ClassVar[int]
     BEFORE_ID_FIELD_NUMBER: _ClassVar[int]
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    KIND_FIELD_NUMBER: _ClassVar[int]
+    CREATED_AFTER_FIELD_NUMBER: _ClassVar[int]
+    CREATED_BEFORE_FIELD_NUMBER: _ClassVar[int]
     user_id: int
     unread_only: bool
     limit: int
     before_id: int
-    def __init__(self, user_id: _Optional[int] = ..., unread_only: bool = ..., limit: _Optional[int] = ..., before_id: _Optional[int] = ...) -> None: ...
+    project_id: int
+    kind: str
+    created_after: str
+    created_before: str
+    def __init__(self, user_id: _Optional[int] = ..., unread_only: bool = ..., limit: _Optional[int] = ..., before_id: _Optional[int] = ..., project_id: _Optional[int] = ..., kind: _Optional[str] = ..., created_after: _Optional[str] = ..., created_before: _Optional[str] = ...) -> None: ...
 
 class ListNotificationsResponse(_message.Message):
     __slots__ = ("notifications", "has_more")
@@ -1310,7 +1318,7 @@ class DeleteConnectorResponse(_message.Message):
     def __init__(self, success: bool = ...) -> None: ...
 
 class AlertEvent(_message.Message):
-    __slots__ = ("id", "rule_id", "project_id", "rule_name", "metric", "comparator", "threshold", "unit", "value", "severity", "connectors_sent", "fired_at")
+    __slots__ = ("id", "rule_id", "project_id", "rule_name", "metric", "comparator", "threshold", "unit", "value", "severity", "connectors_sent", "fired_at", "state")
     ID_FIELD_NUMBER: _ClassVar[int]
     RULE_ID_FIELD_NUMBER: _ClassVar[int]
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
@@ -1323,6 +1331,7 @@ class AlertEvent(_message.Message):
     SEVERITY_FIELD_NUMBER: _ClassVar[int]
     CONNECTORS_SENT_FIELD_NUMBER: _ClassVar[int]
     FIRED_AT_FIELD_NUMBER: _ClassVar[int]
+    STATE_FIELD_NUMBER: _ClassVar[int]
     id: int
     rule_id: int
     project_id: int
@@ -1335,7 +1344,8 @@ class AlertEvent(_message.Message):
     severity: int
     connectors_sent: str
     fired_at: str
-    def __init__(self, id: _Optional[int] = ..., rule_id: _Optional[int] = ..., project_id: _Optional[int] = ..., rule_name: _Optional[str] = ..., metric: _Optional[str] = ..., comparator: _Optional[str] = ..., threshold: _Optional[float] = ..., unit: _Optional[str] = ..., value: _Optional[float] = ..., severity: _Optional[int] = ..., connectors_sent: _Optional[str] = ..., fired_at: _Optional[str] = ...) -> None: ...
+    state: str
+    def __init__(self, id: _Optional[int] = ..., rule_id: _Optional[int] = ..., project_id: _Optional[int] = ..., rule_name: _Optional[str] = ..., metric: _Optional[str] = ..., comparator: _Optional[str] = ..., threshold: _Optional[float] = ..., unit: _Optional[str] = ..., value: _Optional[float] = ..., severity: _Optional[int] = ..., connectors_sent: _Optional[str] = ..., fired_at: _Optional[str] = ..., state: _Optional[str] = ...) -> None: ...
 
 class ListAlertEventsRequest(_message.Message):
     __slots__ = ("project_id", "limit", "before_id")

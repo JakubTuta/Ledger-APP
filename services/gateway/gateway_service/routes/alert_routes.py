@@ -101,6 +101,7 @@ class AlertEventResponse(BaseModel):
     severity: int
     connectors_sent: str
     fired_at: str
+    state: str
 
 
 class AlertEventListResponse(BaseModel):
@@ -158,6 +159,7 @@ def _proto_event_to_response(e) -> AlertEventResponse:
         severity=e.severity,
         connectors_sent=e.connectors_sent,
         fired_at=e.fired_at,
+        state=e.state,
     )
 
 

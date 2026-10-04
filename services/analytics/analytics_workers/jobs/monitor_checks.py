@@ -284,6 +284,7 @@ async def _notify_transition(
 
     notification = {
         "project_id": project_id,
+        "kind": notification_kind,
         "level": _SEVERITY_TO_LEVEL.get(severity, "error"),
         "log_type": "monitor",
         "message": message,

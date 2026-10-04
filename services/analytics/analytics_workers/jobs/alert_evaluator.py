@@ -35,6 +35,10 @@ _COMPARATORS: dict[str, typing.Callable[[float, float], bool]] = {
 
 _LOOKBACK_MINUTES = 10
 _LATENCY_LOOKBACK_MINUTES = 60
+# A rate over a handful of events says nothing: one failed request out of eight
+# is 12.5% and would trip a 5% or 10% rule. Below this many events in the
+# window the rate is unknown, and an unknown value changes no rule's state.
+_MIN_RATE_SAMPLE = 20
 _HEARTBEAT_KEY = "analytics:alert_evaluator:last_run"
 _HEARTBEAT_TTL_SECONDS = 300
 _DELIVERY_RETRY_BACKOFF_SECONDS = 0.5
@@ -137,6 +141,10 @@ async def _evaluate_rule(
 
     value = await _query_metric(metric, project_id, logs_session)
     if value is None:
+        logger.info(
+            f"Rule {rule_id} '{rule_name}' project={project_id} metric={metric} has no value "
+            f"yet (too little data in the window); state={state} left unchanged"
+        )
         return
 
     compare_fn = _COMPARATORS.get(comparator)
@@ -418,6 +426,13 @@ def _to_display_value(metric: str, value: float, unit: str) -> float:
     return value
 
 
+def _rate_percent(matching: int, total: int) -> float | None:
+    if total < _MIN_RATE_SAMPLE:
+        return None
+
+    return 100.0 * matching / total
+
+
 async def _query_metric(
     metric: str,
     project_id: int,
@@ -465,9 +480,8 @@ async def _query_metric(
         result = await session.execute(
             sa.text(
                 """
-                SELECT COALESCE(
-                    100.0 * count(*) FILTER (WHERE status_code BETWEEN :low AND :high)
-                    / NULLIF(count(*), 0), 0)
+                SELECT count(*) FILTER (WHERE status_code BETWEEN :low AND :high),
+                       count(*)
                 FROM logs
                 WHERE project_id = :pid
                   AND timestamp >= :since
@@ -476,36 +490,41 @@ async def _query_metric(
             ),
             {"pid": project_id, "since": since, "low": low, "high": high},
         )
-        val = result.scalar()
-        return float(val) if val is not None else None
+        matching, total = result.one()
+        return _rate_percent(matching, total)
 
+    # The two metrics below read the window itself rather than the 5-minute
+    # rollups. The rollup job runs every 10 minutes on the bucket boundary, so
+    # the newest bucket it holds is only seconds old, and a 10-minute lookback
+    # is shorter than that lag: for half of every cycle the window held nothing
+    # but that sliver (a rate of 1 error in 8 logs, a volume of a few logs).
     if metric == "error_rate_all":
         result = await session.execute(
             sa.text(
                 """
-                SELECT COALESCE(100.0 * SUM(errors)::float / NULLIF(SUM(total), 0), 0)
-                FROM error_rate_5m
-                WHERE project_id = :pid AND bucket >= :since
+                SELECT count(*) FILTER (WHERE level IN ('error', 'critical')),
+                       count(*)
+                FROM logs
+                WHERE project_id = :pid AND timestamp >= :since
                 """
             ),
             {"pid": project_id, "since": since},
         )
-        val = result.scalar()
-        return float(val) if val is not None else None
+        errors, total = result.one()
+        return _rate_percent(errors, total)
 
     if metric == "request_volume":
         result = await session.execute(
             sa.text(
                 """
-                SELECT COALESCE(SUM(count), 0)
-                FROM log_volume_5m
-                WHERE project_id = :pid AND bucket >= :since
+                SELECT count(*)
+                FROM logs
+                WHERE project_id = :pid AND timestamp >= :since
                 """
             ),
             {"pid": project_id, "since": since},
         )
-        val = result.scalar()
-        return float(val) if val is not None else None
+        return float(result.scalar() or 0)
 
     if metric == "new_error_type":
         # Counts error groups whose *first* occurrence fell within the lookback
@@ -948,6 +967,7 @@ async def _publish_in_app(
 
     notification = {
         "project_id": project_id,
+        "kind": "alert_firing" if event_state == "firing" else "alert_resolved",
         "level": _SEVERITY_TO_LEVEL.get(severity, "error"),
         "log_type": "alert",
         "message": message,

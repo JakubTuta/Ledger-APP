@@ -41,3 +41,29 @@ class TestErrorListRoute(BaseGatewayTest):
         forwarded = self.get_mock_query_stub().last_get_error_list_request
         assert forwarded.HasField("include_client_errors")
         assert forwarded.include_client_errors is False
+
+    async def test_accepts_a_custom_date_range(self):
+        token = self.make_session_token(account_id=1)
+        self.get_mock_auth_stub().get_projects_response = auth_pb2.GetProjectsResponse(
+            projects=[
+                auth_pb2.ProjectInfo(
+                    project_id=1,
+                    name="My Project",
+                    slug="my-project",
+                    environment="production",
+                    retention_days=30,
+                    logs_daily_quota=100000,
+                    spans_daily_quota=300000,
+                    metrics_daily_quota=100000,
+                ),
+            ]
+        )
+
+        response = await self.client.get(
+            "/api/v1/errors/list?project_id=1&periodFrom=2026-10-01&periodTo=2026-10-03",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 200
+        forwarded = self.get_mock_query_stub().last_get_error_list_request
+        assert (forwarded.period_from, forwarded.period_to) == ("2026-10-01", "2026-10-03")

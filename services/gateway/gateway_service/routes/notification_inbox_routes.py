@@ -1,3 +1,4 @@
+import datetime
 import logging
 
 import fastapi
@@ -8,6 +9,8 @@ from pydantic import BaseModel
 
 router = fastapi.APIRouter(tags=["Notification Inbox"])
 logger = logging.getLogger(__name__)
+
+_NOTIFICATION_KIND_PATTERN = "^(error|alert_firing|alert_resolved|quota_warning)$"
 
 
 def _require_account(request: fastapi.Request) -> int:
@@ -62,6 +65,14 @@ async def list_notifications(
     unread_only: bool = fastapi.Query(False),
     limit: int = fastapi.Query(50, ge=1, le=200),
     before_id: int | None = fastapi.Query(None),
+    project_id: int | None = fastapi.Query(None, gt=0),
+    kind: str | None = fastapi.Query(None, pattern=_NOTIFICATION_KIND_PATTERN),
+    created_after: datetime.datetime | None = fastapi.Query(
+        None, description="Only notifications created at or after this instant (ISO 8601)"
+    ),
+    created_before: datetime.datetime | None = fastapi.Query(
+        None, description="Only notifications created before this instant (ISO 8601)"
+    ),
 ) -> ListNotificationsResponse:
     account_id = _require_account(request)
     grpc_pool = request.app.state.grpc_pool
@@ -73,6 +84,14 @@ async def list_notifications(
     )
     if before_id is not None:
         proto_req.before_id = before_id
+    if project_id is not None:
+        proto_req.project_id = project_id
+    if kind is not None:
+        proto_req.kind = kind
+    if created_after is not None:
+        proto_req.created_after = created_after.isoformat()
+    if created_before is not None:
+        proto_req.created_before = created_before.isoformat()
 
     try:
         channel = grpc_pool.get_channel("auth")

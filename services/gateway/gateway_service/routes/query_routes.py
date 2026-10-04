@@ -1408,12 +1408,12 @@ async def get_error_list(
     periodFrom: str | None = fastapi.Query(
         None,
         description="Start date in ISO 8601 format (YYYY-MM-DD). Must be used with periodTo.",
-        pattern=r"^\\d{4}-\\d{2}-\\d{2}$",
+        pattern=r"^\d{4}-\d{2}-\d{2}$",
     ),
     periodTo: str | None = fastapi.Query(
         None,
         description="End date in ISO 8601 format (YYYY-MM-DD). Must be used with periodFrom.",
-        pattern=r"^\\d{4}-\\d{2}-\\d{2}$",
+        pattern=r"^\d{4}-\d{2}-\d{2}$",
     ),
     search: str | None = fastapi.Query(
         None,

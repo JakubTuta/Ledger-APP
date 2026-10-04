@@ -307,6 +307,8 @@ class MockAuthStub:
         self.get_account_response = None
         self.last_create_dashboard_panel_request = None
         self.last_update_dashboard_panel_request = None
+        self.list_alert_events_response = None
+        self.last_list_notifications_request = None
 
     async def Register(self, request, timeout=None):
         if self.register_response:
@@ -463,6 +465,15 @@ class MockAuthStub:
     async def UpdateDashboardPanel(self, request, timeout=None):
         self.last_update_dashboard_panel_request = request
         return auth_pb2.UpdateDashboardPanelResponse(panel=_echo_panel(request.panel_id, request))
+
+    async def ListAlertEvents(self, request, timeout=None):
+        if self.list_alert_events_response:
+            return self.list_alert_events_response
+        return auth_pb2.ListAlertEventsResponse()
+
+    async def ListNotifications(self, request, timeout=None):
+        self.last_list_notifications_request = request
+        return auth_pb2.ListNotificationsResponse()
 
 
 class MockIngestionStub:

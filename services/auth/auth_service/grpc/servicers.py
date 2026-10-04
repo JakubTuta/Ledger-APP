@@ -1315,13 +1315,7 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
         try:
             async with database.get_session() as session:
                 limit = request.limit if request.HasField("limit") else 50
-                query = sa.select(models.Notification).where(
-                    models.Notification.user_id == request.user_id
-                )
-                if request.HasField("unread_only") and request.unread_only:
-                    query = query.where(models.Notification.read_at == None)  # noqa: E711
-                if request.HasField("before_id"):
-                    query = query.where(models.Notification.id < request.before_id)
+                query = sa.select(models.Notification).where(*_notification_filters(request))
                 query = query.order_by(models.Notification.id.desc()).limit(limit + 1)
                 result = await session.execute(query)
                 rows = result.scalars().all()
@@ -2216,6 +2210,30 @@ def _connector_to_proto(c: models.Connector) -> auth_pb2.Connector:
     )
 
 
+def _parse_instant(value: str) -> datetime.datetime:
+    instant = datetime.datetime.fromisoformat(value)
+    if instant.tzinfo is None:
+        return instant.replace(tzinfo=datetime.timezone.utc)
+    return instant
+
+
+def _notification_filters(request: auth_pb2.ListNotificationsRequest) -> list[sa.ColumnElement]:
+    filters: list[sa.ColumnElement] = [models.Notification.user_id == request.user_id]
+    if request.HasField("unread_only") and request.unread_only:
+        filters.append(models.Notification.read_at == None)  # noqa: E711
+    if request.HasField("before_id"):
+        filters.append(models.Notification.id < request.before_id)
+    if request.HasField("project_id"):
+        filters.append(models.Notification.project_id == request.project_id)
+    if request.HasField("kind"):
+        filters.append(models.Notification.kind == request.kind)
+    if request.HasField("created_after"):
+        filters.append(models.Notification.created_at >= _parse_instant(request.created_after))
+    if request.HasField("created_before"):
+        filters.append(models.Notification.created_at < _parse_instant(request.created_before))
+    return filters
+
+
 def _alert_event_to_proto(e: models.AlertEvent) -> auth_pb2.AlertEvent:
     event = auth_pb2.AlertEvent(
         id=e.id,
@@ -2229,6 +2247,7 @@ def _alert_event_to_proto(e: models.AlertEvent) -> auth_pb2.AlertEvent:
         severity=_severity_str_to_int(e.severity),
         connectors_sent=json.dumps(e.connectors_sent or []),
         fired_at=e.fired_at.isoformat(),
+        state=e.state,
     )
     if e.rule_id is not None:
         event.rule_id = e.rule_id

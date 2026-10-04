@@ -703,6 +703,10 @@ message ListNotificationsRequest {
   optional bool unread_only = 2;
   optional int32 limit = 3;
   optional int64 before_id = 4;
+  optional int64 project_id = 5;
+  optional string kind = 6;
+  optional string created_after = 7;   // ISO 8601, inclusive
+  optional string created_before = 8;  // ISO 8601, exclusive
 }
 
 message ListNotificationsResponse {
@@ -918,6 +922,7 @@ message AlertEvent {
   int32 severity = 10;
   string connectors_sent = 12;  // JSON array of {id,kind,name}
   string fired_at = 13;
+  string state = 14;  // "firing" or "resolved"
 }
 
 message ListAlertEventsRequest {
