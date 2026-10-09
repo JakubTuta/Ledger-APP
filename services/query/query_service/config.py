@@ -19,8 +19,18 @@ class Settings(pydantic_settings.BaseSettings):
         description="Application environment",
     )
 
+    SELF_MONITORING_API_KEY: str = pydantic.Field(
+        default="",
+        description="API key of the project Ledger reports its own telemetry to; empty disables it",
+    )
+
+    SELF_MONITORING_URL: str = pydantic.Field(
+        default="http://ledger-gateway:8000",
+        description="Gateway the services export their own telemetry to",
+    )
+
     DEBUG: bool = pydantic.Field(
-        default=True,
+        default=False,
         description="Enable debug mode",
     )
 
@@ -49,8 +59,15 @@ class Settings(pydantic_settings.BaseSettings):
         description="Logs database password (override in .env for production)",
     )
 
-    DB_POOL_SIZE: typing.ClassVar[int] = 30
-    DB_MAX_OVERFLOW: typing.ClassVar[int] = 20
+    # Share of the logs DB connection budget (see ingestion_service.config).
+    # A burst beyond this waits up to DB_POOL_TIMEOUT for a free connection
+    # instead of opening more and starving the ingestion worker.
+    DB_POOL_SIZE: typing.ClassVar[int] = 6
+    DB_MAX_OVERFLOW: typing.ClassVar[int] = 4
+    DB_POOL_TIMEOUT: typing.ClassVar[int] = 10
+    # The gateway abandons a query RPC after 10 s; without a server-side limit
+    # the query itself kept running and holding its connection.
+    DB_STATEMENT_TIMEOUT_MS: typing.ClassVar[int] = 15_000
 
     @property
     def LOGS_DATABASE_URL(self) -> str:

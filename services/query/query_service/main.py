@@ -9,6 +9,7 @@ import query_service.database as database
 import query_service.grpc.servicers as servicers
 import query_service.proto.query_pb2_grpc as query_pb2_grpc
 import query_service.redis_client as redis_client
+import query_service.services.self_monitoring as self_monitoring
 
 logging.basicConfig(
     level=getattr(logging, config.settings.LOG_LEVEL),
@@ -18,12 +19,14 @@ logger = logging.getLogger(__name__)
 
 
 async def serve():
+    self_monitoring.start("query")
     await database.init_db()
 
     await redis_client.init_redis()
 
     server = grpc.aio.server(
         concurrent.futures.ThreadPoolExecutor(max_workers=config.settings.GRPC_MAX_WORKERS),
+        interceptors=self_monitoring.rpc_interceptors("query"),
         options=[
             ("grpc.max_send_message_length", 100 * 1024 * 1024),
             ("grpc.max_receive_message_length", 100 * 1024 * 1024),
@@ -55,6 +58,7 @@ async def serve():
         await server.stop(grace=5)
         await redis_client.close_redis()
         await database.close_db()
+        self_monitoring.stop()
 
     loop = asyncio.get_event_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):

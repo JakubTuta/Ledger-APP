@@ -19,8 +19,18 @@ class Settings(pydantic_settings.BaseSettings):
         description="Application environment",
     )
 
+    SELF_MONITORING_API_KEY: str = pydantic.Field(
+        default="",
+        description="API key of the project Ledger reports its own telemetry to; empty disables it",
+    )
+
+    SELF_MONITORING_URL: str = pydantic.Field(
+        default="http://ledger-gateway:8000",
+        description="Gateway the services export their own telemetry to",
+    )
+
     DEBUG: bool = pydantic.Field(
-        default=True,
+        default=False,
         description="Enable debug mode",
     )
 
@@ -63,8 +73,14 @@ class Settings(pydantic_settings.BaseSettings):
         description="Logs database password",
     )
 
-    DB_POOL_SIZE: typing.ClassVar[int] = 20
-    DB_MAX_OVERFLOW: typing.ClassVar[int] = 10
+    # Logs DB connection budget (max_connections=30 in docker-compose.prod.yaml):
+    # ingestion worker 12 + query 10 + analytics 6 = 28. Pools never shrink, so
+    # oversized pools ended up holding every slot after one busy minute and the
+    # worker could no longer connect. Worker concurrency is WORKER_COUNT +
+    # WORKER_SPANS_COUNT + WORKER_METRICS_COUNT (9) plus background jobs; the
+    # gRPC ingestion service shares this config but never opens a session.
+    DB_POOL_SIZE: typing.ClassVar[int] = 10
+    DB_MAX_OVERFLOW: typing.ClassVar[int] = 2
 
     @property
     def LOGS_DATABASE_URL(self) -> str:
@@ -127,6 +143,12 @@ class Settings(pydantic_settings.BaseSettings):
     MAX_BATCH_LOGS: typing.ClassVar[int] = 1000
     MAX_REQUEST_SIZE_MB: typing.ClassVar[int] = 5
     TIMESTAMP_FUTURE_TOLERANCE_MINUTES: typing.ClassVar[int] = 5
+    # Oldest accepted log/span/metric timestamp. The storage worker creates a
+    # monthly partition for whatever month a row claims, so an unbounded window
+    # let any client create (never-dropped) partitions for arbitrary dates.
+    TIMESTAMP_MAX_AGE_DAYS: typing.ClassVar[int] = 30
+    # Longest accepted span; also keeps end - start inside the BIGINT column.
+    MAX_SPAN_DURATION_SECONDS: typing.ClassVar[int] = 7 * 24 * 3600
 
     REDIS_TIMEOUT: typing.ClassVar[float] = 1.0
 

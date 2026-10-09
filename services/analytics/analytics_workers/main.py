@@ -7,7 +7,9 @@ import analytics_workers.database as database
 import analytics_workers.health as health
 import analytics_workers.jobs as jobs
 import analytics_workers.redis_client as redis_client
+import analytics_workers.services.self_monitoring as self_monitoring
 import analytics_workers.utils.logging as logging_utils
+import apscheduler.events as scheduler_events
 import apscheduler.schedulers.asyncio as async_scheduler
 import apscheduler.triggers.cron as cron_trigger
 
@@ -45,6 +47,20 @@ async def shutdown(sig: signal.Signals | None = None) -> None:
     except Exception as e:
         logger.error(f"Error during shutdown: {e}", exc_info=True)
 
+    self_monitoring.stop()
+
+
+def _count_job_run(event: scheduler_events.JobEvent) -> None:
+    if event.code == scheduler_events.EVENT_JOB_MISSED:
+        outcome = "missed"
+    elif getattr(event, "exception", None) is not None:
+        outcome = "error"
+    else:
+        outcome = "ok"
+    self_monitoring.increment(
+        "ledger.analytics.job_runs", 1, {"job": event.job_id, "outcome": outcome}
+    )
+
 
 def setup_jobs() -> None:
     log_metrics_cron = _parse_cron_expression(settings.ANALYTICS_LOG_METRICS_CRON)
@@ -57,6 +73,7 @@ def setup_jobs() -> None:
     lv1d_rollup_cron = _parse_cron_expression(settings.ANALYTICS_LOG_VOLUME_1D_ROLLUP_CRON)
     log_facets_1h_cron = _parse_cron_expression(settings.ANALYTICS_LOG_FACETS_1H_ROLLUP_CRON)
     metric_points_1h_cron = _parse_cron_expression(settings.ANALYTICS_METRIC_POINTS_1H_ROLLUP_CRON)
+    service_edges_1h_cron = _parse_cron_expression(settings.ANALYTICS_SERVICE_EDGES_1H_ROLLUP_CRON)
     partition_cron = _parse_cron_expression(settings.ANALYTICS_PARTITION_MANAGER_CRON)
     alert_cron = _parse_cron_expression(settings.ANALYTICS_ALERT_EVALUATOR_CRON)
     notif_cleanup_cron = _parse_cron_expression(settings.ANALYTICS_NOTIFICATION_CLEANUP_CRON)
@@ -142,6 +159,14 @@ def setup_jobs() -> None:
         trigger=cron_trigger.CronTrigger(**metric_points_1h_cron),
         id="rollup_metric_points_1h",
         name="Rollup Metric Points 1h",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        jobs.rollup_service_edges_1h,
+        trigger=cron_trigger.CronTrigger(**service_edges_1h_cron),
+        id="rollup_service_edges_1h",
+        name="Rollup Service Edges 1h",
         replace_existing=True,
     )
 
@@ -242,6 +267,7 @@ def _parse_cron_expression(cron_expr: str) -> dict:
 async def main() -> None:
     global scheduler
 
+    self_monitoring.start("analytics")
     await startup()
 
     scheduler = async_scheduler.AsyncIOScheduler(
@@ -253,6 +279,13 @@ async def main() -> None:
     )
 
     setup_jobs()
+    if self_monitoring.client() is not None:
+        scheduler.add_listener(
+            _count_job_run,
+            scheduler_events.EVENT_JOB_EXECUTED
+            | scheduler_events.EVENT_JOB_ERROR
+            | scheduler_events.EVENT_JOB_MISSED,
+        )
     scheduler.start()
 
     loop = asyncio.get_running_loop()

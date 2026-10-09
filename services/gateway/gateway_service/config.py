@@ -20,7 +20,7 @@ class Settings(pydantic_settings.BaseSettings):
     )
 
     DEBUG: bool = pydantic.Field(
-        default=True,
+        default=False,
         description="Enable debug mode",
     )
 
@@ -171,16 +171,27 @@ class Settings(pydantic_settings.BaseSettings):
     RATE_LIMIT_WINDOW_MINUTE: typing.ClassVar[int] = 60
     RATE_LIMIT_WINDOW_HOUR: typing.ClassVar[int] = 3600
 
-    CIRCUIT_BREAKER_FAILURE_THRESHOLD: typing.ClassVar[int] = 5
-    CIRCUIT_BREAKER_RECOVERY_TIMEOUT: typing.ClassVar[int] = 30
-    CIRCUIT_BREAKER_HALF_OPEN_MAX_CALLS: typing.ClassVar[int] = 3
-
     REDIS_TIMEOUT: typing.ClassVar[float] = 1.0
     REQUEST_TIMEOUT: typing.ClassVar[float] = 30.0
+
+    # Applies to the wire body and, for gzip uploads, to the inflated body.
+    # An SDK export is ~100 records; a collector batch of several thousand
+    # spans still fits comfortably.
+    MAX_REQUEST_BODY_BYTES: typing.ClassVar[int] = 10 * 1024 * 1024
 
     NOTIFICATIONS_ENABLED: bool = pydantic.Field(
         default=True,
         description="Enable real-time error notifications via Server-Sent Events (SSE)",
+    )
+
+    SELF_MONITORING_API_KEY: str = pydantic.Field(
+        default="",
+        description="API key of the project Ledger reports its own telemetry to; empty disables it",
+    )
+
+    SELF_MONITORING_URL: str = pydantic.Field(
+        default="http://ledger-gateway:8000",
+        description="Gateway the services export their own telemetry to",
     )
 
     NOTIFICATIONS_MAX_CONNECTIONS_PER_USER: typing.ClassVar[int] = 5

@@ -28,8 +28,18 @@ class Settings(pydantic_settings.BaseSettings):
         description="Application environment",
     )
 
+    SELF_MONITORING_API_KEY: str = pydantic.Field(
+        default="",
+        description="API key of the project Ledger reports its own telemetry to; empty disables it",
+    )
+
+    SELF_MONITORING_URL: str = pydantic.Field(
+        default="http://ledger-gateway:8000",
+        description="Gateway the services export their own telemetry to",
+    )
+
     DEBUG: bool = pydantic.Field(
-        default=True,
+        default=False,
         description="Enable debug mode",
     )
 
@@ -69,8 +79,10 @@ class Settings(pydantic_settings.BaseSettings):
         description="Auth database password",
     )
 
-    DB_POOL_SIZE: typing.ClassVar[int] = 20
-    DB_MAX_OVERFLOW: typing.ClassVar[int] = 10
+    # Auth DB budget (max_connections=30 in docker-compose.prod.yaml): auth
+    # service 15 + analytics 6, leaving room for migrations and admin sessions.
+    DB_POOL_SIZE: typing.ClassVar[int] = 10
+    DB_MAX_OVERFLOW: typing.ClassVar[int] = 5
 
     @property
     def AUTH_DATABASE_URL(self) -> str:
@@ -108,6 +120,14 @@ class Settings(pydantic_settings.BaseSettings):
         default="your-secret-key-change-this-in-production",
         min_length=32,
         description="JWT signing secret (min 32 chars)",
+    )
+
+    CONNECTOR_SECRETS_KEY: str = pydantic.Field(
+        default="",
+        description=(
+            "Comma-separated Fernet keys encrypting connector credentials at rest; the first "
+            "encrypts, all decrypt (rotation). Must match analytics' value."
+        ),
     )
 
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: typing.ClassVar[int] = 15

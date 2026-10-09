@@ -1,6 +1,7 @@
 asyncpg==0.30.0
 grpcio==1.75.1
 grpcio-tools==1.75.1
+ledger-sdk>=2.4.0,<3
 protobuf==6.33.0
 pydantic==2.12.3
 pydantic-settings==2.11.0

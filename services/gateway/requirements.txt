@@ -11,6 +11,9 @@ protobuf==6.33.0
 # OpenTelemetry (OTLP ingestion, proto definitions only)
 opentelemetry-proto==1.39.0
 
+# Self-monitoring (imported only when SELF_MONITORING_API_KEY is set)
+ledger-sdk>=2.4.0,<3
+
 # Redis Client
 redis[hiredis]==6.4.0
 

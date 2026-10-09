@@ -5,7 +5,7 @@ import typing
 import fastapi
 import gateway_service.config as config
 from fastapi.responses import JSONResponse
-from gateway_service.middleware import auth, circuit_breaker, gzip_request, rate_limit
+from gateway_service.middleware import auth, gzip_request, rate_limit
 from gateway_service.routes import (
     alert_routes,
     api_key_routes,
@@ -23,7 +23,7 @@ from gateway_service.routes import (
     sharing_routes,
     tracing_routes,
 )
-from gateway_service.services import grpc_pool, redis_client
+from gateway_service.services import grpc_pool, pubsub_hub, redis_client, self_monitoring
 
 logging.basicConfig(
     level=getattr(logging, config.settings.LOG_LEVEL),
@@ -36,6 +36,7 @@ class GatewayApp:
     def __init__(self):
         self.grpc_pool: grpc_pool.GRPCPoolManager | None = None
         self.redis_client: redis_client.RedisClient | None = None
+        self.pubsub_hub: pubsub_hub.PubSubHub | None = None
 
     async def startup(self):
         self.redis_client = redis_client.RedisClient(
@@ -44,6 +45,8 @@ class GatewayApp:
             decode_responses=False,
         )
         await self.redis_client.connect()
+
+        self.pubsub_hub = pubsub_hub.PubSubHub(config.settings.REDIS_URL)
 
         self.grpc_pool = grpc_pool.GRPCPoolManager()
 
@@ -66,8 +69,13 @@ class GatewayApp:
         if self.grpc_pool:
             await self.grpc_pool.close_all()
 
+        if self.pubsub_hub:
+            await self.pubsub_hub.close()
+
         if self.redis_client:
             await self.redis_client.close()
+
+        self_monitoring.stop()
 
 
 gateway_app = GatewayApp()
@@ -78,6 +86,7 @@ async def lifespan(app: fastapi.FastAPI) -> typing.AsyncIterator[None]:
     await gateway_app.startup()
     app.state.grpc_pool = gateway_app.grpc_pool
     app.state.redis_client = gateway_app.redis_client
+    app.state.pubsub_hub = gateway_app.pubsub_hub
     yield
     await gateway_app.shutdown()
 
@@ -96,7 +105,6 @@ Production-ready, OpenTelemetry-native API for ingesting, storing, and querying 
 * **High-throughput ingestion** - Process 10K+ requests per second
 * **Multi-tenant architecture** - Project-based isolation with API key authentication
 * **Rate limiting** - Automatic rate limiting per API key (per-minute and per-hour)
-* **Circuit breaker** - Graceful degradation with fallback mechanisms
 * **Real-time analytics** - Pre-computed metrics and dashboards
 * **Real-time notifications** - Server-Sent Events (SSE) for instant error alerts
 * **Flexible querying** - Filter logs by level, type, time range, and more
@@ -283,6 +291,9 @@ async def deep_health_check():
     grpc_stats = gateway_app.grpc_pool.get_stats()  # type: ignore
     health_status["services"]["grpc"] = grpc_stats
 
+    if gateway_app.pubsub_hub is not None:
+        health_status["services"]["sse"] = gateway_app.pubsub_hub.stats()
+
     return health_status
 
 
@@ -308,8 +319,12 @@ def add_middleware(middleware_class, **options):
 
 # CORS MANAGED BY REVERSE PROXY
 
+# Starlette wraps in reverse registration order, so the last one added runs
+# first: auth -> rate limit -> body limit/gzip -> routes.
+# The body middleware must stay inside auth so an unauthenticated request is
+# never buffered or inflated.
 add_middleware(
-    circuit_breaker.CircuitBreakerMiddleware,
+    gzip_request.GzipRequestMiddleware,
 )
 add_middleware(
     rate_limit.RateLimitMiddleware,
@@ -317,9 +332,28 @@ add_middleware(
 add_middleware(
     auth.AuthMiddleware,
 )
-add_middleware(
-    gzip_request.GzipRequestMiddleware,
-)
+
+# Self-monitoring wraps everything, so rejected (401/429/413) requests show up
+# too. OTLP ingestion is excluded: those are customers' exports (and this
+# process's own), and tracing them would turn every export into more exports.
+# SSE streams are long-lived and health checks are noise.
+_self_monitoring = self_monitoring.start("gateway")
+if _self_monitoring is not None:
+    import ledger.integrations.fastapi as ledger_fastapi
+
+    add_middleware(
+        ledger_fastapi.LedgerMiddleware,
+        ledger_client=_self_monitoring,
+        exclude_paths=[
+            "/v1/logs",
+            "/v1/traces",
+            "/v1/metrics",
+            "/health",
+            "/health/deep",
+            "/api/v1/logs/tail",
+            "/api/v1/notifications/stream",
+        ],
+    )
 
 
 def include_router(router, prefix: str = ""):

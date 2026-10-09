@@ -13,7 +13,11 @@ protobuf==6.33.0
 # Security
 bcrypt==5.0.0
 pyjwt[crypto]==2.10.1
+cryptography==50.0.2
 pyotp==2.9.0
+
+# Self-monitoring (imported only when SELF_MONITORING_API_KEY is set)
+ledger-sdk>=2.4.0,<3
 
 # Config
 pydantic==2.12.3

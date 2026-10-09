@@ -19,8 +19,18 @@ class Settings(pydantic_settings.BaseSettings):
         description="Application environment",
     )
 
+    SELF_MONITORING_API_KEY: str = pydantic.Field(
+        default="",
+        description="API key of the project Ledger reports its own telemetry to; empty disables it",
+    )
+
+    SELF_MONITORING_URL: str = pydantic.Field(
+        default="http://ledger-gateway:8000",
+        description="Gateway the services export their own telemetry to",
+    )
+
     DEBUG: bool = pydantic.Field(
-        default=True,
+        default=False,
         description="Enable debug mode",
     )
 
@@ -74,8 +84,11 @@ class Settings(pydantic_settings.BaseSettings):
         description="Auth database password",
     )
 
-    DB_POOL_SIZE: typing.ClassVar[int] = 20
-    DB_MAX_OVERFLOW: typing.ClassVar[int] = 10
+    # Per database (one pool each for the logs and auth DBs). Jobs that fire on
+    # the same minute queue for a connection rather than opening more; see the
+    # connection budget in ingestion_service.config.
+    DB_POOL_SIZE: typing.ClassVar[int] = 4
+    DB_MAX_OVERFLOW: typing.ClassVar[int] = 2
 
     @property
     def LOGS_DATABASE_URL(self) -> str:
@@ -199,6 +212,12 @@ class Settings(pydantic_settings.BaseSettings):
         "the metric series query falls back to for windows longer than two days",
     )
 
+    ANALYTICS_SERVICE_EDGES_1H_ROLLUP_CRON: str = pydantic.Field(
+        default="5-59/10 * * * *",
+        description="service_edges_1h rollup cron schedule - feeds service maps for windows "
+        "longer than a few hours (staggered off the metric_points_1h rollup)",
+    )
+
     ANALYTICS_PARTITION_MANAGER_CRON: str = pydantic.Field(
         default="10 * * * *",
         description="Partition manager cron schedule (staggered off the hour boundary)",
@@ -222,6 +241,11 @@ class Settings(pydantic_settings.BaseSettings):
     ALERT_WEBHOOK_ALLOW_HTTP: bool = pydantic.Field(
         default=False,
         description="Allow plain-http webhook URLs (dev/testing only; https required otherwise)",
+    )
+
+    CONNECTOR_SECRETS_KEY: str = pydantic.Field(
+        default="",
+        description="Fernet key(s) the auth service encrypts connector credentials with",
     )
 
     ANALYTICS_NOTIFICATION_CLEANUP_CRON: str = pydantic.Field(

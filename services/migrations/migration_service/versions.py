@@ -28,6 +28,10 @@ SCHEMA_VERSIONS: dict[int, dict[str, str]] = {
         "auth": "b8c9d0e1f2a3",
         "logs": "022",
     },
+    5: {
+        "auth": "c9d0e1f2a3b4",
+        "logs": "024",
+    },
 }
 
 LATEST_VERSION: int = max(SCHEMA_VERSIONS)

@@ -8,6 +8,7 @@ from redis.asyncio import Redis
 from . import config, database
 from .grpc import servicers
 from .proto import auth_pb2_grpc
+from .services import connector_secrets, self_monitoring
 
 logging.basicConfig(
     level=getattr(logging, config.settings.LOG_LEVEL),
@@ -16,8 +17,19 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+async def _encrypt_stored_connector_secrets() -> None:
+    connector_secrets.ensure_key_configured()
+    async with database.get_session() as session:
+        rewritten = await connector_secrets.rewrite_stored_configs(session)
+    if rewritten:
+        logger.info(f"Encrypted connector secrets under the current key: {rewritten} connectors")
+
+
 async def serve():
     """Start gRPC server."""
+
+    self_monitoring.start("auth")
+    await _encrypt_stored_connector_secrets()
 
     redis = Redis.from_url(
         config.settings.REDIS_URL,
@@ -28,6 +40,7 @@ async def serve():
 
     server = grpc.aio.server(
         concurrent.futures.ThreadPoolExecutor(max_workers=10),
+        interceptors=self_monitoring.rpc_interceptors("auth"),
         options=[
             ("grpc.max_send_message_length", 100 * 1024 * 1024),
             ("grpc.max_receive_message_length", 100 * 1024 * 1024),
@@ -61,6 +74,7 @@ async def serve():
         await server.stop(grace=5)
         await redis.close()
         await database.close_db()
+        self_monitoring.stop()
 
 
 def main():

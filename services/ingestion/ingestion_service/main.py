@@ -8,6 +8,7 @@ import ingestion_service.grpc.servicers as servicers
 import ingestion_service.proto.ingestion_pb2_grpc as ingestion_pb2_grpc
 import ingestion_service.services.rabbitmq_client as rabbitmq_client
 import ingestion_service.services.redis_client as redis_client
+import ingestion_service.services.self_monitoring as self_monitoring
 
 logging.basicConfig(
     level=getattr(logging, config.settings.LOG_LEVEL),
@@ -17,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 async def serve():
+    self_monitoring.start("ingestion")
     redis = redis_client.get_redis_client()
     await redis.ping()
 
@@ -25,6 +27,7 @@ async def serve():
     await rabbitmq_client.setup_topology()
 
     server = grpc.aio.server(
+        interceptors=self_monitoring.rpc_interceptors("ingestion"),
         options=[
             ("grpc.max_send_message_length", 100 * 1024 * 1024),
             ("grpc.max_receive_message_length", 100 * 1024 * 1024),
@@ -60,6 +63,7 @@ async def serve():
         await redis_client.close_redis()
 
         await database.close_db()
+        self_monitoring.stop()
 
 
 if __name__ == "__main__":

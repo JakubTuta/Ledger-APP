@@ -6,7 +6,7 @@ import msgpack
 import pytest
 import sqlalchemy
 from ingestion_service import models, schemas
-from ingestion_service.services import queue_service
+from ingestion_service.services import queue_service, self_monitoring
 from ingestion_service.worker import StorageWorker
 
 from .test_base import BaseIngestionTest
@@ -530,6 +530,25 @@ class TestFlushBatch:
         assert bad_message.ack_calls == []
         assert bad_message.nack_calls == [False]
         assert worker.failed_count == 2
+
+    async def test_stored_and_dropped_items_are_reported_to_self_monitoring(self):
+        worker = self._worker()
+        messages = [_FakeAckableMessage(), _FakeAckableMessage()]
+        message_logs = [[{"id": 1}], [{"id": 2}, {"id": 3}]]
+        mock_process = unittest.mock.AsyncMock(
+            side_effect=[Exception("batch failed"), None, Exception("first"), Exception("retry")]
+        )
+
+        with (
+            unittest.mock.patch.object(worker, "process_logs_batch", new=mock_process),
+            unittest.mock.patch.object(self_monitoring, "increment") as increment,
+        ):
+            await worker._flush_batch(messages, message_logs)
+
+        assert increment.call_args_list == [
+            unittest.mock.call("ledger.storage.rows", 1, {"signal": "logs"}),
+            unittest.mock.call("ledger.storage.dropped", 2, {"signal": "logs"}),
+        ]
 
     async def test_zip_pairs_each_message_with_its_own_logs(self):
         """The fallback loop must pair messages[i] with message_logs[i], not

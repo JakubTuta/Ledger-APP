@@ -19,6 +19,9 @@ msgpack==1.1.2
 # Scheduling
 apscheduler==3.11.0
 
+# Self-monitoring (imported only when SELF_MONITORING_API_KEY is set)
+ledger-sdk>=2.4.0,<3
+
 # Configuration & Validation
 pydantic==2.12.3
 pydantic-settings==2.11.0

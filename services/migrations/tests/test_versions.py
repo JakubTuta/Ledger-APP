@@ -35,9 +35,10 @@ class TestVersionOf:
         assert versions.version_of("logs", "016") == 1
 
     def test_unchanged_head_resolves_to_the_latest_version_that_declares_it(self):
-        # auth's head has not moved since version 1; version_of reports the newest
-        # schema version that still carries it, which is what schema_version_label wants.
-        assert versions.version_of("auth", "b8c9d0e1f2a3") == versions.LATEST_VERSION
+        # auth's head did not move from version 1 through 4; version_of reports the
+        # newest schema version that still carries it, which is what
+        # schema_version_label wants.
+        assert versions.version_of("auth", "b8c9d0e1f2a3") == 4
 
     def test_other_revision_is_unversioned(self):
         assert versions.version_of("auth", "a2dd1ac4850d") is None
