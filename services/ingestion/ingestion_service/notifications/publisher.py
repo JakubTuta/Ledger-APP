@@ -23,42 +23,68 @@ class ErrorNotification(BaseModel):
     platform: str | None = None
 
 
+class PerSecondBudget:
+    """How many events each project may still emit in the current second."""
+
+    def __init__(self, per_second: int):
+        self.per_second = per_second
+        self._window: dict[int, tuple[int, int]] = {}  # project_id -> (second, used)
+
+    def take(self, project_id: int, wanted: int) -> int:
+        now_second = int(time.time())
+        window_second, used = self._window.get(project_id, (now_second, 0))
+        if window_second != now_second:
+            window_second, used = now_second, 0
+        granted = max(0, min(wanted, self.per_second - used))
+        self._window[project_id] = (window_second, used + granted)
+        return granted
+
+
 class NotificationPublisher:
+    # Live error notifications are read by people: past a few per second per
+    # project a dashboard cannot show them, while an error storm used to cost one
+    # PUBLISH - and one SSE event in every open tab - per error log.
+    MAX_NOTIFICATIONS_PER_PROJECT_PER_SECOND = 20
+
     def __init__(self, redis_client: redis.Redis, enabled: bool = True):
         self.redis = redis_client
         self.enabled = enabled
+        self._budget = PerSecondBudget(self.MAX_NOTIFICATIONS_PER_PROJECT_PER_SECOND)
 
     async def publish_error_notification(
         self, project_id: int, notification: ErrorNotification
     ) -> None:
-        if not self.enabled:
+        await self.publish_error_notifications(project_id, [notification])
+
+    async def publish_error_notifications(
+        self, project_id: int, notifications: list[ErrorNotification]
+    ) -> None:
+        """Publish up to the project's per-second budget, in one pipelined round trip."""
+        if not self.enabled or not notifications:
             return
 
+        granted = self._budget.take(project_id, len(notifications))
+        if granted < len(notifications):
+            logger.debug(
+                "Error notification budget reached; skipping the rest of the batch",
+                extra={"project_id": project_id, "skipped": len(notifications) - granted},
+            )
+        if granted == 0:
+            return
+
+        channel = f"notifications:errors:{project_id}"
+        messages = [notification.model_dump_json() for notification in notifications[:granted]]
         try:
-            channel = f"notifications:errors:{project_id}"
-            message = notification.model_dump_json()
-
-            published = await self.redis.publish(channel, message)
-
-            if published > 0:
-                logger.info(
-                    f"Published error notification to {published} subscribers",
-                    extra={
-                        "channel": channel,
-                        "project_id": project_id,
-                        "level": notification.level,
-                        "error_type": notification.error_type,
-                    },
-                )
+            if len(messages) == 1:
+                await self.redis.publish(channel, messages[0])
             else:
-                logger.debug(
-                    "Published error notification but no active subscribers",
-                    extra={"channel": channel, "project_id": project_id},
-                )
-
+                pipe = self.redis.pipeline(transaction=False)
+                for message in messages:
+                    pipe.publish(channel, message)
+                await pipe.execute()
         except Exception as e:
             logger.error(
-                f"Failed to publish error notification: {e}",
+                f"Failed to publish error notifications: {e}",
                 extra={"project_id": project_id, "error": str(e)},
                 exc_info=True,
             )
@@ -94,33 +120,24 @@ class TailPublisher:
     def __init__(self, redis_client: redis.Redis, enabled: bool = True):
         self.redis = redis_client
         self.enabled = enabled
-        self._window: dict[int, tuple[int, int]] = {}  # project_id -> (second, count_in_second)
-
-    def _allow(self, project_id: int) -> bool:
-        now_second = int(time.time())
-        window_second, count = self._window.get(project_id, (now_second, 0))
-        if window_second != now_second:
-            window_second, count = now_second, 0
-        if count >= self.MAX_EVENTS_PER_PROJECT_PER_SECOND:
-            self._window[project_id] = (window_second, count)
-            return False
-        self._window[project_id] = (window_second, count + 1)
-        return True
+        self._budget = PerSecondBudget(self.MAX_EVENTS_PER_PROJECT_PER_SECOND)
 
     async def publish_tail_batch(self, project_id: int, records: list[dict]) -> None:
         if not self.enabled or not records:
             return
 
+        granted = self._budget.take(project_id, len(records))
+        if granted < len(records):
+            logger.debug(
+                "Tail sample cap reached; dropping remaining events in batch",
+                extra={"project_id": project_id},
+            )
+        if granted == 0:
+            return
+
         channel = f"logs:tail:{project_id}"
-
-        for record in records:
-            if not self._allow(project_id):
-                logger.debug(
-                    "Tail sample cap reached; dropping remaining events in batch",
-                    extra={"project_id": project_id},
-                )
-                break
-
+        pipe = self.redis.pipeline(transaction=False)
+        for record in records[:granted]:
             summary = {
                 "id": record.get("log_id"),
                 "project_id": project_id,
@@ -137,14 +154,16 @@ class TailPublisher:
                 "path": record.get("path"),
                 "status_code": record.get("status_code"),
                 "duration_ms": record.get("duration_ms"),
+                "service_name": record.get("service_name"),
+                "trace_id": record.get("trace_id"),
             }
+            pipe.publish(channel, json.dumps(summary, default=str))
 
-            try:
-                await self.redis.publish(channel, json.dumps(summary, default=str))
-            except Exception as e:
-                logger.error(
-                    f"Failed to publish tail event: {e}",
-                    extra={"project_id": project_id},
-                    exc_info=True,
-                )
-                break
+        try:
+            await pipe.execute()
+        except Exception as e:
+            logger.error(
+                f"Failed to publish tail events: {e}",
+                extra={"project_id": project_id},
+                exc_info=True,
+            )

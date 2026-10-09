@@ -22,9 +22,9 @@ from sqlalchemy.engine import make_url
 
 _SCRATCH_DB_NAME = "test_schema_parity_logs"
 
-_HOT_PATH_TABLES = ("logs", "spans", "metric_points", "error_groups")
+_HOT_PATH_TABLES = ("logs", "spans", "metric_points", "error_groups", "resources")
 
-# Snapshot of `pg_indexes` for the hot-path tables at migration head 021.
+# Snapshot of `pg_indexes` for the hot-path tables at migration head 024.
 # Update this alongside a migration that intentionally adds/drops/renames one
 # of these indexes - and say so in the revision's message, since every index
 # here is on the ingestion hot path and its removal/addition changes write cost.
@@ -121,6 +121,10 @@ _EXPECTED_INDEXES = {
     ("spans", "spans_pkey"): (
         "CREATE UNIQUE INDEX spans_pkey ON ONLY public.spans USING btree (span_id, start_time)"
     ),
+    ("resources", "resources_pkey"): (
+        "CREATE UNIQUE INDEX resources_pkey ON public.resources "
+        "USING btree (project_id, resource_hash)"
+    ),
 }
 
 # Snapshot of `pg_constraint` (contype: c=check, p=primary key) for the same
@@ -134,6 +138,7 @@ _EXPECTED_CONSTRAINTS = {
     ("logs", "check_log_type"): "c",
     ("logs", "logs_pkey"): "p",
     ("metric_points", "metric_points_pkey"): "p",
+    ("resources", "resources_pkey"): "p",
     ("spans", "spans_pkey"): "p",
 }
 

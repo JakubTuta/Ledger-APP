@@ -10,6 +10,7 @@ from opentelemetry.proto.collector.trace.v1 import trace_service_pb2
 import gateway_service.config as config
 import gateway_service.proto.ingestion_pb2 as ingestion_pb2
 import gateway_service.services.otlp_translator as otlp_translator
+import gateway_service.services.self_monitoring as self_monitoring
 
 router = fastapi.APIRouter(tags=["OTLP"])
 logger = logging.getLogger(__name__)
@@ -89,16 +90,22 @@ def _http_error_for(rpc_error: grpc.RpcError, signal: str) -> fastapi.HTTPExcept
 
 
 async def _forward_in_chunks(
-    request: fastapi.Request, project_id: int, items: list, signal: _Signal
-) -> tuple[int, list[str]]:
+    request: fastapi.Request,
+    project_id: int,
+    translated: otlp_translator.Translated,
+    signal: _Signal,
+) -> tuple[int, int, list[str]]:
     """Send `items` to the ingestion service in batches it will accept.
 
-    Returns (rejected count, per-chunk detail messages). A chunk that fails
-    outright raises, unless earlier chunks already landed - re-raising then would
-    make the exporter resend data that is already stored, so the remainder is
-    reported as rejected via OTLP partial_success instead.
+    Returns (rejected count, unsent count, per-chunk detail messages). A chunk
+    that fails outright raises, unless earlier chunks already landed -
+    re-raising then would make the exporter resend data that is already
+    stored, so the remainder is reported as rejected via OTLP partial_success
+    instead. `unsent` is the part of that remainder that never reached the
+    ingestion service.
     """
     grpc_pool = request.app.state.grpc_pool
+    items = translated.items
     rejected = 0
     sent = 0
     details: list[str] = []
@@ -110,7 +117,7 @@ async def _forward_in_chunks(
             async with grpc_pool.get_ingestion_stub() as stub:
                 method = getattr(stub, signal.grpc_method_name)
                 response = await method(
-                    signal.build_grpc_request(project_id, chunk),
+                    signal.build_grpc_request(project_id, chunk, translated.resources),
                     timeout=config.settings.GRPC_TIMEOUT,
                 )
         except grpc.RpcError as e:
@@ -123,14 +130,15 @@ async def _forward_in_chunks(
                 f"{e.code()} - {e.details()}"
             )
             details.append(f"ingestion unavailable after {sent} accepted")
-            return rejected + (len(items) - sent), details
+            unsent = len(items) - sent
+            return rejected + unsent, unsent, details
 
         rejected += signal.rejected_of(response)
         if response.HasField("error") and response.error:
             details.append(response.error)
         sent += len(chunk)
 
-    return rejected, details
+    return rejected, 0, details
 
 
 async def _export(request: fastapi.Request, signal: _Signal) -> fastapi.Response:
@@ -148,7 +156,8 @@ async def _export(request: fastapi.Request, signal: _Signal) -> fastapi.Response
     except otlp_translator.TranslationError as e:
         raise fastapi.HTTPException(status_code=400, detail=str(e))
 
-    items = signal.translate(otlp_request)
+    translated = signal.translate(otlp_request)
+    items = translated.items
 
     if len(items) > _MAX_ITEMS_PER_REQUEST:
         raise fastapi.HTTPException(
@@ -172,12 +181,28 @@ async def _export(request: fastapi.Request, signal: _Signal) -> fastapi.Response
         if quota_error is not None:
             rejected = len(items)
             error_message = quota_error
+            _count_items(signal, "quota", rejected)
         else:
-            rejected, details = await _forward_in_chunks(request, project_id, items, signal)
+            redis = request.app.state.redis_client
+            # Items that never reached ingestion give their reservation back:
+            # the exporter retries a 503, and an outage would otherwise burn the
+            # day's quota on data that was never stored.
+            try:
+                rejected, unsent, details = await _forward_in_chunks(
+                    request, project_id, translated, signal
+                )
+            except fastapi.HTTPException:
+                await redis.refund_quota(project_id, signal.name, len(items))
+                _count_items(signal, "unavailable", len(items))
+                raise
+            if unsent:
+                await redis.refund_quota(project_id, signal.name, unsent)
             if rejected:
                 error_message = "; ".join(details) or (
                     f"{rejected} of {len(items)} {signal.name} rejected"
                 )
+            _count_items(signal, "accepted", len(items) - rejected)
+            _count_items(signal, "rejected", rejected)
 
     response_proto = signal.new_response()
     if rejected:
@@ -188,6 +213,13 @@ async def _export(request: fastapi.Request, signal: _Signal) -> fastapi.Response
         media_type=content_type,
         status_code=200,
     )
+
+
+def _count_items(signal: _Signal, outcome: str, count: int) -> None:
+    if count:
+        self_monitoring.increment(
+            "ledger.otlp.items", count, {"signal": signal.name, "outcome": outcome}
+        )
 
 
 def _set_partial_success(field_name: str) -> typing.Callable:
@@ -203,8 +235,8 @@ _TRACES = _Signal(
     decode=otlp_translator.decode_trace_request,
     translate=otlp_translator.otlp_spans_to_proto,
     quota_state_attr="spans_daily_quota",
-    build_grpc_request=lambda project_id, chunk: ingestion_pb2.IngestSpansBatchRequest(
-        project_id=project_id, spans=chunk
+    build_grpc_request=lambda project_id, chunk, resources: ingestion_pb2.IngestSpansBatchRequest(
+        project_id=project_id, spans=chunk, resources=resources
     ),
     grpc_method_name="IngestSpansBatch",
     rejected_of=lambda response: response.rejected,
@@ -217,8 +249,8 @@ _LOGS = _Signal(
     decode=otlp_translator.decode_logs_request,
     translate=otlp_translator.otlp_logs_to_proto,
     quota_state_attr="logs_daily_quota",
-    build_grpc_request=lambda project_id, chunk: ingestion_pb2.IngestLogBatchRequest(
-        project_id=project_id, logs=chunk
+    build_grpc_request=lambda project_id, chunk, resources: ingestion_pb2.IngestLogBatchRequest(
+        project_id=project_id, logs=chunk, resources=resources
     ),
     grpc_method_name="IngestLogBatch",
     rejected_of=lambda response: response.failed,
@@ -231,8 +263,10 @@ _METRICS = _Signal(
     decode=otlp_translator.decode_metrics_request,
     translate=otlp_translator.otlp_metrics_to_proto,
     quota_state_attr="metrics_daily_quota",
-    build_grpc_request=lambda project_id, chunk: ingestion_pb2.IngestMetricPointsBatchRequest(
-        project_id=project_id, points=chunk
+    build_grpc_request=lambda project_id, chunk, resources: (
+        ingestion_pb2.IngestMetricPointsBatchRequest(
+            project_id=project_id, points=chunk, resources=resources
+        )
     ),
     grpc_method_name="IngestMetricPointsBatch",
     rejected_of=lambda response: response.rejected,

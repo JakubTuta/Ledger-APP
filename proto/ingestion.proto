@@ -54,6 +54,14 @@ message LogEntry {
     optional string client_channel = 16;
     // ISO 3166-1 alpha-2 country code resolved from the (truncated) client IP
     optional string client_country = 17;
+
+    // Key into the batch's `resources`; the resource attributes are stored once
+    // per distinct resource instead of being repeated in every row.
+    optional int64 resource_hash = 18;
+    optional string service_name = 19;
+    // W3C trace context of the record (32 / 16 lowercase hex chars).
+    optional string trace_id = 20;
+    optional string span_id = 21;
 }
 
 message IngestLogRequest {
@@ -70,6 +78,8 @@ message IngestLogResponse {
 message IngestLogBatchRequest {
     int64 project_id = 1;
     repeated LogEntry logs = 2;
+    // resource_hash -> resource attributes (JSON object string)
+    map<int64, string> resources = 3;
 }
 
 message IngestLogBatchResponse {
@@ -114,11 +124,13 @@ message Span {
     map<string, string> attributes = 10;
     repeated SpanEvent events      = 11;
     string service_name    = 12;
+    optional int64 resource_hash = 13;
 }
 
 message IngestSpansBatchRequest {
     int64 project_id    = 1;
     repeated Span spans = 2;
+    map<int64, string> resources = 3;
 }
 
 message IngestSpansBatchResponse {
@@ -131,9 +143,11 @@ message IngestSpansBatchResponse {
 // ==================== Metric Ingestion Messages ====================
 
 enum MetricType {
-    SUM       = 0;
-    GAUGE     = 1;
-    HISTOGRAM = 2;
+    SUM                   = 0;
+    GAUGE                 = 1;
+    HISTOGRAM             = 2;
+    EXPONENTIAL_HISTOGRAM = 3;
+    SUMMARY               = 4;
 }
 
 // Mirrors OTLP AggregationTemporality. A cumulative point carries a running
@@ -164,11 +178,37 @@ message MetricPoint {
     string service_name      = 10;
 
     MetricTemporality temporality = 11;
+
+    optional int64 resource_hash = 12;
+
+    // exponential histogram: bucket i of a range covers
+    // (base^(offset+i), base^(offset+i+1)] with base = 2^(2^-scale)
+    optional int32 scale             = 13;
+    optional int64 zero_count        = 14;
+    optional int32 positive_offset   = 15;
+    repeated int64 positive_counts   = 16;
+    optional int32 negative_offset   = 17;
+    repeated int64 negative_counts   = 18;
+
+    // summary: parallel arrays of quantile (0..1) and its reported value
+    repeated double quantiles        = 19;
+    repeated double quantile_values  = 20;
+
+    repeated Exemplar exemplars      = 21;
+}
+
+// A sample measurement linked to the trace that produced it.
+message Exemplar {
+    double value    = 1;
+    string timestamp = 2;  // ISO 8601
+    string trace_id = 3;   // 32 hex chars, empty if unsampled
+    string span_id  = 4;   // 16 hex chars
 }
 
 message IngestMetricPointsBatchRequest {
     int64 project_id           = 1;
     repeated MetricPoint points = 2;
+    map<int64, string> resources = 3;
 }
 
 message IngestMetricPointsBatchResponse {

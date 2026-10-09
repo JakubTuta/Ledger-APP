@@ -1,24 +1,19 @@
 import asyncio
 
 import asyncpg
-import query_service.config as config
 import query_service.models as models
 import sqlalchemy
 import sqlalchemy.ext.asyncio as sa_async
 import sqlalchemy.pool as sa_pool
 
-TEST_DB_HOST = "localhost"
-TEST_DB_PORT = "5433"
-TEST_DB_NAME = "test_logs_db"
-TEST_DB_URL = (
-    f"postgresql+asyncpg://{config.settings.LOGS_DB_USER}:{config.settings.LOGS_DB_PASSWORD}"
-    f"@{TEST_DB_HOST}:{TEST_DB_PORT}/{TEST_DB_NAME}"
-)
+import tests.infra as infra
 
-POSTGRES_URL = (
-    f"postgresql://{config.settings.LOGS_DB_USER}:{config.settings.LOGS_DB_PASSWORD}"
-    f"@{TEST_DB_HOST}:{TEST_DB_PORT}/postgres"
+TEST_DB_NAME = infra.require_test_database_name("test_logs_db")
+_SERVER = (
+    f"{infra.POSTGRES_USER}:{infra.POSTGRES_PASSWORD}@{infra.POSTGRES_HOST}:{infra.POSTGRES_PORT}"
 )
+TEST_DB_URL = f"postgresql+asyncpg://{_SERVER}/{TEST_DB_NAME}"
+POSTGRES_URL = f"postgresql://{_SERVER}/postgres"
 
 
 class TestDatabase:
@@ -66,6 +61,10 @@ class TestDatabase:
                             tags_hash       CHAR(16) NOT NULL,
                             service_name    TEXT,
                             temporality     SMALLINT,
+                            resource_hash   BIGINT,
+                            exp_histogram   JSONB,
+                            quantiles       JSONB,
+                            exemplars       JSONB,
                             PRIMARY KEY (project_id, name, tags_hash, ts)
                         ) PARTITION BY RANGE (ts)
                     """)
@@ -87,6 +86,53 @@ class TestDatabase:
                             temporality  SMALLINT,
                             PRIMARY KEY (project_id, name, tags_hash, bucket)
                         )
+                    """)
+                )
+
+                conn_sync.execute(
+                    sqlalchemy.text("""
+                        CREATE TABLE IF NOT EXISTS service_edges_1h (
+                            project_id      BIGINT NOT NULL,
+                            bucket          TIMESTAMPTZ NOT NULL,
+                            caller          TEXT NOT NULL,
+                            callee          TEXT NOT NULL,
+                            calls           BIGINT NOT NULL,
+                            errors          BIGINT NOT NULL,
+                            duration_ns_sum BIGINT NOT NULL,
+                            p95_ns          BIGINT,
+                            PRIMARY KEY (project_id, bucket, caller, callee)
+                        )
+                    """)
+                )
+
+                # spans have no ORM model here either (read via raw SQL in
+                # services/tracing.py and services/correlation.py).
+                conn_sync.execute(
+                    sqlalchemy.text("""
+                        CREATE TABLE IF NOT EXISTS spans (
+                            span_id           CHAR(16) NOT NULL,
+                            trace_id          CHAR(32) NOT NULL,
+                            parent_span_id    CHAR(16),
+                            project_id        BIGINT NOT NULL,
+                            service_name      TEXT NOT NULL,
+                            name              TEXT NOT NULL,
+                            kind              SMALLINT NOT NULL DEFAULT 0,
+                            start_time        TIMESTAMPTZ NOT NULL,
+                            duration_ns       BIGINT NOT NULL DEFAULT 0,
+                            status_code       SMALLINT NOT NULL DEFAULT 0,
+                            status_message    TEXT,
+                            attributes        JSONB NOT NULL DEFAULT '{}'::jsonb,
+                            events            JSONB,
+                            error_fingerprint CHAR(64),
+                            resource_hash     BIGINT,
+                            PRIMARY KEY (span_id, start_time)
+                        ) PARTITION BY RANGE (start_time)
+                    """)
+                )
+                conn_sync.execute(
+                    sqlalchemy.text("""
+                        CREATE TABLE IF NOT EXISTS spans_test_partition PARTITION OF spans
+                        FOR VALUES FROM ('2020-01-01') TO ('2030-12-31')
                     """)
                 )
 
@@ -121,6 +167,8 @@ class TestDatabase:
             def drop_all(conn_sync):
                 conn_sync.execute(sqlalchemy.text("DROP TABLE IF EXISTS metric_points_1h"))
                 conn_sync.execute(sqlalchemy.text("DROP TABLE IF EXISTS metric_points CASCADE"))
+                conn_sync.execute(sqlalchemy.text("DROP TABLE IF EXISTS spans CASCADE"))
+                conn_sync.execute(sqlalchemy.text("DROP TABLE IF EXISTS service_edges_1h"))
                 models.Base.metadata.drop_all(conn_sync)
 
             await conn.run_sync(drop_all)
@@ -131,7 +179,7 @@ class TestDatabase:
             return
         async with self.engine.begin() as conn:
             table_names = [t.name for t in reversed(models.Base.metadata.sorted_tables)]
-            table_names += ["metric_points_1h", "metric_points"]
+            table_names += ["metric_points_1h", "metric_points", "spans", "service_edges_1h"]
             if table_names:
                 await conn.execute(
                     sqlalchemy.text(

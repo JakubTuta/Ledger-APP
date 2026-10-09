@@ -7,7 +7,7 @@ import sqlalchemy
 import sqlalchemy.ext.asyncio as sa_async
 import sqlalchemy.pool as sa_pool
 
-import analytics_workers.config as config
+import tests.infra as infra
 
 # analytics_workers owns no ORM models of its own (every job is raw SQL
 # against tables owned by auth_service and ingestion_service - see
@@ -28,11 +28,8 @@ import auth_service.models  # noqa: E402,F401
 import ingestion_service.database as logs_db_module  # noqa: E402
 import ingestion_service.models  # noqa: E402,F401
 
-TEST_DB_HOST = "localhost"
-TEST_AUTH_DB_PORT = "5432"
-TEST_LOGS_DB_PORT = "5433"
-TEST_AUTH_DB_NAME = "test_auth_db"
-TEST_LOGS_DB_NAME = "test_logs_db"
+TEST_AUTH_DB_NAME = infra.require_test_database_name("test_auth_db")
+TEST_LOGS_DB_NAME = infra.require_test_database_name("test_logs_db")
 
 # Rollup tables live in logs_db (created by ingestion's migrations), mirrored
 # here since analytics has no ORM model for them either.
@@ -115,6 +112,19 @@ _LOGS_ROLLUP_DDL = [
         PRIMARY KEY (project_id, name, tags_hash, bucket)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS service_edges_1h (
+        project_id      BIGINT NOT NULL,
+        bucket          TIMESTAMPTZ NOT NULL,
+        caller          TEXT NOT NULL,
+        callee          TEXT NOT NULL,
+        calls           BIGINT NOT NULL,
+        errors          BIGINT NOT NULL,
+        duration_ns_sum BIGINT NOT NULL,
+        p95_ns          BIGINT,
+        PRIMARY KEY (project_id, bucket, caller, callee)
+    )
+    """,
 ]
 
 
@@ -142,12 +152,10 @@ class _TestDatabase:
 class AnalyticsTestDatabases:
     def __init__(self):
         self.auth = _TestDatabase(
-            f"postgresql+asyncpg://{config.settings.AUTH_DB_USER}:{config.settings.AUTH_DB_PASSWORD}"
-            f"@{TEST_DB_HOST}:{TEST_AUTH_DB_PORT}/{TEST_AUTH_DB_NAME}"
+            infra.AUTH_DB_SERVER.url(TEST_AUTH_DB_NAME, driver="postgresql+asyncpg")
         )
         self.logs = _TestDatabase(
-            f"postgresql+asyncpg://{config.settings.LOGS_DB_USER}:{config.settings.LOGS_DB_PASSWORD}"
-            f"@{TEST_DB_HOST}:{TEST_LOGS_DB_PORT}/{TEST_LOGS_DB_NAME}"
+            infra.LOGS_DB_SERVER.url(TEST_LOGS_DB_NAME, driver="postgresql+asyncpg")
         )
 
     async def create_engines(self) -> None:
@@ -225,6 +233,7 @@ class AnalyticsTestDatabases:
             def drop_logs(conn_sync):
                 for table in (
                     "rollup_job_state",
+                    "service_edges_1h",
                     "metric_points_1h",
                     "span_latency_1h",
                     "error_rate_5m",
@@ -256,6 +265,7 @@ class AnalyticsTestDatabases:
                 "error_rate_5m",
                 "span_latency_1h",
                 "metric_points_1h",
+                "service_edges_1h",
             ]
             await conn.execute(
                 sqlalchemy.text(f"TRUNCATE TABLE {', '.join(table_names)} RESTART IDENTITY CASCADE")
@@ -277,9 +287,8 @@ async def get_test_dbs() -> AnalyticsTestDatabases:
     return _test_dbs
 
 
-async def _ensure_database_exists(port: str, db_name: str, user: str, password: str) -> None:
-    postgres_url = f"postgresql://{user}:{password}@{TEST_DB_HOST}:{port}/postgres"
-    conn = await asyncpg.connect(postgres_url)
+async def _ensure_database_exists(server: infra.PostgresServer, db_name: str) -> None:
+    conn = await asyncpg.connect(server.url("postgres"))
     try:
         exists = await conn.fetchval("SELECT 1 FROM pg_database WHERE datname = $1", db_name)
         if not exists:
@@ -292,18 +301,8 @@ async def _ensure_database_exists(port: str, db_name: str, user: str, password: 
 
 
 async def setup_test_databases() -> None:
-    await _ensure_database_exists(
-        TEST_AUTH_DB_PORT,
-        TEST_AUTH_DB_NAME,
-        config.settings.AUTH_DB_USER,
-        config.settings.AUTH_DB_PASSWORD,
-    )
-    await _ensure_database_exists(
-        TEST_LOGS_DB_PORT,
-        TEST_LOGS_DB_NAME,
-        config.settings.LOGS_DB_USER,
-        config.settings.LOGS_DB_PASSWORD,
-    )
+    await _ensure_database_exists(infra.AUTH_DB_SERVER, TEST_AUTH_DB_NAME)
+    await _ensure_database_exists(infra.LOGS_DB_SERVER, TEST_LOGS_DB_NAME)
     dbs = await get_test_dbs()
     try:
         await dbs.create_tables()

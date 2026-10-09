@@ -8,6 +8,7 @@ import query_service.proto.query_pb2_grpc as query_pb2_grpc
 import query_service.schemas as schemas
 import query_service.services.aggregated_metrics as aggregated_metrics_service
 import query_service.services.bottleneck_metrics as bottleneck_metrics_service
+import query_service.services.correlation as correlation_service
 import query_service.services.error_groups as error_groups_service
 import query_service.services.health_summary as health_summary_service
 import query_service.services.log_query as log_query
@@ -994,7 +995,9 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
                     tags=histogram["tags"],
                     buckets=[
                         query_pb2.HistogramBucket(
-                            upper_bound=bucket["upper_bound"], count=bucket["count"]
+                            lower_bound=bucket["lower_bound"],
+                            upper_bound=bucket["upper_bound"],
+                            count=bucket["count"],
                         )
                         for bucket in histogram["buckets"]
                     ],
@@ -1005,4 +1008,96 @@ class QueryServiceServicer(query_pb2_grpc.QueryServiceServicer):
             ],
             downsampled=result["downsampled"],
             truncated=result["truncated"],
+            exemplars=[query_pb2.MetricExemplar(**exemplar) for exemplar in result["exemplars"]],
+        )
+
+    async def GetTraceLogs(
+        self,
+        request: query_pb2.GetTraceLogsRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> query_pb2.GetTraceLogsResponse:
+        limit = request.limit if request.limit > 0 else correlation_service.DEFAULT_TRACE_LOG_LIMIT
+        try:
+            logs, truncated = await correlation_service.get_trace_logs(
+                project_id=request.project_id,
+                trace_id=request.trace_id.lower(),
+                span_id=request.span_id.lower() if request.HasField("span_id") else None,
+                limit=min(limit, correlation_service.MAX_TRACE_LOG_LIMIT),
+            )
+        except Exception as e:
+            await context.abort(grpc.StatusCode.INTERNAL, f"GetTraceLogs failed: {str(e)}")
+            return
+        return query_pb2.GetTraceLogsResponse(
+            logs=[_log_to_proto(log) for log in logs], truncated=truncated
+        )
+
+    async def GetServiceMap(
+        self,
+        request: query_pb2.GetServiceMapRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> query_pb2.GetServiceMapResponse:
+        try:
+            start, end = correlation_service.resolve_window(
+                request.from_time if request.HasField("from_time") else None,
+                request.to_time if request.HasField("to_time") else None,
+            )
+            result = await correlation_service.get_service_map(request.project_id, start, end)
+        except ValueError as e:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
+            return
+        except Exception as e:
+            await context.abort(grpc.StatusCode.INTERNAL, f"GetServiceMap failed: {str(e)}")
+            return
+        return query_pb2.GetServiceMapResponse(
+            nodes=[query_pb2.ServiceNode(**node) for node in result["nodes"]],
+            edges=[query_pb2.ServiceEdge(**edge) for edge in result["edges"]],
+            from_time=result["from_time"].isoformat(),
+            to_time=result["to_time"].isoformat(),
+            downsampled=result["downsampled"],
+        )
+
+    async def GetServiceRed(
+        self,
+        request: query_pb2.GetServiceRedRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> query_pb2.GetServiceRedResponse:
+        try:
+            start, end = correlation_service.resolve_window(
+                request.from_time if request.HasField("from_time") else None,
+                request.to_time if request.HasField("to_time") else None,
+            )
+            interval = correlation_service.resolve_interval(
+                start, end, request.interval if request.HasField("interval") else None
+            )
+            series = await correlation_service.get_service_red(
+                project_id=request.project_id,
+                service=request.service if request.HasField("service") else None,
+                start=start,
+                end=end,
+                interval=interval,
+            )
+        except ValueError as e:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
+            return
+        except Exception as e:
+            await context.abort(grpc.StatusCode.INTERNAL, f"GetServiceRed failed: {str(e)}")
+            return
+        return query_pb2.GetServiceRedResponse(
+            interval=interval,
+            from_time=start.isoformat(),
+            to_time=end.isoformat(),
+            series=[
+                query_pb2.RedSeries(
+                    service=entry["service"],
+                    operation=entry["operation"],
+                    calls=entry["calls"],
+                    errors=entry["errors"],
+                    p95_ms=entry["p95_ms"],
+                    points=[
+                        query_pb2.RedPoint(**{**point, "bucket": point["bucket"].isoformat()})
+                        for point in entry["points"]
+                    ],
+                )
+                for entry in series
+            ],
         )

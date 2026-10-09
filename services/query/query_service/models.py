@@ -66,6 +66,13 @@ class Log(Base):
     )
     client_country: orm.Mapped[str | None] = orm.mapped_column(sqlalchemy.CHAR(2), nullable=True)
 
+    # See logs revision 024: the resource is stored once in `resources`, and
+    # these columns used to exist only inside `attributes`.
+    resource_hash: orm.Mapped[int | None] = orm.mapped_column(sqlalchemy.BigInteger, nullable=True)
+    service_name: orm.Mapped[str | None] = orm.mapped_column(sqlalchemy.VARCHAR(255), nullable=True)
+    trace_id: orm.Mapped[str | None] = orm.mapped_column(sqlalchemy.CHAR(32), nullable=True)
+    span_id: orm.Mapped[str | None] = orm.mapped_column(sqlalchemy.CHAR(16), nullable=True)
+
     __table_args__ = (
         sqlalchemy.Index(
             "idx_logs_project_timestamp",
@@ -130,6 +137,29 @@ class Log(Base):
             f"<Log(id={self.id}, project_id={self.project_id}, "
             f"level={self.level}, timestamp={self.timestamp})>"
         )
+
+
+# OTLP resources stored once per project (written by the ingestion worker),
+# referenced from logs/spans/metric_points by resource_hash.
+resources = sqlalchemy.Table(
+    "resources",
+    Base.metadata,
+    sqlalchemy.Column("project_id", sqlalchemy.BigInteger, primary_key=True),
+    sqlalchemy.Column("resource_hash", sqlalchemy.BigInteger, primary_key=True),
+    sqlalchemy.Column("attributes", postgresql.JSONB, nullable=False),
+    sqlalchemy.Column(
+        "first_seen",
+        sqlalchemy.DateTime(timezone=True),
+        nullable=False,
+        server_default=sqlalchemy.func.now(),
+    ),
+    sqlalchemy.Column(
+        "last_seen",
+        sqlalchemy.DateTime(timezone=True),
+        nullable=False,
+        server_default=sqlalchemy.func.now(),
+    ),
+)
 
 
 # Analytics rollup feeding the Explore filter sidebar (written by

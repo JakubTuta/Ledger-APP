@@ -12,6 +12,7 @@ from sqlalchemy import (
     Integer,
     SmallInteger,
     Text,
+    func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -65,6 +66,13 @@ class Log(database.Base):
 
     client_channel: Mapped[str | None] = mapped_column(VARCHAR(20), nullable=True)
     client_country: Mapped[str | None] = mapped_column(CHAR(2), nullable=True)
+
+    # The record's resource lives once in `resources`; `attributes` holds only
+    # the record's own attributes (see logs revision 024).
+    resource_hash: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    service_name: Mapped[str | None] = mapped_column(VARCHAR(255), nullable=True)
+    trace_id: Mapped[str | None] = mapped_column(CHAR(32), nullable=True)
+    span_id: Mapped[str | None] = mapped_column(CHAR(16), nullable=True)
 
     __table_args__ = (
         Index(
@@ -262,6 +270,8 @@ class Span(database.Base):
 
     error_fingerprint: Mapped[str | None] = mapped_column(CHAR(64), nullable=True)
 
+    resource_hash: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+
     __table_args__ = (
         Index(
             "brin_spans_project_time",
@@ -319,6 +329,14 @@ class MetricPoint(database.Base):
     service_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     temporality: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
 
+    resource_hash: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    # {"scale", "zero_count", "positive": {"offset", "counts"}, "negative": {...}}
+    exp_histogram: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # [[quantile, value], ...] reported by an OTLP summary
+    quantiles: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    # [{"v", "ts", "trace_id", "span_id"}, ...] linking the point to traces
+    exemplars: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+
     __table_args__ = (
         Index(
             "idx_metric_points_lookup",
@@ -335,3 +353,22 @@ class MetricPoint(database.Base):
 
     def __repr__(self) -> str:
         return f"<MetricPoint(project_id={self.project_id}, name={self.name}, ts={self.ts})>"
+
+
+class Resource(database.Base):
+    """One distinct OTLP resource of a project, referenced by resource_hash."""
+
+    __tablename__ = "resources"
+
+    project_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, nullable=False)
+    resource_hash: Mapped[int] = mapped_column(BigInteger, primary_key=True, nullable=False)
+    attributes: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    first_seen: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    last_seen: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    def __repr__(self) -> str:
+        return f"<Resource(project_id={self.project_id}, resource_hash={self.resource_hash})>"

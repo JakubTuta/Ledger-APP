@@ -1,3 +1,6 @@
+import asyncio
+import contextlib
+
 import gateway_service.proto.auth_pb2 as auth_pb2
 import gateway_service.proto.ingestion_pb2 as ingestion_pb2
 import gateway_service.proto.query_pb2 as query_pb2
@@ -117,6 +120,22 @@ class MockRedisClient:
         self.data[key] = new_usage
         return True, new_usage
 
+    async def refund_quota(self, project_id: int, signal: str, amount: int) -> None:
+        key = f"daily_usage:{project_id}:{signal}"
+        if key in self.data:
+            self.data[key] = max(0, self.data[key] - amount)
+
+    async def increment_window_counter(self, key: str, window_seconds: int) -> int:
+        counter_key = f"window:{key}"
+        self.data[counter_key] = self.data.get(counter_key, 0) + 1
+        return self.data[counter_key]
+
+    async def delete_totp_session(self, totp_session_token: str) -> None:
+        self.data.pop(f"totp_session:{totp_session_token}", None)
+
+    async def get_totp_session(self, totp_session_token: str) -> int | None:
+        return self.data.get(f"totp_session:{totp_session_token}")
+
     def pubsub(self):
         return MockRedisPubSub()
 
@@ -125,6 +144,36 @@ class MockRedisClient:
 
     async def close(self) -> None:
         pass
+
+
+class FakePubSubHub:
+    """In-process stand-in for services.pubsub_hub.PubSubHub (no Redis)."""
+
+    def __init__(self):
+        self.queues: dict[str, list[asyncio.Queue]] = {}
+
+    @contextlib.asynccontextmanager
+    async def subscribe(self, channels):
+        queue: asyncio.Queue = asyncio.Queue()
+        channel_list = list(channels)
+        for channel in channel_list:
+            self.queues.setdefault(channel, []).append(queue)
+        try:
+            yield queue
+        finally:
+            for channel in channel_list:
+                self.queues[channel].remove(queue)
+                if not self.queues[channel]:
+                    del self.queues[channel]
+
+    def publish(self, channel: str, data: str) -> int:
+        queues = self.queues.get(channel, [])
+        for queue in queues:
+            queue.put_nowait(data)
+        return len(queues)
+
+    def stats(self) -> dict:
+        return {"channels": len(self.queues), "streams": 0, "dropped_messages": 0}
 
 
 class MockRedisPubSub:
@@ -533,6 +582,22 @@ class MockQueryStub:
         self.last_list_log_services_request = None
         self.list_log_services_response = None
         self.last_get_error_list_request = None
+        self.get_trace_logs_response = query_pb2.GetTraceLogsResponse()
+        self.last_get_trace_logs_request = None
+        self.get_service_map_response = query_pb2.GetServiceMapResponse()
+        self.get_service_red_response = query_pb2.GetServiceRedResponse()
+        self.last_get_service_red_request = None
+
+    async def GetTraceLogs(self, request, timeout=None):
+        self.last_get_trace_logs_request = request
+        return self.get_trace_logs_response
+
+    async def GetServiceMap(self, request, timeout=None):
+        return self.get_service_map_response
+
+    async def GetServiceRed(self, request, timeout=None):
+        self.last_get_service_red_request = request
+        return self.get_service_red_response
 
     async def QueryLogs(self, request, timeout=None):
         self.last_query_logs_request = request

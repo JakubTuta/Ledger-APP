@@ -7,6 +7,20 @@ import pydantic
 import ingestion_service.config as config
 
 
+def timestamp_window_error(moment: datetime.datetime) -> str | None:
+    """Why `moment` is outside the accepted ingestion window, or None if it is inside."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=datetime.timezone.utc)
+    future_minutes = config.settings.TIMESTAMP_FUTURE_TOLERANCE_MINUTES
+    if moment > now + datetime.timedelta(minutes=future_minutes):
+        return f"Timestamp cannot be more than {future_minutes} minutes in the future"
+    max_age_days = config.settings.TIMESTAMP_MAX_AGE_DAYS
+    if moment < now - datetime.timedelta(days=max_age_days):
+        return f"Timestamp cannot be more than {max_age_days} days in the past"
+    return None
+
+
 class LogEntry(pydantic.BaseModel):
     timestamp: datetime.datetime = pydantic.Field(
         ...,
@@ -107,16 +121,35 @@ class LogEntry(pydantic.BaseModel):
         description="ISO 3166-1 alpha-2 country code resolved from the (truncated) client IP",
     )
 
+    resource_hash: int | None = pydantic.Field(
+        None,
+        description="Key of the record's resource; its attributes are stored once in `resources`",
+    )
+
+    service_name: str | None = pydantic.Field(
+        None,
+        max_length=255,
+        description="service.name of the record's resource",
+    )
+
+    trace_id: str | None = pydantic.Field(
+        None,
+        pattern=r"^[0-9a-f]{32}$",
+        description="W3C trace id of the record (32 lowercase hex chars)",
+    )
+
+    span_id: str | None = pydantic.Field(
+        None,
+        pattern=r"^[0-9a-f]{16}$",
+        description="W3C span id of the record (16 lowercase hex chars)",
+    )
+
     @pydantic.field_validator("timestamp")
     @classmethod
     def validate_timestamp(cls, v: datetime.datetime) -> datetime.datetime:
-        max_future = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
-            minutes=config.settings.TIMESTAMP_FUTURE_TOLERANCE_MINUTES
-        )
-        if v > max_future:
-            raise ValueError(
-                f"Timestamp cannot be more than {config.settings.TIMESTAMP_FUTURE_TOLERANCE_MINUTES} minutes in the future"
-            )
+        error = timestamp_window_error(v)
+        if error:
+            raise ValueError(error)
         return v
 
     @pydantic.field_validator("attributes")

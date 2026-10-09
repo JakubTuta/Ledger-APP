@@ -37,11 +37,32 @@ def _build_log_dict(log: schemas.EnrichedLogEntry) -> dict:
         "log_id": log.log_entry.log_id,
         "client_channel": log.log_entry.client_channel,
         "client_country": log.log_entry.client_country,
+        "resource_hash": log.log_entry.resource_hash,
+        "service_name": log.log_entry.service_name,
+        "trace_id": log.log_entry.trace_id,
+        "span_id": log.log_entry.span_id,
     }
 
 
-def _build_envelope(project_id: int, logs: list[dict]) -> bytes:
-    envelope = {"v": 1, "project_id": project_id, "logs": logs}
+def _referenced_resources(items: list[dict], resources: dict[int, str] | None) -> list[list]:
+    """[resource_hash, attributes_json] pairs for the resources `items` use.
+
+    A list of pairs rather than a map: msgpack refuses integer map keys when
+    unpacking (strict_map_key).
+    """
+    if not resources:
+        return []
+    used = {item["resource_hash"] for item in items if item.get("resource_hash") in resources}
+    return [[resource_hash, resources[resource_hash]] for resource_hash in sorted(used)]
+
+
+def _build_envelope(project_id: int, logs: list[dict], resources: dict[int, str] | None) -> bytes:
+    envelope = {
+        "v": 1,
+        "project_id": project_id,
+        "logs": logs,
+        "resources": _referenced_resources(logs, resources),
+    }
     return msgpack.packb(envelope, use_bin_type=True)
 
 
@@ -50,11 +71,12 @@ async def _publish_envelope(
     exchange: aio_pika.abc.AbstractExchange,
     project_id: int,
     logs: list[dict],
+    resources: dict[int, str] | None,
 ) -> None:
     try:
         await exchange.publish(
             aio_pika.Message(
-                body=_build_envelope(project_id, logs),
+                body=_build_envelope(project_id, logs, resources),
                 delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
             ),
             routing_key=f"logs.{project_id}",
@@ -69,11 +91,13 @@ async def enqueue_log(enriched_log: schemas.EnrichedLogEntry) -> None:
     async with pool.acquire() as channel:
         exchange = await channel.get_exchange(config.settings.RABBITMQ_EXCHANGE)
         await _publish_envelope(
-            channel, exchange, enriched_log.project_id, [_build_log_dict(enriched_log)]
+            channel, exchange, enriched_log.project_id, [_build_log_dict(enriched_log)], {}
         )
 
 
-async def enqueue_logs_batch(enriched_logs: list[schemas.EnrichedLogEntry]) -> None:
+async def enqueue_logs_batch(
+    enriched_logs: list[schemas.EnrichedLogEntry], resources: dict[int, str] | None = None
+) -> None:
     if not enriched_logs:
         return
 
@@ -88,11 +112,20 @@ async def enqueue_logs_batch(enriched_logs: list[schemas.EnrichedLogEntry]) -> N
         exchange = await channel.get_exchange(config.settings.RABBITMQ_EXCHANGE)
         for project_id, logs in by_project.items():
             for i in range(0, len(logs), chunk_size):
-                await _publish_envelope(channel, exchange, project_id, logs[i : i + chunk_size])
+                await _publish_envelope(
+                    channel, exchange, project_id, logs[i : i + chunk_size], resources
+                )
 
 
-def _build_spans_envelope(project_id: int, spans: list[dict]) -> bytes:
-    envelope = {"v": 1, "project_id": project_id, "spans": spans}
+def _build_spans_envelope(
+    project_id: int, spans: list[dict], resources: dict[int, str] | None
+) -> bytes:
+    envelope = {
+        "v": 1,
+        "project_id": project_id,
+        "spans": spans,
+        "resources": _referenced_resources(spans, resources),
+    }
     return msgpack.packb(envelope, use_bin_type=True)
 
 
@@ -101,11 +134,12 @@ async def _publish_spans_envelope(
     exchange: aio_pika.abc.AbstractExchange,
     project_id: int,
     spans: list[dict],
+    resources: dict[int, str] | None,
 ) -> None:
     try:
         await exchange.publish(
             aio_pika.Message(
-                body=_build_spans_envelope(project_id, spans),
+                body=_build_spans_envelope(project_id, spans, resources),
                 delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
             ),
             routing_key=f"spans.{project_id}",
@@ -116,7 +150,9 @@ async def _publish_spans_envelope(
         ) from e
 
 
-async def enqueue_spans_envelope(project_id: int, spans: list[dict]) -> None:
+async def enqueue_spans_envelope(
+    project_id: int, spans: list[dict], resources: dict[int, str] | None = None
+) -> None:
     if not spans:
         return
 
@@ -126,11 +162,20 @@ async def enqueue_spans_envelope(project_id: int, spans: list[dict]) -> None:
     async with pool.acquire() as channel:
         exchange = await channel.get_exchange(config.settings.RABBITMQ_EXCHANGE)
         for i in range(0, len(spans), chunk_size):
-            await _publish_spans_envelope(channel, exchange, project_id, spans[i : i + chunk_size])
+            await _publish_spans_envelope(
+                channel, exchange, project_id, spans[i : i + chunk_size], resources
+            )
 
 
-def _build_metrics_envelope(project_id: int, points: list[dict]) -> bytes:
-    envelope = {"v": 1, "project_id": project_id, "points": points}
+def _build_metrics_envelope(
+    project_id: int, points: list[dict], resources: dict[int, str] | None
+) -> bytes:
+    envelope = {
+        "v": 1,
+        "project_id": project_id,
+        "points": points,
+        "resources": _referenced_resources(points, resources),
+    }
     return msgpack.packb(envelope, use_bin_type=True)
 
 
@@ -139,11 +184,12 @@ async def _publish_metrics_envelope(
     exchange: aio_pika.abc.AbstractExchange,
     project_id: int,
     points: list[dict],
+    resources: dict[int, str] | None,
 ) -> None:
     try:
         await exchange.publish(
             aio_pika.Message(
-                body=_build_metrics_envelope(project_id, points),
+                body=_build_metrics_envelope(project_id, points, resources),
                 delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
             ),
             routing_key=f"metrics.{project_id}",
@@ -154,7 +200,9 @@ async def _publish_metrics_envelope(
         ) from e
 
 
-async def enqueue_metrics_envelope(project_id: int, points: list[dict]) -> None:
+async def enqueue_metrics_envelope(
+    project_id: int, points: list[dict], resources: dict[int, str] | None = None
+) -> None:
     if not points:
         return
 
@@ -165,5 +213,5 @@ async def enqueue_metrics_envelope(project_id: int, points: list[dict]) -> None:
         exchange = await channel.get_exchange(config.settings.RABBITMQ_EXCHANGE)
         for i in range(0, len(points), chunk_size):
             await _publish_metrics_envelope(
-                channel, exchange, project_id, points[i : i + chunk_size]
+                channel, exchange, project_id, points[i : i + chunk_size], resources
             )

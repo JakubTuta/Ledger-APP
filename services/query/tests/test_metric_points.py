@@ -12,6 +12,8 @@ import tests.test_base as test_base
 _SUM = 0
 _GAUGE = 1
 _HISTOGRAM = 2
+_EXPONENTIAL_HISTOGRAM = 3
+_SUMMARY = 4
 
 _DELTA = 1
 _CUMULATIVE = 2
@@ -19,11 +21,14 @@ _CUMULATIVE = 2
 _INSERT = sa.text("""
     INSERT INTO metric_points
         (project_id, name, type, ts, value, count, sum, bucket_counts,
-         explicit_bounds, tags, tags_hash, service_name, temporality)
+         explicit_bounds, tags, tags_hash, service_name, temporality,
+         exp_histogram, quantiles, exemplars)
     VALUES
         (:project_id, :name, :type, :ts, :value, :count, :sum,
          CAST(:bucket_counts AS jsonb), CAST(:explicit_bounds AS jsonb),
-         CAST(:tags AS jsonb), :tags_hash, :service_name, :temporality)
+         CAST(:tags AS jsonb), :tags_hash, :service_name, :temporality,
+         CAST(:exp_histogram AS jsonb), CAST(:quantiles AS jsonb),
+         CAST(:exemplars AS jsonb))
 """)
 
 _INSERT_ROLLUP = sa.text("""
@@ -34,6 +39,10 @@ _INSERT_ROLLUP = sa.text("""
         (:project_id, :name, :type, :tags_hash, CAST(:tags AS jsonb), :bucket,
          :count, :sum_v, :min_v, :max_v, :avg_v, :temporality)
 """)
+
+
+def _json_or_none(value) -> str | None:
+    return json.dumps(value) if value is not None else None
 
 
 def _tags_hash(tags: dict) -> str:
@@ -56,6 +65,9 @@ class MetricPointFixtures(test_base.BaseQueryTest):
         explicit_bounds: list | None = None,
         tags: dict | None = None,
         temporality: int | None = None,
+        exp_histogram: dict | None = None,
+        quantiles: list | None = None,
+        exemplars: list | None = None,
     ) -> None:
         tags = tags or {}
         async with database.get_logs_session() as session:
@@ -79,6 +91,9 @@ class MetricPointFixtures(test_base.BaseQueryTest):
                     "tags_hash": _tags_hash(tags),
                     "service_name": "test-service",
                     "temporality": temporality,
+                    "exp_histogram": _json_or_none(exp_histogram),
+                    "quantiles": _json_or_none(quantiles),
+                    "exemplars": _json_or_none(exemplars),
                 },
             )
             await session.commit()
@@ -525,3 +540,166 @@ class TestQueryMetricSeriesRollup(MetricPointFixtures):
 
         assert response.downsampled is False
         assert response.series[0].points[0].value == pytest.approx(42.0)
+
+
+class TestQueryMetricSeriesDistributions(MetricPointFixtures):
+    base = datetime.datetime(2026, 8, 1, 12, 0, tzinfo=datetime.timezone.utc)
+
+    async def _series(
+        self, name: str, aggregation: str, **extra
+    ) -> query_pb2.QueryMetricSeriesResponse:
+        return await self.stub.QueryMetricSeries(
+            query_pb2.QueryMetricSeriesRequest(
+                project_id=1,
+                name=name,
+                aggregation=aggregation,
+                interval="5m",
+                from_time=self.base.isoformat(),
+                to_time=(self.base + datetime.timedelta(minutes=5)).isoformat(),
+                **extra,
+            )
+        )
+
+    @pytest.mark.asyncio
+    async def test_cumulative_histogram_is_differenced_not_summed(self):
+        # Running totals 2 then 8: the window saw 6 requests, not 10.
+        for offset, (count, total, counts) in enumerate(
+            [(2, 20.0, [1, 1, 0, 0]), (8, 200.0, [3, 4, 1, 0])]
+        ):
+            await self._insert_point(
+                "request_duration_ms",
+                self.base + datetime.timedelta(seconds=60 * offset),
+                metric_type=_HISTOGRAM,
+                count=count,
+                total=total,
+                bucket_counts=counts,
+                explicit_bounds=[10, 50, 100],
+                temporality=_CUMULATIVE,
+            )
+
+        count = await self._series("request_duration_ms", "count")
+        avg = await self._series("request_duration_ms", "avg")
+
+        assert count.series[0].points[0].value == 6.0
+        assert avg.series[0].points[0].value == pytest.approx(30.0)
+        assert [b.count for b in count.histograms[0].buckets] == [2.0, 3.0, 1.0, 0.0]
+
+    @pytest.mark.asyncio
+    async def test_exponential_histogram_quantile(self):
+        # scale 0: bucket i covers (2**i, 2**(i+1)]
+        await self._insert_point(
+            "request_duration_ms",
+            self.base,
+            metric_type=_EXPONENTIAL_HISTOGRAM,
+            count=4,
+            total=14.0,
+            exp_histogram={
+                "scale": 0,
+                "zero_count": 0,
+                "positive": {"offset": 0, "counts": [1, 2, 1]},
+                "negative": {"offset": 0, "counts": []},
+            },
+            temporality=_DELTA,
+        )
+
+        response = await self._series("request_duration_ms", "p50")
+
+        assert response.type == _EXPONENTIAL_HISTOGRAM
+        # target 2 of 4: halfway through the (2, 4] bucket
+        assert response.series[0].points[0].value == pytest.approx(3.0)
+        assert [
+            (b.lower_bound, b.upper_bound, b.count) for b in response.histograms[0].buckets
+        ] == [
+            (1.0, 2.0, 1.0),
+            (2.0, 4.0, 2.0),
+            (4.0, 8.0, 1.0),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_exponential_histograms_of_different_scales_merge(self):
+        for offset, (scale, counts) in enumerate([(1, [1, 1]), (0, [2])]):
+            await self._insert_point(
+                "request_duration_ms",
+                self.base + datetime.timedelta(seconds=60 * offset),
+                metric_type=_EXPONENTIAL_HISTOGRAM,
+                count=sum(counts),
+                total=6.0,
+                exp_histogram={
+                    "scale": scale,
+                    "zero_count": 0,
+                    # scale 1 buckets 2 and 3 are exactly scale 0 bucket 1, (2, 4]
+                    "positive": {"offset": 2 if scale == 1 else 1, "counts": counts},
+                    "negative": {"offset": 0, "counts": []},
+                },
+                temporality=_DELTA,
+            )
+
+        response = await self._series("request_duration_ms", "max")
+
+        assert [
+            (b.lower_bound, b.upper_bound, b.count) for b in response.histograms[0].buckets
+        ] == [(2.0, 4.0, 4.0)]
+        assert response.series[0].points[0].value == pytest.approx(4.0)
+
+    @pytest.mark.asyncio
+    async def test_summary_reports_the_clients_quantiles(self):
+        for offset, p99 in enumerate([1.0, 3.0]):
+            await self._insert_point(
+                "gc_pause_seconds",
+                self.base + datetime.timedelta(seconds=60 * offset),
+                metric_type=_SUMMARY,
+                count=10 * (offset + 1),
+                total=2.0 * (offset + 1),
+                quantiles=[[0.5, 0.2], [0.99, p99]],
+                temporality=_CUMULATIVE,
+            )
+
+        p99 = await self._series("gc_pause_seconds", "p99")
+        p95 = await self._series("gc_pause_seconds", "p95")
+
+        # The first cumulative point only anchors the second.
+        assert p99.series[0].points[0].value == pytest.approx(3.0)
+        # A quantile the client does not report has no value to chart.
+        assert p95.series[0].points == []
+        assert p99.histograms == []
+
+    @pytest.mark.asyncio
+    async def test_p90_is_supported(self):
+        await self._insert_point(
+            "request_duration_ms",
+            self.base,
+            metric_type=_HISTOGRAM,
+            count=10,
+            total=100.0,
+            bucket_counts=[10, 0],
+            explicit_bounds=[10],
+            temporality=_DELTA,
+        )
+
+        response = await self._series("request_duration_ms", "p90")
+
+        assert response.series[0].points[0].value == pytest.approx(9.0)
+
+    @pytest.mark.asyncio
+    async def test_exemplars_come_back_largest_first_per_series(self):
+        await self._insert_point(
+            "request_duration_ms",
+            self.base,
+            metric_type=_HISTOGRAM,
+            count=2,
+            total=900.0,
+            bucket_counts=[1, 1],
+            explicit_bounds=[100],
+            tags={"route": "/orders"},
+            exemplars=[
+                {"v": 12.0, "ts": self.base.isoformat(), "trace_id": "a" * 32, "span_id": ""},
+                {"v": 888.0, "ts": self.base.isoformat(), "trace_id": "b" * 32, "span_id": ""},
+            ],
+        )
+
+        response = await self._series("request_duration_ms", "p50", group_by=["route"])
+
+        assert [(e.value, e.trace_id, dict(e.tags)) for e in response.exemplars] == [
+            (888.0, "b" * 32, {"route": "/orders"}),
+            (12.0, "a" * 32, {"route": "/orders"}),
+        ]

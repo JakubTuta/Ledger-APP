@@ -2,9 +2,9 @@
 
 Distinct from `metrics.py`, which serves metrics *derived from logs* (error
 rate, log volume, endpoint latency). This module reads the `metric_points`
-table - counters, gauges and histograms a user emitted explicitly through the
-SDK's `metric_increment` / `metric_gauge` / `metric_histogram` or any stock
-OpenTelemetry exporter.
+table - counters, gauges, histograms, exponential histograms and summaries a
+user emitted explicitly through the SDK's `metric_increment` / `metric_gauge` /
+`metric_histogram` or any stock OpenTelemetry exporter.
 """
 
 import datetime
@@ -14,15 +14,19 @@ import typing
 import sqlalchemy as sa
 
 import query_service.database as database
+import query_service.services.distributions as distributions
 
 SUM = 0
 GAUGE = 1
 HISTOGRAM = 2
+EXPONENTIAL_HISTOGRAM = 3
+SUMMARY = 4
+_DISTRIBUTION_TYPES = frozenset({HISTOGRAM, EXPONENTIAL_HISTOGRAM, SUMMARY})
 
 TEMPORALITY_DELTA = 1
 TEMPORALITY_CUMULATIVE = 2
 
-_QUANTILE_AGGREGATIONS = {"p50": 0.50, "p95": 0.95, "p99": 0.99}
+_QUANTILE_AGGREGATIONS = {"p50": 0.50, "p90": 0.90, "p95": 0.95, "p99": 0.99}
 _PLAIN_AGGREGATIONS = frozenset({"avg", "sum", "min", "max", "count"})
 VALID_AGGREGATIONS = _PLAIN_AGGREGATIONS | set(_QUANTILE_AGGREGATIONS)
 
@@ -38,6 +42,12 @@ _DEFAULT_WINDOW = datetime.timedelta(hours=1)
 _MAX_HISTOGRAM_ROWS = 50_000
 
 MAX_TAG_VALUES_PER_KEY = 50
+
+# Exemplars point at the traces behind a chart. The largest values are the
+# ones worth opening (the slow request, the big payload), so the cap keeps
+# those per series.
+_MAX_EXEMPLARS_PER_SERIES = 20
+_MAX_EXEMPLAR_ROWS = 1000
 
 
 def _parse_iso(value: str) -> datetime.datetime:
@@ -234,8 +244,8 @@ async def query_metric_series(
     async with database.get_logs_session() as session:
         metric_type, temporality = await _describe_metric(session, project_id, name)
 
-        if metric_type == HISTOGRAM:
-            series, histograms, truncated = await _query_histogram(
+        if metric_type in _DISTRIBUTION_TYPES:
+            series, histograms, truncated = await _query_distribution(
                 session,
                 project_id,
                 name,
@@ -268,6 +278,10 @@ async def query_metric_series(
             histograms = []
             truncated = False
 
+        exemplars = await _query_exemplars(
+            session, project_id, name, tag_filters, group_by, start, end
+        )
+
     return {
         "project_id": project_id,
         "name": name,
@@ -279,6 +293,7 @@ async def query_metric_series(
         "histograms": histograms,
         "downsampled": downsampled,
         "truncated": truncated,
+        "exemplars": exemplars,
     }
 
 
@@ -501,7 +516,16 @@ def _rows_to_series(rows, group_by: list[str]) -> list[dict]:
     return list(grouped.values())
 
 
-async def _query_histogram(
+def _tag_filter_predicate(tag_filters: dict[str, str], params: dict) -> str:
+    if not tag_filters:
+        return ""
+    # CAST(), not `:param::jsonb` - SQLAlchemy's bindparam regex refuses to
+    # match a name followed by ':' and silently binds a truncated name.
+    params["tag_filters"] = json.dumps(tag_filters)
+    return "AND mp.tags @> CAST(:tag_filters AS jsonb)"
+
+
+async def _query_distribution(
     session,
     project_id: int,
     name: str,
@@ -514,16 +538,21 @@ async def _query_histogram(
 ) -> tuple[list[dict], list[dict], bool]:
     """Quantile time series plus a whole-window distribution, per series.
 
-    Bucket arrays are summed element-wise in Python: the alternative is
-    unnesting two JSONB arrays with ordinality and re-aggregating per bucket
+    Points are merged in Python (see distributions.py): the alternative is
+    unnesting JSONB bucket arrays with ordinality and re-aggregating per bucket
     per series, which is markedly slower than the row fetch for the row counts
     this path actually sees.
     """
     group_selects, group_params = _group_by_selects(group_by)
     select_parts = [
         _bucket_expression("mp.ts", interval) + " AS bucket",
+        "mp.tags_hash AS tags_hash",
+        "mp.ts AS ts",
+        "mp.temporality AS temporality",
         "mp.bucket_counts AS bucket_counts",
         "mp.explicit_bounds AS explicit_bounds",
+        "mp.exp_histogram AS exp_histogram",
+        "mp.quantiles AS quantiles",
         "mp.count AS point_count",
         "mp.sum AS point_sum",
     ]
@@ -538,13 +567,7 @@ async def _query_histogram(
         "row_limit": _MAX_HISTOGRAM_ROWS + 1,
         **group_params,
     }
-
-    tag_predicate = ""
-    if tag_filters:
-        # CAST(), not `:param::jsonb` - SQLAlchemy's bindparam regex refuses to
-        # match a name followed by ':' and silently binds a truncated name.
-        tag_predicate = "AND mp.tags @> CAST(:tag_filters AS jsonb)"
-        params["tag_filters"] = json.dumps(tag_filters)
+    tag_predicate = _tag_filter_predicate(tag_filters, params)
 
     result = await session.execute(
         sa.text(f"""
@@ -567,135 +590,198 @@ async def _query_histogram(
 
     per_bucket: dict[tuple, dict] = {}
     per_series: dict[tuple, dict] = {}
-
-    for row in rows:
+    for row, count, total, distribution in _increments(rows):
         tags = _series_tags(row, group_by)
         series_key = tuple(sorted(tags.items()))
-        bounds = _as_float_list(row.explicit_bounds)
-        counts = _as_float_list(row.bucket_counts)
-        if not counts:
-            continue
+        _accumulate(per_bucket, (series_key, row.bucket), tags, count, total, distribution)
+        _accumulate(per_series, series_key, tags, count, total, distribution)
 
-        bucket_key = (series_key, row.bucket)
-        bucket_state = per_bucket.setdefault(
-            bucket_key,
-            {
-                "tags": tags,
-                "bucket": row.bucket,
-                "counts": [],
-                "bounds": bounds,
-                "count": 0,
-                "sum": 0.0,
-            },
-        )
-        _accumulate_counts(bucket_state, counts, bounds, row)
-
-        series_state = per_series.setdefault(
-            series_key, {"tags": tags, "counts": [], "bounds": bounds, "count": 0, "sum": 0.0}
-        )
-        _accumulate_counts(series_state, counts, bounds, row)
-
-    series = _histogram_time_series(per_bucket, aggregation)
+    series = _distribution_time_series(per_bucket, aggregation)
     histograms = [
         {
             "tags": state["tags"],
-            "buckets": _to_buckets(state["counts"], state["bounds"]),
+            "buckets": state["distribution"].buckets(),
             "count": state["count"],
             "sum": state["sum"],
         }
         for state in per_series.values()
+        if state["distribution"] is not None and state["distribution"].buckets()
     ]
 
     return series, histograms, truncated
 
 
-def _accumulate_counts(state: dict, counts: list[float], bounds: list[float], row) -> None:
-    if not state["counts"]:
-        state["counts"] = list(counts)
-        state["bounds"] = bounds
-    elif len(state["counts"]) == len(counts):
-        state["counts"] = [a + b for a, b in zip(state["counts"], counts)]
+def _distribution_of(row) -> distributions.Distribution | None:
+    exp_histogram = _as_json(row.exp_histogram)
+    if isinstance(exp_histogram, dict):
+        return distributions.ExponentialHistogram.from_stored(exp_histogram)
+    quantiles = _as_json(row.quantiles)
+    if isinstance(quantiles, list) and quantiles:
+        return distributions.Summary.from_stored(quantiles)
+    counts = _as_float_list(row.bucket_counts)
+    if counts:
+        return distributions.ExplicitHistogram(tuple(_as_float_list(row.explicit_bounds)), counts)
+    return None
 
-    state["count"] += int(row.point_count or 0)
-    state["sum"] += float(row.point_sum or 0.0)
+
+def _increments(rows) -> typing.Iterator[tuple]:
+    """(row, count, sum, distribution) for each point, as activity within it.
+
+    A cumulative point carries the running total since its process started, so
+    it is turned into the increment since the previous point of the same series
+    (tags_hash). The first point of a series in the window has nothing to be
+    differenced against and only anchors the next one. A count that went down
+    means the process restarted, and then the new total *is* the increment -
+    the same rule as for cumulative counters.
+    """
+    previous: dict[str, tuple] = {}
+    for row in sorted(rows, key=lambda r: (r.tags_hash, r.ts)):
+        count = int(row.point_count or 0)
+        total = float(row.point_sum or 0.0)
+        distribution = _distribution_of(row)
+
+        if row.temporality != TEMPORALITY_CUMULATIVE:
+            yield row, count, total, distribution
+            continue
+
+        before = previous.get(row.tags_hash)
+        previous[row.tags_hash] = (count, total, distribution)
+        if before is None:
+            continue
+        before_count, before_total, before_distribution = before
+        if count < before_count:
+            yield row, count, total, distribution
+            continue
+
+        increment = None
+        if distribution is not None and before_distribution is not None:
+            increment = distribution.minus(before_distribution)
+        yield row, count - before_count, total - before_total, increment or distribution
 
 
-def _histogram_time_series(per_bucket: dict, aggregation: str) -> list[dict]:
+def _accumulate(
+    states: dict,
+    key: tuple,
+    tags: dict[str, str],
+    count: int,
+    total: float,
+    distribution: distributions.Distribution | None,
+) -> None:
+    state = states.get(key)
+    if state is None:
+        states[key] = {
+            "tags": tags,
+            "count": count,
+            "sum": total,
+            "distribution": distributions.copy_of(distribution) if distribution else None,
+        }
+        return
+    state["count"] += count
+    state["sum"] += total
+    if distribution is None:
+        return
+    if state["distribution"] is None:
+        state["distribution"] = distributions.copy_of(distribution)
+    else:
+        state["distribution"].merge(distribution)
+
+
+def _distribution_time_series(per_bucket: dict, aggregation: str) -> list[dict]:
     grouped: dict[tuple, dict] = {}
     for (series_key, bucket), state in sorted(per_bucket.items(), key=lambda item: item[0][1]):
+        value = _distribution_value(state, aggregation)
         series = grouped.setdefault(series_key, {"tags": state["tags"], "points": []})
-        series["points"].append(
-            {
-                "bucket": bucket.isoformat(),
-                "value": _histogram_value(state, aggregation),
-            }
-        )
+        if value is not None:
+            series["points"].append({"bucket": bucket.isoformat(), "value": value})
     return list(grouped.values())
 
 
-def _histogram_value(state: dict, aggregation: str) -> float:
+def _distribution_value(state: dict, aggregation: str) -> float | None:
+    """None when the points can't answer it (a summary that doesn't report
+    that quantile); the chart then has no point for that bucket."""
+    distribution = state["distribution"]
     if aggregation == "count":
         return float(state["count"])
     if aggregation == "sum":
         return state["sum"]
-    if aggregation == "avg":
-        return state["sum"] / state["count"] if state["count"] else 0.0
     if aggregation in _QUANTILE_AGGREGATIONS:
-        return _interpolate_quantile(
-            state["counts"], state["bounds"], _QUANTILE_AGGREGATIONS[aggregation]
-        )
+        return distribution.quantile(_QUANTILE_AGGREGATIONS[aggregation]) if distribution else None
     if aggregation == "min":
-        return _first_populated_bound(state["counts"], state["bounds"])
+        return distribution.minimum() if distribution else None
     if aggregation == "max":
-        return _interpolate_quantile(state["counts"], state["bounds"], 1.0)
-    return state["sum"] / state["count"] if state["count"] else 0.0
+        return distribution.quantile(1.0) if distribution else None
+    return state["sum"] / state["count"] if state["count"] else None
 
 
-def _interpolate_quantile(counts: list[float], bounds: list[float], quantile: float) -> float:
-    """Linear interpolation within the bucket the quantile falls in.
+async def _query_exemplars(
+    session,
+    project_id: int,
+    name: str,
+    tag_filters: dict[str, str],
+    group_by: list[str],
+    start: datetime.datetime,
+    end: datetime.datetime,
+) -> list[dict]:
+    group_selects, group_params = _group_by_selects(group_by)
+    params: dict[str, typing.Any] = {
+        "project_id": project_id,
+        "name": name,
+        "start": start,
+        "end": end,
+        "row_limit": _MAX_EXEMPLAR_ROWS,
+        **group_params,
+    }
+    tag_predicate = _tag_filter_predicate(tag_filters, params)
+    extra_select = f"{group_selects}, " if group_selects else ""
 
-    OTLP explicit-bucket histograms carry one more count than bound - the final
-    count is the +Inf overflow, which has no upper edge to interpolate toward,
-    so a quantile landing there reports the last finite bound.
-    """
-    total = sum(counts)
-    if total <= 0:
-        return 0.0
+    result = await session.execute(
+        sa.text(f"""
+            SELECT {extra_select}
+                   (exemplar->>'v')::double precision AS value,
+                   exemplar->>'ts' AS timestamp,
+                   exemplar->>'trace_id' AS trace_id,
+                   exemplar->>'span_id' AS span_id
+            FROM metric_points mp,
+                 LATERAL jsonb_array_elements(mp.exemplars) AS exemplar
+            WHERE mp.project_id = :project_id
+              AND mp.name = :name
+              AND mp.ts >= :start
+              AND mp.ts <= :end
+              AND mp.exemplars IS NOT NULL
+              {tag_predicate}
+            ORDER BY value DESC
+            LIMIT :row_limit
+        """),
+        params,
+    )
 
-    target = total * quantile
-    cumulative = 0.0
-    lower = 0.0
-
-    for index, count in enumerate(counts):
-        if index >= len(bounds):
-            return bounds[-1] if bounds else 0.0
-
-        upper = bounds[index]
-        if cumulative + count >= target:
-            if count <= 0:
-                return upper
-            fraction = (target - cumulative) / count
-            return lower + (upper - lower) * fraction
-
-        cumulative += count
-        lower = upper
-
-    return bounds[-1] if bounds else 0.0
-
-
-def _first_populated_bound(counts: list[float], bounds: list[float]) -> float:
-    for index, count in enumerate(counts):
-        if count > 0:
-            return bounds[index] if index < len(bounds) else (bounds[-1] if bounds else 0.0)
-    return 0.0
+    per_series: dict[tuple, int] = {}
+    exemplars = []
+    for row in result.fetchall():
+        tags = _series_tags(row, group_by)
+        series_key = tuple(sorted(tags.items()))
+        if per_series.get(series_key, 0) >= _MAX_EXEMPLARS_PER_SERIES:
+            continue
+        per_series[series_key] = per_series.get(series_key, 0) + 1
+        exemplars.append(
+            {
+                "tags": tags,
+                "value": float(row.value),
+                "timestamp": row.timestamp or "",
+                "trace_id": row.trace_id or "",
+                "span_id": row.span_id or "",
+            }
+        )
+    return exemplars
 
 
-def _to_buckets(counts: list[float], bounds: list[float]) -> list[dict]:
-    buckets = []
-    for index, count in enumerate(counts):
-        upper = bounds[index] if index < len(bounds) else float("inf")
-        buckets.append({"upper_bound": upper, "count": count})
-    return buckets
+def _as_json(raw) -> typing.Any:
+    if isinstance(raw, str):
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+    return raw
 
 
 def _as_float_list(raw) -> list[float]:

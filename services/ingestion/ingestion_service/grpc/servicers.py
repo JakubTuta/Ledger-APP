@@ -1,9 +1,9 @@
-import asyncio
 import datetime
 import hashlib
 import json
 import logging
 import re
+import typing
 
 import grpc
 
@@ -19,6 +19,27 @@ logger = logging.getLogger(__name__)
 
 _HEX32_RE = re.compile(r"^[0-9a-f]{32}$")
 _HEX16_RE = re.compile(r"^[0-9a-f]{16}$")
+_MAX_SPAN_DURATION_NS = config.settings.MAX_SPAN_DURATION_SECONDS * 1_000_000_000
+_MAX_RESOURCE_JSON_BYTES = 64 * 1024
+
+
+def _valid_resources(resources: typing.Mapping[int, str]) -> dict[int, str]:
+    """The batch's resources that are JSON objects of a sane size.
+
+    A dropped resource only costs the records that point at it their resource
+    attributes; they are still stored.
+    """
+    valid: dict[int, str] = {}
+    for resource_hash, attributes_json in resources.items():
+        if len(attributes_json) > _MAX_RESOURCE_JSON_BYTES:
+            continue
+        try:
+            parsed = json.loads(attributes_json)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            valid[resource_hash] = attributes_json
+    return valid
 
 
 def _build_error_notification(enriched_log) -> notifications.ErrorNotification:
@@ -59,7 +80,7 @@ class IngestionServicer(ingestion_pb2_grpc.IngestionServiceServicer):
         self, request: ingestion_pb2.IngestLogRequest, context: grpc.aio.ServicerContext
     ) -> ingestion_pb2.IngestLogResponse:
         try:
-            log_entry = _proto_to_log_entry(request.log)
+            log_entry = _proto_to_log_entry(request.log, resources={})
 
             enriched_log = enricher.enrich_log_entry(log_entry, request.project_id)
 
@@ -115,10 +136,11 @@ class IngestionServicer(ingestion_pb2_grpc.IngestionServiceServicer):
 
         try:
             enriched_logs = []
+            resources = _valid_resources(request.resources)
 
             for idx, proto_log in enumerate(request.logs):
                 try:
-                    log_entry = _proto_to_log_entry(proto_log)
+                    log_entry = _proto_to_log_entry(proto_log, resources)
                     enriched_log = enricher.enrich_log_entry(log_entry, request.project_id)
                     enriched_logs.append(enriched_log)
                     queued += 1
@@ -138,26 +160,22 @@ class IngestionServicer(ingestion_pb2_grpc.IngestionServiceServicer):
                     )
 
             if enriched_logs:
-                await queue_service.enqueue_logs_batch(enriched_logs)
+                await queue_service.enqueue_logs_batch(enriched_logs, resources)
 
                 if self.notification_publisher:
-                    notification_tasks = []
-                    for enriched_log in enriched_logs:
-                        log = enriched_log.log_entry
-                        if self.notification_publisher.should_notify(
-                            log.level,
-                            log.log_type,
-                            config.settings.NOTIFICATIONS_PUBLISH_ERRORS,
-                            config.settings.NOTIFICATIONS_PUBLISH_CRITICAL,
-                        ):
-                            notification = _build_error_notification(enriched_log)
-                            notification_tasks.append(
-                                self.notification_publisher.publish_error_notification(
-                                    enriched_log.project_id, notification
-                                )
+                    await self.notification_publisher.publish_error_notifications(
+                        request.project_id,
+                        [
+                            _build_error_notification(enriched_log)
+                            for enriched_log in enriched_logs
+                            if self.notification_publisher.should_notify(
+                                enriched_log.log_entry.level,
+                                enriched_log.log_entry.log_type,
+                                config.settings.NOTIFICATIONS_PUBLISH_ERRORS,
+                                config.settings.NOTIFICATIONS_PUBLISH_CRITICAL,
                             )
-                    if notification_tasks:
-                        await asyncio.gather(*notification_tasks, return_exceptions=True)
+                        ],
+                    )
 
             error_str = "; ".join(error_messages) if error_messages else None
 
@@ -190,11 +208,19 @@ class IngestionServicer(ingestion_pb2_grpc.IngestionServiceServicer):
         accepted = 0
         rejected = 0
         rows = []
+        resources = _valid_resources(request.resources)
 
         for span in request.spans:
             trace_id = span.trace_id.lower()
             span_id = span.span_id.lower()
-            if not _HEX32_RE.match(trace_id) or not _HEX16_RE.match(span_id):
+            parent_span_id = span.parent_span_id.lower() or None
+            # Every id must fit its CHAR column: one oversized value fails the
+            # COPY for every project's spans that share the worker's batch.
+            if (
+                not _HEX32_RE.match(trace_id)
+                or not _HEX16_RE.match(span_id)
+                or (parent_span_id is not None and not _HEX16_RE.match(parent_span_id))
+            ):
                 rejected += 1
                 continue
 
@@ -212,6 +238,13 @@ class IngestionServicer(ingestion_pb2_grpc.IngestionServiceServicer):
                 logger.warning(f"Invalid span timestamp for project {request.project_id}: {e}")
                 continue
 
+            if (
+                schemas.timestamp_window_error(start_dt) is not None
+                or not 0 <= duration_ns <= _MAX_SPAN_DURATION_NS
+            ):
+                rejected += 1
+                continue
+
             status_code = int(span.status)
 
             error_fingerprint = None
@@ -223,7 +256,7 @@ class IngestionServicer(ingestion_pb2_grpc.IngestionServiceServicer):
                 {
                     "span_id": span_id,
                     "trace_id": trace_id,
-                    "parent_span_id": span.parent_span_id or None,
+                    "parent_span_id": parent_span_id,
                     "service_name": span.service_name[:255],
                     "name": span.name[:255],
                     "kind": int(span.kind),
@@ -241,13 +274,14 @@ class IngestionServicer(ingestion_pb2_grpc.IngestionServiceServicer):
                         for e in span.events
                     ],
                     "error_fingerprint": error_fingerprint,
+                    "resource_hash": _known_resource(span, resources),
                 }
             )
             accepted += 1
 
         if rows:
             try:
-                await queue_service.enqueue_spans_envelope(request.project_id, rows)
+                await queue_service.enqueue_spans_envelope(request.project_id, rows, resources)
             except queue_service.QueueFullError as e:
                 logger.warning(f"Spans queue full for project {request.project_id}: {e}")
                 await context.abort(
@@ -272,6 +306,7 @@ class IngestionServicer(ingestion_pb2_grpc.IngestionServiceServicer):
         accepted = 0
         rejected = 0
         rows = []
+        resources = _valid_resources(request.resources)
 
         for point in request.points:
             name = point.name.strip()[:255]
@@ -289,6 +324,9 @@ class IngestionServicer(ingestion_pb2_grpc.IngestionServiceServicer):
                     f"Invalid metric point timestamp for project {request.project_id}: "
                     f"{point.timestamp!r}"
                 )
+                continue
+            if schemas.timestamp_window_error(ts) is not None:
+                rejected += 1
                 continue
 
             point_type = int(point.type)
@@ -308,13 +346,15 @@ class IngestionServicer(ingestion_pb2_grpc.IngestionServiceServicer):
                     "tags_hash": _compute_tags_hash(tags),
                     "service_name": point.service_name[:255] if point.service_name else None,
                     "temporality": int(point.temporality) or None,
+                    "resource_hash": _known_resource(point, resources),
+                    **_distribution_fields(point),
                 }
             )
             accepted += 1
 
         if rows:
             try:
-                await queue_service.enqueue_metrics_envelope(request.project_id, rows)
+                await queue_service.enqueue_metrics_envelope(request.project_id, rows, resources)
             except queue_service.QueueFullError as e:
                 logger.warning(f"Metrics queue full for project {request.project_id}: {e}")
                 await context.abort(
@@ -332,7 +372,49 @@ class IngestionServicer(ingestion_pb2_grpc.IngestionServiceServicer):
         )
 
 
-def _proto_to_log_entry(proto_log: ingestion_pb2.LogEntry) -> schemas.LogEntry:
+def _known_resource(item, resources: dict[int, str]) -> int | None:
+    """The item's resource_hash, if the batch carried that resource."""
+    if item.HasField("resource_hash") and item.resource_hash in resources:
+        return item.resource_hash
+    return None
+
+
+def _valid_hex_id(item, field: str, pattern: re.Pattern) -> str | None:
+    """A malformed id is dropped rather than failing the record: an oversized
+    value would fail the COPY for every row sharing the worker's batch."""
+    if not item.HasField(field):
+        return None
+    value = getattr(item, field).lower()
+    return value if pattern.match(value) else None
+
+
+def _distribution_fields(point: ingestion_pb2.MetricPoint) -> dict:
+    """Exponential-histogram, summary and exemplar data of a metric point."""
+    fields: dict = {"exp_histogram": None, "quantiles": None, "exemplars": None}
+    if point.type == ingestion_pb2.EXPONENTIAL_HISTOGRAM:
+        fields["exp_histogram"] = {
+            "scale": point.scale,
+            "zero_count": point.zero_count,
+            "positive": {"offset": point.positive_offset, "counts": list(point.positive_counts)},
+            "negative": {"offset": point.negative_offset, "counts": list(point.negative_counts)},
+        }
+    elif point.type == ingestion_pb2.SUMMARY:
+        fields["quantiles"] = [
+            [quantile, value] for quantile, value in zip(point.quantiles, point.quantile_values)
+        ]
+    exemplars = [
+        {"v": e.value, "ts": e.timestamp, "trace_id": e.trace_id, "span_id": e.span_id}
+        for e in point.exemplars
+        if _HEX32_RE.match(e.trace_id)
+    ]
+    if exemplars:
+        fields["exemplars"] = exemplars
+    return fields
+
+
+def _proto_to_log_entry(
+    proto_log: ingestion_pb2.LogEntry, resources: dict[int, str]
+) -> schemas.LogEntry:
     try:
         timestamp = datetime.datetime.fromisoformat(proto_log.timestamp.replace("Z", "+00:00"))
     except ValueError:
@@ -365,4 +447,8 @@ def _proto_to_log_entry(proto_log: ingestion_pb2.LogEntry) -> schemas.LogEntry:
         log_id=proto_log.log_id if proto_log.HasField("log_id") else None,
         client_channel=proto_log.client_channel if proto_log.HasField("client_channel") else None,
         client_country=proto_log.client_country if proto_log.HasField("client_country") else None,
+        resource_hash=_known_resource(proto_log, resources),
+        service_name=proto_log.service_name[:255] if proto_log.HasField("service_name") else None,
+        trace_id=_valid_hex_id(proto_log, "trace_id", _HEX32_RE),
+        span_id=_valid_hex_id(proto_log, "span_id", _HEX16_RE),
     )

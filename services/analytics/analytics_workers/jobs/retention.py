@@ -22,9 +22,11 @@ _ROLLUP_TABLES = (
     ("error_rate_5m", "bucket"),
     ("span_latency_1h", "bucket"),
     ("metric_points_1h", "bucket"),
+    ("service_edges_1h", "bucket"),
 )
 
 _MONITOR_CHECK_RETENTION_DAYS = 90
+_RESOURCE_RETENTION_MARGIN_DAYS = 32
 
 
 async def enforce_retention() -> None:
@@ -56,6 +58,7 @@ async def enforce_retention() -> None:
                 logs_session, "metric_points", "ts", project_retention, max_retention_days, now
             )
             await _prune_error_groups(logs_session, project_retention, now)
+            await _prune_resources(logs_session, project_retention, now)
             await _prune_rollups(logs_session, now)
 
         async with database.get_auth_session() as auth_session:
@@ -160,6 +163,26 @@ async def _prune_error_groups(
         cutoff = now - datetime.timedelta(days=retention_days)
         await session.execute(
             sa.text("DELETE FROM error_groups WHERE project_id = :pid AND last_seen < :cutoff"),
+            {"pid": project_id, "cutoff": cutoff},
+        )
+    await session.commit()
+
+
+async def _prune_resources(
+    session: sa.ext.asyncio.AsyncSession,
+    project_retention: dict[int, int],
+    now: datetime.datetime,
+) -> None:
+    """Delete resources no retained row can still reference.
+
+    The worker refreshes last_seen at most daily, and rows of the longest-
+    retention projects only leave with their monthly partition (up to a month
+    past retention), hence the extra month of margin.
+    """
+    for project_id, retention_days in project_retention.items():
+        cutoff = now - datetime.timedelta(days=retention_days + _RESOURCE_RETENTION_MARGIN_DAYS)
+        await session.execute(
+            sa.text("DELETE FROM resources WHERE project_id = :pid AND last_seen < :cutoff"),
             {"pid": project_id, "cutoff": cutoff},
         )
     await session.commit()

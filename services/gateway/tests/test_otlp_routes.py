@@ -518,3 +518,38 @@ class TestOtlpMetricsRoute(test_base.BaseGatewayTest):
         assert response.status_code == 200
         data = json.loads(response.content)
         assert data["partialSuccess"]["rejectedDataPoints"] == "1"
+
+    async def test_exponential_histograms_and_summaries_are_accepted(self, setup_method):
+        await self.set_api_key_cache("test_api_key_123", project_id=1)
+        body = {
+            "resourceMetrics": [
+                {
+                    "scopeMetrics": [
+                        {
+                            "metrics": [
+                                {
+                                    "name": "latency",
+                                    "exponentialHistogram": {
+                                        "dataPoints": [{"count": "3"}, {"count": "1"}]
+                                    },
+                                },
+                                {
+                                    "name": "gc.pause",
+                                    "summary": {"dataPoints": [{"count": "2", "sum": 1.5}]},
+                                },
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+
+        response = await self.client.post(
+            "/v1/metrics",
+            content=json.dumps(body).encode(),
+            headers={"X-API-Key": "test_api_key_123", "Content-Type": "application/json"},
+        )
+
+        assert response.status_code == 200
+        assert "partialSuccess" not in json.loads(response.content)
+        assert await self.mock_redis.get_daily_usage(1, signal="metrics") == 3

@@ -8,6 +8,7 @@ import sqlalchemy as sa
 import query_service.database as database
 import query_service.models as models
 import query_service.schemas as schemas
+import query_service.services.log_resources as log_resources
 
 
 def _encode_cursor(timestamp: datetime.datetime, log_id: int) -> str:
@@ -45,8 +46,12 @@ def _search_predicate(term: str) -> sa.ColumnElement[bool]:
 
 
 def _service_name_expression() -> sa.ColumnElement[str]:
-    """`service.name` lives only in the attributes JSONB, merged in from the OTLP resource."""
-    return models.Log.attributes["service.name"].astext
+    """`service.name`: a column since logs revision 024, only in the JSONB before it.
+
+    COALESCE stops at its first non-NULL argument, so rows written since then
+    never detoast `attributes` for this.
+    """
+    return sa.func.coalesce(models.Log.service_name, models.Log.attributes["service.name"].astext)
 
 
 def _apply_log_dimension_filters(query: sa.Select, filters: schemas.LogFilters) -> sa.Select:
@@ -134,7 +139,7 @@ async def query_logs(
             next_cursor = _encode_cursor(last.timestamp, last.id)
 
         return schemas.LogsQueryResponse(
-            logs=[schemas.LogResponse.model_validate(log) for log in logs],
+            logs=await log_resources.log_responses(session, project_id, logs),
             total=None,
             has_more=has_more,
             next_cursor=next_cursor,
@@ -489,9 +494,10 @@ async def get_country_breakdown(
 
 _DEFAULT_LOG_SERVICES_LIMIT = 50
 
-# Upper bound on rows read to discover service names. service.name is only in
-# the attributes JSONB, so a DISTINCT over the whole window would detoast every
-# row; reading just the newest rows keeps this an ordered scan of
+# Upper bound on rows read to discover service names. Rows written before logs
+# revision 024 have service.name only in the attributes JSONB, so a DISTINCT
+# over the whole window would detoast every row; reading just the newest rows
+# keeps this an ordered scan of
 # idx_logs_project_timestamp that stops early, at the cost of missing a service
 # that logged nothing in the window's most recent rows.
 _LOG_SERVICES_SAMPLE_ROWS = 20_000
@@ -563,7 +569,7 @@ async def search_logs(
             logs = logs[: pagination.limit]
 
         return schemas.LogsQueryResponse(
-            logs=[schemas.LogResponse.model_validate(log) for log in logs],
+            logs=await log_resources.log_responses(session, project_id, logs),
             total=None,
             has_more=has_more,
         )
@@ -605,6 +611,36 @@ _CLIENT_ERROR_STATUS_FLOOR = 400
 _SERVER_ERROR_STATUS_FLOOR = 500
 
 
+def _error_group_key() -> sa.ColumnElement[str]:
+    """What makes two rows "the same error" in the error list.
+
+    Exceptions group by fingerprint. Failed HTTP requests group by method,
+    route and status: their message embeds the request duration
+    ("GET /items/{id} - 404 (12ms)"), so grouping them by message split one
+    failing endpoint into a group per distinct duration. Anything else groups
+    by error type and message.
+    """
+    return sa.case(
+        (models.Log.error_fingerprint.is_not(None), models.Log.error_fingerprint),
+        (
+            models.Log.status_code.is_not(None),
+            sa.func.md5(
+                sa.func.concat_ws(
+                    " ",
+                    models.Log.method,
+                    models.Log.path,
+                    sa.cast(models.Log.status_code, sa.Text),
+                )
+            ),
+        ),
+        else_=sa.func.md5(
+            sa.func.coalesce(models.Log.error_type, sa.literal(""))
+            + sa.literal("|")
+            + sa.func.coalesce(models.Log.message, sa.literal(""))
+        ),
+    )
+
+
 async def get_error_list(
     project_id: int,
     period: str | None = None,
@@ -628,15 +664,7 @@ async def get_error_list(
     )
 
     async with database.get_logs_session() as session:
-        # Build group_key expression: fingerprint or hash(error_type|message)
-        group_key_col = sa.func.coalesce(
-            models.Log.error_fingerprint,
-            sa.func.md5(
-                sa.func.coalesce(models.Log.error_type, sa.literal(""))
-                + sa.literal("|")
-                + sa.func.coalesce(models.Log.message, sa.literal(""))
-            ),
-        )
+        group_key_col = _error_group_key()
 
         base_where_conditions = [
             models.Log.project_id == project_id,
@@ -670,20 +698,18 @@ async def get_error_list(
                 sa.func.min(models.Log.timestamp).label("first_seen"),
                 sa.func.max(models.Log.timestamp).label("last_seen"),
                 sa.func.max(models.Log.id).label("latest_log_id"),
-                models.Log.project_id.label("project_id"),
             )
             .where(base_where)
-            .group_by(group_key_col, models.Log.project_id)
+            .group_by(group_key_col)
             .subquery("groups")
         )
 
-        # Total distinct groups
-        count_result = await session.execute(sa.select(sa.func.count()).select_from(groups_subq))
-        total = count_result.scalar() or 0
-
-        # Step 2: paginate groups, then join latest row to get sample fields
+        # Step 2: paginate groups, then join latest row to get sample fields.
+        # The group total rides along as a window count: computing it with a
+        # separate COUNT over the same subquery ran the whole aggregation twice,
+        # and each run re-reads every matching heap page.
         paged_groups = (
-            sa.select(groups_subq)
+            sa.select(groups_subq, sa.func.count().over().label("total_groups"))
             .order_by(groups_subq.c.last_seen.desc())
             .limit(pagination.limit)
             .offset(pagination.offset)
@@ -704,7 +730,7 @@ async def get_error_list(
                 paged_groups.c.first_seen,
                 paged_groups.c.last_seen,
                 paged_groups.c.latest_log_id,
-                paged_groups.c.project_id,
+                paged_groups.c.total_groups,
                 latest_log.c.message,
                 latest_log.c.error_type,
                 latest_log.c.path,
@@ -713,6 +739,9 @@ async def get_error_list(
                 latest_log.c.log_type,
                 latest_log.c.error_fingerprint,
                 latest_log.c.attributes,
+                latest_log.c.resource_hash,
+                latest_log.c.trace_id,
+                latest_log.c.span_id,
                 latest_log.c.stack_trace,
                 latest_log.c.sdk_version,
                 latest_log.c.platform,
@@ -732,14 +761,26 @@ async def get_error_list(
         result = await session.execute(final_query)
         rows = result.all()
 
+        if rows:
+            total = rows[0].total_groups
+        elif pagination.offset > 0:
+            # A page past the end carries no window count; count only then.
+            count_result = await session.execute(
+                sa.select(sa.func.count()).select_from(groups_subq)
+            )
+            total = count_result.scalar() or 0
+        else:
+            total = 0
+
+        resources = await log_resources.fetch_resource_attributes(session, project_id, rows)
         errors = []
         for row in rows:
-            attributes = row.attributes if isinstance(row.attributes, dict) else None
+            attributes = log_resources.client_attributes(row, resources)
 
             errors.append(
                 schemas.ErrorListEntry(
                     log_id=row.latest_log_id,
-                    project_id=row.project_id,
+                    project_id=project_id,
                     level=row.level or "error",
                     log_type=row.log_type or "exception",
                     message=row.message or "",

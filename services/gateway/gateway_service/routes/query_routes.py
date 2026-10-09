@@ -1,4 +1,3 @@
-import asyncio
 import datetime
 import json
 import logging
@@ -8,8 +7,8 @@ import fastapi
 import gateway_service.proto.query_pb2 as query_pb2
 import gateway_service.schemas as schemas
 import grpc
-import redis.asyncio as redis
 from gateway_service import config, dependencies
+from gateway_service.services import pubsub_hub
 from sse_starlette.sse import EventSourceResponse
 
 router = fastapi.APIRouter(tags=["Query"])
@@ -585,8 +584,7 @@ async def get_country_breakdown(
         )
 
 
-# Mirrors routes/notifications.py's NotificationStream/EventSourceResponse
-# pattern, but subscribes directly to the ingestion worker's per-project
+# Like routes/notifications.py, but on the ingestion worker's per-project
 # `logs:tail:{project_id}` channel (see notifications/publisher.py::
 # TailPublisher) instead of going through query_service - the whole point is
 # sub-second delivery of newly-ingested logs, which a gRPC round-trip to the
@@ -595,44 +593,6 @@ async def get_country_breakdown(
 # Registered before /logs/{log_id} below: Starlette matches path routes in
 # registration order, and {log_id} would otherwise greedily match "tail" as
 # its path parameter (and fail int parsing) before this route is ever tried.
-
-
-class LogTailStream:
-    def __init__(self, redis_url: str, project_id: int):
-        self.redis_url = redis_url
-        self.project_id = project_id
-        self.redis_client: redis.Redis | None = None
-        self.pubsub = None
-
-    async def subscribe(self) -> None:
-        self.redis_client = redis.Redis.from_url(
-            self.redis_url, decode_responses=True, max_connections=10
-        )
-        self.pubsub = self.redis_client.pubsub()
-        await self.pubsub.subscribe(f"logs:tail:{self.project_id}")
-
-    async def unsubscribe(self) -> None:
-        if self.pubsub:
-            await self.pubsub.unsubscribe()
-            await self.pubsub.close()
-        if self.redis_client:
-            await self.redis_client.close()
-
-    async def listen(self) -> typing.AsyncGenerator[dict, None]:
-        try:
-            async for message in self.pubsub.listen():
-                if message["type"] == "message":
-                    try:
-                        data = json.loads(message["data"])
-                        yield {"event": "log", "data": json.dumps(data)}
-                    except json.JSONDecodeError:
-                        logger.error(f"Failed to decode tail message: {message['data']}")
-        except asyncio.CancelledError:
-            logger.info("Log tail stream cancelled")
-            raise
-        except Exception as e:
-            logger.error(f"Error in log tail stream: {e}", exc_info=True)
-            yield {"event": "error", "data": json.dumps({"error": "Stream error occurred"})}
 
 
 @router.get(
@@ -668,55 +628,15 @@ async def stream_log_tail(
             detail="Live tail is currently disabled",
         )
 
-    stream = LogTailStream(config.settings.REDIS_URL, project_id)
-    await stream.subscribe()
-
-    async def event_generator():
-        queue: asyncio.Queue = asyncio.Queue()
-        tasks: list[asyncio.Task] = []
-
-        async def pump_stream():
-            async for event in stream.listen():
-                await queue.put(event)
-
-        async def pump_heartbeat():
-            while True:
-                await asyncio.sleep(config.settings.NOTIFICATIONS_HEARTBEAT_INTERVAL)
-                await queue.put(
-                    {
-                        "event": "heartbeat",
-                        "data": json.dumps(
-                            {"timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()}
-                        ),
-                    }
-                )
-
-        try:
-            yield {
-                "event": "connected",
-                "data": json.dumps({"project_id": project_id}),
-            }
-
-            tasks.append(asyncio.create_task(pump_heartbeat()))
-            tasks.append(asyncio.create_task(pump_stream()))
-
-            while True:
-                event = await queue.get()
-                yield event
-
-        except asyncio.CancelledError:
-            logger.info(f"Client disconnected from log tail stream (project: {project_id})")
-        finally:
-            for task in tasks:
-                task.cancel()
-            for task in tasks:
-                try:
-                    await task
-                except (asyncio.CancelledError, Exception):
-                    pass
-            await stream.unsubscribe()
-
-    return EventSourceResponse(event_generator())
+    return EventSourceResponse(
+        pubsub_hub.channel_events(
+            request.app.state.pubsub_hub,
+            [f"logs:tail:{project_id}"],
+            "log",
+            {"project_id": project_id},
+            config.settings.NOTIFICATIONS_HEARTBEAT_INTERVAL,
+        )
+    )
 
 
 @router.get(
@@ -966,7 +886,7 @@ async def query_logs(
 
         logs = []
         for log_entry in response.logs:
-            logs.append(_proto_to_pydantic_log(log_entry))
+            logs.append(proto_to_log_response(log_entry))
 
         return schemas.LogsListResponse(
             project_id=project_id,
@@ -1639,7 +1559,7 @@ async def get_bottleneck_list(
         raise fastapi.HTTPException(status_code=500, detail="Failed to retrieve bottleneck list")
 
 
-def _proto_to_pydantic_log(proto_log: query_pb2.LogEntry) -> schemas.LogEntryResponse:
+def proto_to_log_response(proto_log: query_pb2.LogEntry) -> schemas.LogEntryResponse:
     """
     Convert protobuf LogEntry to Pydantic LogEntryResponse.
 

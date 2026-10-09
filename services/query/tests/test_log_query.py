@@ -758,6 +758,42 @@ class TestGetErrorList(_LogFactoryMixin, test_base.BaseQueryTest):
             "unhandled exception",
         ]
 
+    @pytest.mark.asyncio
+    async def test_http_failures_group_by_route_and_status_not_message(self):
+        # The SDK's endpoint message embeds the duration, so it differs per request.
+        for duration in (12, 15, 40):
+            await self.create_test_log(
+                project_id=1,
+                level="warning",
+                log_type="endpoint",
+                message=f"GET /items/{{id}} - 404 ({duration}ms)",
+                method="GET",
+                path="/items/{id}",
+                status_code=404,
+            )
+
+        response = await self.stub.GetErrorList(
+            query_pb2.GetErrorListRequest(project_id=1, period="last7days")
+        )
+
+        assert response.total == 1
+        assert [e.occurrence_count for e in response.errors] == [3]
+
+    @pytest.mark.asyncio
+    async def test_total_counts_every_group_not_just_the_page(self):
+        for n in range(5):
+            await self.create_test_error_log(project_id=1, message=f"distinct failure {n}")
+
+        first_page = await self.stub.GetErrorList(
+            query_pb2.GetErrorListRequest(project_id=1, period="last7days", limit=2)
+        )
+        past_the_end = await self.stub.GetErrorList(
+            query_pb2.GetErrorListRequest(project_id=1, period="last7days", limit=2, offset=10)
+        )
+
+        assert (len(first_page.errors), first_page.total, first_page.has_more) == (2, 5, True)
+        assert (len(past_the_end.errors), past_the_end.total) == (0, 5)
+
 
 class TestGetCountryBreakdown(_LogFactoryMixin, test_base.BaseQueryTest):
     @pytest.mark.asyncio
@@ -830,6 +866,85 @@ class TestGetCountryBreakdown(_LogFactoryMixin, test_base.BaseQueryTest):
 
 def _service(name: str | None) -> dict:
     return {"service.name": name} if name is not None else {"other": "attr"}
+
+
+_RESOURCE_HASH = -4_611_686_018_427_387_904
+
+
+class TestResourcesStoredOnce(_LogFactoryMixin, test_base.BaseQueryTest):
+    """Rows written since logs revision 024 keep only their own attributes."""
+
+    async def _store_resource(self, attributes: dict) -> None:
+        async with self.test_db_manager.session_factory() as session:
+            await session.execute(
+                models.resources.insert().values(
+                    project_id=1, resource_hash=_RESOURCE_HASH, attributes=attributes
+                )
+            )
+            await session.commit()
+
+    @pytest.mark.asyncio
+    async def test_logs_come_back_with_resource_and_trace_context_merged_in(self):
+        await self._store_resource({"service.name": "api", "host.name": "web-1"})
+        await self.create_test_log(
+            project_id=1,
+            attributes={"code.function": "handler", "host.name": "overridden"},
+            resource_hash=_RESOURCE_HASH,
+            service_name="api",
+            trace_id="a" * 32,
+            span_id="b" * 16,
+        )
+
+        response = await self.stub.QueryLogs(query_pb2.QueryLogsRequest(project_id=1, limit=10))
+
+        assert json.loads(response.logs[0].attributes) == {
+            "service.name": "api",
+            "host.name": "overridden",
+            "code.function": "handler",
+            "trace_id": "a" * 32,
+            "span_id": "b" * 16,
+        }
+
+    @pytest.mark.asyncio
+    async def test_rows_from_before_the_split_pass_through_unchanged(self):
+        legacy = {"service.name": "api", "trace_id": "c" * 32}
+        await self.create_test_log(project_id=1, attributes=legacy)
+
+        response = await self.stub.QueryLogs(query_pb2.QueryLogsRequest(project_id=1, limit=10))
+
+        assert json.loads(response.logs[0].attributes) == legacy
+
+    @pytest.mark.asyncio
+    async def test_service_filter_matches_the_column_and_legacy_jsonb(self):
+        await self.create_test_log(project_id=1, message="new", service_name="api")
+        await self.create_test_log(project_id=1, message="legacy", attributes=_service("api"))
+        await self.create_test_log(project_id=1, message="other", service_name="worker")
+
+        response = await self.stub.QueryLogs(
+            query_pb2.QueryLogsRequest(project_id=1, service="api", limit=10)
+        )
+
+        assert sorted(log.message for log in response.logs) == ["legacy", "new"]
+
+    @pytest.mark.asyncio
+    async def test_error_list_sample_carries_the_resource(self):
+        await self._store_resource({"service.name": "api"})
+        await self.create_test_log(
+            project_id=1,
+            level="error",
+            message="boom",
+            attributes={"code.function": "handler"},
+            resource_hash=_RESOURCE_HASH,
+        )
+
+        response = await self.stub.GetErrorList(
+            query_pb2.GetErrorListRequest(project_id=1, period="today", limit=10)
+        )
+
+        assert json.loads(response.errors[0].attributes) == {
+            "service.name": "api",
+            "code.function": "handler",
+        }
 
 
 class TestServiceFilter(_LogFactoryMixin, test_base.BaseQueryTest):

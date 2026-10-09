@@ -1,6 +1,7 @@
 import base64
 import binascii
 import datetime
+import hashlib
 import ipaddress
 import json
 import typing
@@ -56,6 +57,60 @@ _HTTP_STATUS_KEYS = ("http.response.status_code", "http.status_code")
 _RAW_IP_ATTR_KEYS = ("client.address", "http.client_ip", "ledger.client.ip_prefix")
 
 _CLIENT_ATTR_PREFIX = "ledger.client."
+
+# Record attributes copied into their own log columns, per the log type that
+# promotes them; keeping them in the JSONB as well stored stack traces twice.
+_PROMOTED_LOG_ATTR_KEYS = ("ledger.log_id", "ledger.log_type", "ledger.importance")
+_PROMOTED_LOG_ATTR_KEYS_BY_TYPE = {
+    "exception": ("exception.type", "exception.message", "exception.stacktrace"),
+    "endpoint": ("ledger.duration_ms",),
+}
+
+# Resource attributes that identify a metric series: OTel's service identity
+# (service.instance.id keeps two processes' cumulative counters apart) plus
+# the placement users group by. Everything else on a resource (SDK, process,
+# OS details) describes the producer and is stored once in `resources`
+# instead of in every point's tags.
+_SERIES_IDENTITY_RESOURCE_KEYS = frozenset(
+    {
+        "service.name",
+        "service.namespace",
+        "service.version",
+        "service.instance.id",
+        "deployment.environment",
+        "deployment.environment.name",
+        "host.name",
+        "k8s.namespace.name",
+        "k8s.deployment.name",
+        "k8s.pod.name",
+        "cloud.region",
+    }
+)
+
+_MAX_EXEMPLARS_PER_POINT = 5
+
+
+class Translated(typing.NamedTuple):
+    """Items for the ingestion service plus the resources they reference."""
+
+    items: list
+    # resource_hash -> canonical JSON of the resource attributes
+    resources: dict[int, str]
+
+
+def _register_resource(resources: dict[int, str], attrs: dict[str, typing.Any]) -> int | None:
+    """Add `attrs` to `resources` under a stable 64-bit key and return the key.
+
+    The key is derived from the canonical JSON, so every export of the same
+    resource (from any gateway worker) maps to the same stored row.
+    """
+    if not attrs:
+        return None
+    canonical = json.dumps(attrs, sort_keys=True, separators=(",", ":"), default=str)
+    digest = hashlib.blake2b(canonical.encode(), digest_size=8).digest()
+    resource_hash = int.from_bytes(digest, "big", signed=True)
+    resources[resource_hash] = canonical
+    return resource_hash
 
 
 def _truncate_ip_value(value: str) -> str | None:
@@ -164,6 +219,18 @@ def _truncate(value: str | None, max_length: int) -> str | None:
     return value[:max_length]
 
 
+def _hex_ids_to_base64(item: dict, id_keys: tuple[str, ...]) -> None:
+    """OTLP/JSON writes trace/span ids as hex; protobuf's ParseDict expects base64."""
+    for id_key in id_keys:
+        raw = item.get(id_key)
+        if not raw:
+            continue
+        try:
+            item[id_key] = base64.b64encode(bytes.fromhex(raw)).decode("ascii")
+        except (ValueError, binascii.Error):
+            raise TranslationError(f"Invalid hex id for {id_key}: {raw}")
+
+
 def _hexify_ids_in_json(data: dict) -> None:
     for resource_key in ("resourceSpans", "resourceLogs"):
         for resource_entry in data.get(resource_key, []):
@@ -171,14 +238,20 @@ def _hexify_ids_in_json(data: dict) -> None:
             item_key = "spans" if resource_key == "resourceSpans" else "logRecords"
             for scope_entry in resource_entry.get(scope_key, []):
                 for item in scope_entry.get(item_key, []):
-                    for id_key in _HEX_ID_KEYS:
-                        raw = item.get(id_key)
-                        if not raw:
-                            continue
-                        try:
-                            item[id_key] = base64.b64encode(bytes.fromhex(raw)).decode("ascii")
-                        except (ValueError, binascii.Error):
-                            raise TranslationError(f"Invalid hex id for {id_key}: {raw}")
+                    _hex_ids_to_base64(item, _HEX_ID_KEYS)
+
+
+_METRIC_DATA_KEYS = ("sum", "gauge", "histogram", "exponentialHistogram")
+
+
+def _hexify_exemplar_ids_in_json(data: dict) -> None:
+    for resource_entry in data.get("resourceMetrics", []):
+        for scope_entry in resource_entry.get("scopeMetrics", []):
+            for metric in scope_entry.get("metrics", []):
+                for data_key in _METRIC_DATA_KEYS:
+                    for point in (metric.get(data_key) or {}).get("dataPoints", []):
+                        for exemplar in point.get("exemplars", []):
+                            _hex_ids_to_base64(exemplar, ("traceId", "spanId"))
 
 
 def decode_trace_request(
@@ -252,8 +325,8 @@ def decode_metrics_request(
     except json.JSONDecodeError as e:
         raise TranslationError(f"Malformed JSON body: {e}")
 
-    # Metric points carry no hex trace/span ids at the top level (unlike spans
-    # and logs), so no id-hexify pass is needed before ParseDict here.
+    _hexify_exemplar_ids_in_json(data)
+
     try:
         json_format.ParseDict(data, request, ignore_unknown_fields=True)
     except json_format.ParseError as e:
@@ -262,23 +335,24 @@ def decode_metrics_request(
     return request
 
 
-def otlp_spans_to_proto(
-    request: trace_service_pb2.ExportTraceServiceRequest,
-) -> list[ingestion_pb2.Span]:
+def otlp_spans_to_proto(request: trace_service_pb2.ExportTraceServiceRequest) -> Translated:
     spans: list[ingestion_pb2.Span] = []
+    resources: dict[int, str] = {}
 
     for resource_spans in request.resource_spans:
         resource_attrs = _attributes_to_dict(resource_spans.resource.attributes)
+        _sanitize_client_ip_attrs(resource_attrs)
+        resource_hash = _register_resource(resources, resource_attrs)
         service_name = resource_attrs.get("service.name") or "unknown_service"
 
         for scope_spans in resource_spans.scope_spans:
             for span in scope_spans.spans:
-                spans.append(_translate_span(span, str(service_name)))
+                spans.append(_translate_span(span, str(service_name), resource_hash))
 
-    return spans
+    return Translated(spans, resources)
 
 
-def _translate_span(span, service_name: str) -> ingestion_pb2.Span:
+def _translate_span(span, service_name: str, resource_hash: int | None) -> ingestion_pb2.Span:
     attrs = _attributes_to_dict(span.attributes)
     proto_attrs: dict[str, str] = {}
     for key, value in attrs.items():
@@ -303,7 +377,7 @@ def _translate_span(span, service_name: str) -> ingestion_pb2.Span:
         for event in span.events
     ]
 
-    return ingestion_pb2.Span(
+    translated = ingestion_pb2.Span(
         trace_id=span.trace_id.hex(),
         span_id=span.span_id.hex(),
         parent_span_id=span.parent_span_id.hex() if span.parent_span_id else "",
@@ -317,6 +391,9 @@ def _translate_span(span, service_name: str) -> ingestion_pb2.Span:
         events=events,
         service_name=service_name,
     )
+    if resource_hash is not None:
+        translated.resource_hash = resource_hash
+    return translated
 
 
 def _severity_to_level(severity_number: int, severity_text: str) -> str:
@@ -409,26 +486,35 @@ def _build_endpoint_attributes(
     return endpoint
 
 
-def otlp_logs_to_proto(
-    request: logs_service_pb2.ExportLogsServiceRequest,
-) -> list[ingestion_pb2.LogEntry]:
+def otlp_logs_to_proto(request: logs_service_pb2.ExportLogsServiceRequest) -> Translated:
     logs: list[ingestion_pb2.LogEntry] = []
+    resources: dict[int, str] = {}
 
     for resource_logs in request.resource_logs:
         resource_attrs = _attributes_to_dict(resource_logs.resource.attributes)
+        _sanitize_client_ip_attrs(resource_attrs)
+        resource_hash = _register_resource(resources, resource_attrs)
 
         for scope_logs in resource_logs.scope_logs:
             for log_record in scope_logs.log_records:
-                logs.append(_translate_log_record(log_record, resource_attrs))
+                logs.append(_translate_log_record(log_record, resource_attrs, resource_hash))
 
-    return logs
+    return Translated(logs, resources)
 
 
 def _translate_log_record(
-    log_record, resource_attrs: dict[str, typing.Any]
+    log_record, resource_attrs: dict[str, typing.Any], resource_hash: int | None
 ) -> ingestion_pb2.LogEntry:
-    merged_attrs = {**resource_attrs, **_attributes_to_dict(log_record.attributes)}
-    _sanitize_client_ip_attrs(merged_attrs)
+    """Translate one record; its row keeps only record-level attributes.
+
+    Resource attributes still drive the inferred and promoted fields (they
+    are merged under the record's), but are stored once per resource and
+    merged back in on read.
+    """
+    record_attrs = _attributes_to_dict(log_record.attributes)
+    _sanitize_client_ip_attrs(record_attrs)
+    client_data, client_channel, client_country = _extract_client_data(record_attrs)
+    merged_attrs = {**resource_attrs, **record_attrs}
 
     time_unix_nano = (
         log_record.time_unix_nano
@@ -457,9 +543,7 @@ def _translate_log_record(
         if not error_type or not error_message:
             log_type = "custom"
 
-    client_data, client_channel, client_country = _extract_client_data(merged_attrs)
-
-    attrs_out = dict(merged_attrs)
+    attrs_out = dict(record_attrs)
 
     if log_type == "endpoint":
         endpoint = _build_endpoint_attributes(merged_attrs)
@@ -470,11 +554,6 @@ def _translate_log_record(
 
     if client_data:
         attrs_out["client"] = client_data
-
-    if log_record.trace_id:
-        attrs_out["trace_id"] = log_record.trace_id.hex()
-    if log_record.span_id:
-        attrs_out["span_id"] = log_record.span_id.hex()
 
     environment = _truncate(
         _as_str_or_none(
@@ -499,6 +578,9 @@ def _translate_log_record(
         50,
     )
     log_id = _truncate(_as_str_or_none(merged_attrs.get("ledger.log_id")), 64)
+    service_name = _truncate(_as_str_or_none(merged_attrs.get("service.name")), 255)
+
+    _drop_promoted_attrs(attrs_out, log_type)
 
     log_entry = ingestion_pb2.LogEntry(
         timestamp=timestamp,
@@ -531,10 +613,29 @@ def _translate_log_record(
         log_entry.client_channel = client_channel
     if client_country is not None:
         log_entry.client_country = client_country
+    if service_name is not None:
+        log_entry.service_name = service_name
+    if resource_hash is not None:
+        log_entry.resource_hash = resource_hash
+    if log_record.trace_id:
+        log_entry.trace_id = log_record.trace_id.hex()
+    if log_record.span_id:
+        log_entry.span_id = log_record.span_id.hex()
     if attrs_out:
         log_entry.attributes = json.dumps(attrs_out)
 
     return log_entry
+
+
+def _drop_promoted_attrs(attrs: dict[str, typing.Any], log_type: str) -> None:
+    """Remove record attributes that were moved into their own columns.
+
+    Type-specific keys are only promoted for that final log type (an
+    exception log missing its message is downgraded to custom, and then the
+    attribute is the only copy), so only those are dropped.
+    """
+    for key in _PROMOTED_LOG_ATTR_KEYS + _PROMOTED_LOG_ATTR_KEYS_BY_TYPE.get(log_type, ()):
+        attrs.pop(key, None)
 
 
 def _as_str_or_none(value: typing.Any) -> str | None:
@@ -551,61 +652,66 @@ def _nano_to_iso(time_unix_nano: int) -> str:
     ).isoformat()
 
 
-def _merge_point_tags(resource_attrs: dict[str, typing.Any], point_attributes) -> dict[str, str]:
-    merged = {**resource_attrs, **_attributes_to_dict(point_attributes)}
-    return {key: _stringify(value) for key, value in merged.items()}
+class _SeriesOrigin(typing.NamedTuple):
+    """What every data point of one ResourceMetrics shares."""
+
+    identity_tags: dict[str, str]
+    service_name: str
+    resource_hash: int | None
 
 
-def otlp_metrics_to_proto(
-    request: metrics_service_pb2.ExportMetricsServiceRequest,
-) -> list[ingestion_pb2.MetricPoint]:
+def otlp_metrics_to_proto(request: metrics_service_pb2.ExportMetricsServiceRequest) -> Translated:
     points: list[ingestion_pb2.MetricPoint] = []
+    resources: dict[int, str] = {}
 
     for resource_metrics in request.resource_metrics:
         resource_attrs = _attributes_to_dict(resource_metrics.resource.attributes)
-        service_name = str(resource_attrs.get("service.name") or "unknown_service")
-
+        origin = _SeriesOrigin(
+            identity_tags={
+                key: _stringify(value)
+                for key, value in resource_attrs.items()
+                if key in _SERIES_IDENTITY_RESOURCE_KEYS
+            },
+            service_name=str(resource_attrs.get("service.name") or "unknown_service"),
+            resource_hash=_register_resource(resources, resource_attrs),
+        )
         for scope_metrics in resource_metrics.scope_metrics:
             for metric in scope_metrics.metrics:
-                data_kind = metric.WhichOneof("data")
+                points.extend(_translate_metric(metric, origin))
 
-                if data_kind == "sum":
-                    temporality = _map_temporality(metric.sum.aggregation_temporality)
-                    for dp in metric.sum.data_points:
-                        points.append(
-                            _translate_number_point(
-                                metric.name,
-                                ingestion_pb2.SUM,
-                                dp,
-                                resource_attrs,
-                                service_name,
-                                temporality,
-                            )
-                        )
-                elif data_kind == "gauge":
-                    for dp in metric.gauge.data_points:
-                        points.append(
-                            _translate_number_point(
-                                metric.name,
-                                ingestion_pb2.GAUGE,
-                                dp,
-                                resource_attrs,
-                                service_name,
-                                ingestion_pb2.TEMPORALITY_UNSPECIFIED,
-                            )
-                        )
-                elif data_kind == "histogram":
-                    temporality = _map_temporality(metric.histogram.aggregation_temporality)
-                    for dp in metric.histogram.data_points:
-                        points.append(
-                            _translate_histogram_point(
-                                metric.name, dp, resource_attrs, service_name, temporality
-                            )
-                        )
-                # exponential_histogram and summary metric types are not yet
-                # supported by the internal MetricPoint model and are skipped.
+    return Translated(points, resources)
 
-    return points
+
+def _translate_metric(metric, origin: _SeriesOrigin) -> list[ingestion_pb2.MetricPoint]:
+    data_kind = metric.WhichOneof("data")
+    if data_kind == "sum":
+        temporality = _map_temporality(metric.sum.aggregation_temporality)
+        return [
+            _number_point(origin, metric.name, ingestion_pb2.SUM, dp, temporality)
+            for dp in metric.sum.data_points
+        ]
+    if data_kind == "gauge":
+        return [
+            _number_point(
+                origin, metric.name, ingestion_pb2.GAUGE, dp, ingestion_pb2.TEMPORALITY_UNSPECIFIED
+            )
+            for dp in metric.gauge.data_points
+        ]
+    if data_kind == "histogram":
+        temporality = _map_temporality(metric.histogram.aggregation_temporality)
+        return [
+            _histogram_point(origin, metric.name, dp, temporality)
+            for dp in metric.histogram.data_points
+        ]
+    if data_kind == "exponential_histogram":
+        temporality = _map_temporality(metric.exponential_histogram.aggregation_temporality)
+        return [
+            _exponential_histogram_point(origin, metric.name, dp, temporality)
+            for dp in metric.exponential_histogram.data_points
+        ]
+    if data_kind == "summary":
+        return [_summary_point(origin, metric.name, dp) for dp in metric.summary.data_points]
+    return []
 
 
 def _map_temporality(otlp_temporality: int) -> int:
@@ -618,48 +724,95 @@ def _map_temporality(otlp_temporality: int) -> int:
     return ingestion_pb2.TEMPORALITY_UNSPECIFIED
 
 
-def _translate_number_point(
-    name: str,
-    metric_type,
-    dp,
-    resource_attrs: dict[str, typing.Any],
-    service_name: str,
-    temporality: int,
+def _new_point(
+    origin: _SeriesOrigin, name: str, metric_type: int, dp, temporality: int
 ) -> ingestion_pb2.MetricPoint:
-    value = dp.as_double if dp.WhichOneof("value") == "as_double" else float(dp.as_int)
-
+    point_tags = {
+        key: _stringify(value) for key, value in _attributes_to_dict(dp.attributes).items()
+    }
     point = ingestion_pb2.MetricPoint(
         name=name[:255],
         type=metric_type,
         timestamp=_nano_to_iso(dp.time_unix_nano),
-        tags=_merge_point_tags(resource_attrs, dp.attributes),
-        service_name=service_name[:255],
+        tags={**origin.identity_tags, **point_tags},
+        service_name=origin.service_name[:255],
         temporality=temporality,
     )
-    point.value = value
+    if origin.resource_hash is not None:
+        point.resource_hash = origin.resource_hash
     return point
 
 
-def _translate_histogram_point(
-    name: str,
-    dp,
-    resource_attrs: dict[str, typing.Any],
-    service_name: str,
-    temporality: int,
+def _exemplars(exemplars) -> list[ingestion_pb2.Exemplar]:
+    """Exemplars that link to a trace; unsampled ones have nothing to open."""
+    linked = []
+    for exemplar in exemplars:
+        if not exemplar.trace_id:
+            continue
+        value_kind = exemplar.WhichOneof("value")
+        linked.append(
+            ingestion_pb2.Exemplar(
+                value=exemplar.as_double if value_kind == "as_double" else float(exemplar.as_int),
+                timestamp=_nano_to_iso(exemplar.time_unix_nano),
+                trace_id=exemplar.trace_id.hex(),
+                span_id=exemplar.span_id.hex(),
+            )
+        )
+        if len(linked) == _MAX_EXEMPLARS_PER_POINT:
+            break
+    return linked
+
+
+def _number_point(
+    origin: _SeriesOrigin, name: str, metric_type: int, dp, temporality: int
 ) -> ingestion_pb2.MetricPoint:
-    point = ingestion_pb2.MetricPoint(
-        name=name[:255],
-        type=ingestion_pb2.HISTOGRAM,
-        timestamp=_nano_to_iso(dp.time_unix_nano),
-        tags=_merge_point_tags(resource_attrs, dp.attributes),
-        service_name=service_name[:255],
-        bucket_counts=[float(c) for c in dp.bucket_counts],
-        explicit_bounds=list(dp.explicit_bounds),
-        temporality=temporality,
-    )
+    point = _new_point(origin, name, metric_type, dp, temporality)
+    point.value = dp.as_double if dp.WhichOneof("value") == "as_double" else float(dp.as_int)
+    point.exemplars.extend(_exemplars(dp.exemplars))
+    return point
+
+
+def _histogram_point(
+    origin: _SeriesOrigin, name: str, dp, temporality: int
+) -> ingestion_pb2.MetricPoint:
+    point = _new_point(origin, name, ingestion_pb2.HISTOGRAM, dp, temporality)
+    point.bucket_counts.extend(float(c) for c in dp.bucket_counts)
+    point.explicit_bounds.extend(dp.explicit_bounds)
     point.count = dp.count
     if dp.HasField("sum"):
         point.sum = dp.sum
+    point.exemplars.extend(_exemplars(dp.exemplars))
+    return point
+
+
+def _exponential_histogram_point(
+    origin: _SeriesOrigin, name: str, dp, temporality: int
+) -> ingestion_pb2.MetricPoint:
+    point = _new_point(origin, name, ingestion_pb2.EXPONENTIAL_HISTOGRAM, dp, temporality)
+    point.count = dp.count
+    if dp.HasField("sum"):
+        point.sum = dp.sum
+    point.scale = dp.scale
+    point.zero_count = dp.zero_count
+    point.positive_offset = dp.positive.offset
+    point.positive_counts.extend(dp.positive.bucket_counts)
+    point.negative_offset = dp.negative.offset
+    point.negative_counts.extend(dp.negative.bucket_counts)
+    point.exemplars.extend(_exemplars(dp.exemplars))
+    return point
+
+
+def _summary_point(origin: _SeriesOrigin, name: str, dp) -> ingestion_pb2.MetricPoint:
+    # A summary's count and sum are running totals since process start by
+    # definition (the data model has no temporality field), so they are
+    # differenced like any cumulative series.
+    point = _new_point(
+        origin, name, ingestion_pb2.SUMMARY, dp, ingestion_pb2.TEMPORALITY_CUMULATIVE
+    )
+    point.count = dp.count
+    point.sum = dp.sum
+    point.quantiles.extend(q.quantile for q in dp.quantile_values)
+    point.quantile_values.extend(q.value for q in dp.quantile_values)
     return point
 
 

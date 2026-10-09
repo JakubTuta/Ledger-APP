@@ -5,6 +5,7 @@ import sqlalchemy as sa
 import query_service.database as database
 import query_service.models as models
 import query_service.schemas as schemas
+import query_service.services.log_resources as log_resources
 
 _VALID_STATUSES = frozenset({"unresolved", "resolved", "ignored", "muted"})
 
@@ -68,7 +69,7 @@ async def get_error_group(
             log_result = await session.execute(log_query)
             log = log_result.scalar_one_or_none()
             if log is not None:
-                sample_log = schemas.LogResponse.model_validate(log)
+                (sample_log,) = await log_resources.log_responses(session, project_id, [log])
 
         return schemas.ErrorGroupDetailResponse(
             group=schemas.ErrorGroupResponse.model_validate(group),

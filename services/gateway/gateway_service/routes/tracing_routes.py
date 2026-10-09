@@ -4,6 +4,8 @@ from datetime import datetime, timedelta
 
 import fastapi
 import gateway_service.proto.query_pb2 as query_pb2
+import gateway_service.routes.query_routes as query_routes
+import gateway_service.schemas as schemas
 import grpc
 from gateway_service import dependencies
 from pydantic import BaseModel
@@ -184,4 +186,192 @@ async def get_trace(
         duration_ms=response.duration_ms,
         services=list(response.services),
         root_span_id=response.root_span_id,
+    )
+
+
+class TraceLogsResponse(BaseModel):
+    logs: list[schemas.LogEntryResponse]
+    truncated: bool
+
+
+class ServiceNodeResponse(BaseModel):
+    service: str
+    calls: int
+    errors: int
+    p95_ms: float
+
+
+class ServiceEdgeResponse(BaseModel):
+    caller: str
+    callee: str
+    calls: int
+    errors: int
+    p95_ms: float
+
+
+class ServiceMapResponse(BaseModel):
+    nodes: list[ServiceNodeResponse]
+    edges: list[ServiceEdgeResponse]
+    from_time: str
+    to_time: str
+    # Hourly rollup: p95 is the highest hourly p95 rather than the window's.
+    downsampled: bool
+
+
+class RedPointResponse(BaseModel):
+    bucket: str
+    calls: int
+    errors: int
+    p50_ms: float
+    p95_ms: float
+    p99_ms: float
+
+
+class RedSeriesResponse(BaseModel):
+    service: str
+    operation: str | None
+    calls: int
+    errors: int
+    p95_ms: float
+    points: list[RedPointResponse]
+
+
+class ServiceRedResponse(BaseModel):
+    interval: str
+    series: list[RedSeriesResponse]
+    from_time: str
+    to_time: str
+
+
+_INTERVALS = ("1m", "5m", "1h", "1d")
+
+
+async def _call_query(request: fastapi.Request, method: str, proto_req, timeout: float = 15.0):
+    try:
+        async with request.app.state.grpc_pool.get_query_stub() as stub:
+            return await getattr(stub, method)(proto_req, timeout=timeout)
+    except grpc.RpcError as e:
+        if e.code() == grpc.StatusCode.INVALID_ARGUMENT:
+            raise fastapi.HTTPException(status_code=400, detail=str(e.details()))
+        raise fastapi.HTTPException(status_code=502, detail=str(e.details()))
+
+
+@router.get(
+    "/traces/{trace_id}/logs",
+    response_model=TraceLogsResponse,
+    summary="Logs emitted inside a trace",
+    description="Logs carrying this trace id, oldest first - optionally only those "
+    "emitted inside one span. Searched within the trace's own time window.",
+)
+async def get_trace_logs(
+    request: fastapi.Request,
+    trace_id: str,
+    project_id: int = fastapi.Depends(dependencies.require_project_member),
+    span_id: str | None = fastapi.Query(None),
+    limit: int = fastapi.Query(500, ge=1, le=2000),
+) -> TraceLogsResponse:
+    proto_req = query_pb2.GetTraceLogsRequest(project_id=project_id, trace_id=trace_id, limit=limit)
+    if span_id is not None:
+        proto_req.span_id = span_id
+    response = await _call_query(request, "GetTraceLogs", proto_req)
+    return TraceLogsResponse(
+        logs=[query_routes.proto_to_log_response(log) for log in response.logs],
+        truncated=response.truncated,
+    )
+
+
+@router.get(
+    "/services/map",
+    response_model=ServiceMapResponse,
+    summary="Service dependency map",
+    description="Services seen in a window (entry-span calls, errors, p95) and the "
+    "calls between them, including calls into uninstrumented dependencies named "
+    "by client spans (databases, third-party APIs). Window: at most 7 days, "
+    "default the last hour.",
+)
+async def get_service_map(
+    request: fastapi.Request,
+    project_id: int = fastapi.Depends(dependencies.require_project_member),
+    from_time: str | None = fastapi.Query(None, alias="from"),
+    to_time: str | None = fastapi.Query(None, alias="to"),
+) -> ServiceMapResponse:
+    proto_req = query_pb2.GetServiceMapRequest(project_id=project_id)
+    if from_time is not None:
+        proto_req.from_time = from_time
+    if to_time is not None:
+        proto_req.to_time = to_time
+    response = await _call_query(request, "GetServiceMap", proto_req)
+    return ServiceMapResponse(
+        nodes=[
+            ServiceNodeResponse(service=n.service, calls=n.calls, errors=n.errors, p95_ms=n.p95_ms)
+            for n in response.nodes
+        ],
+        edges=[
+            ServiceEdgeResponse(
+                caller=e.caller, callee=e.callee, calls=e.calls, errors=e.errors, p95_ms=e.p95_ms
+            )
+            for e in response.edges
+        ],
+        from_time=response.from_time,
+        to_time=response.to_time,
+        downsampled=response.downsampled,
+    )
+
+
+@router.get(
+    "/services/red",
+    response_model=ServiceRedResponse,
+    summary="Rate, errors and duration per service",
+    description="RED metrics from entry spans (server/consumer spans and trace "
+    "roots): one series per service, or per operation when `service` is set. "
+    "Window: at most 7 days, default the last hour.",
+)
+async def get_service_red(
+    request: fastapi.Request,
+    project_id: int = fastapi.Depends(dependencies.require_project_member),
+    service: str | None = fastapi.Query(None),
+    interval: str | None = fastapi.Query(None),
+    from_time: str | None = fastapi.Query(None, alias="from"),
+    to_time: str | None = fastapi.Query(None, alias="to"),
+) -> ServiceRedResponse:
+    if interval is not None and interval not in _INTERVALS:
+        raise fastapi.HTTPException(
+            status_code=400,
+            detail=f"Invalid interval {interval!r}. Expected one of: {', '.join(_INTERVALS)}",
+        )
+    proto_req = query_pb2.GetServiceRedRequest(project_id=project_id)
+    for field, value in (
+        ("service", service),
+        ("interval", interval),
+        ("from_time", from_time),
+        ("to_time", to_time),
+    ):
+        if value is not None:
+            setattr(proto_req, field, value)
+    response = await _call_query(request, "GetServiceRed", proto_req)
+    return ServiceRedResponse(
+        interval=response.interval,
+        from_time=response.from_time,
+        to_time=response.to_time,
+        series=[
+            RedSeriesResponse(
+                service=s.service,
+                operation=s.operation or None,
+                calls=s.calls,
+                errors=s.errors,
+                p95_ms=s.p95_ms,
+                points=[
+                    RedPointResponse(
+                        bucket=p.bucket,
+                        calls=p.calls,
+                        errors=p.errors,
+                        p50_ms=p.p50_ms,
+                        p95_ms=p.p95_ms,
+                        p99_ms=p.p99_ms,
+                    )
+                    for p in s.points
+                ],
+            )
+            for s in response.series
+        ],
     )

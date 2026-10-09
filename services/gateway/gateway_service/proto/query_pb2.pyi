@@ -1039,12 +1039,35 @@ class MetricSeries(_message.Message):
     def __init__(self, tags: _Optional[_Mapping[str, str]] = ..., points: _Optional[_Iterable[_Union[MetricSeriesPoint, _Mapping]]] = ...) -> None: ...
 
 class HistogramBucket(_message.Message):
-    __slots__ = ("upper_bound", "count")
+    __slots__ = ("upper_bound", "count", "lower_bound")
     UPPER_BOUND_FIELD_NUMBER: _ClassVar[int]
     COUNT_FIELD_NUMBER: _ClassVar[int]
+    LOWER_BOUND_FIELD_NUMBER: _ClassVar[int]
     upper_bound: float
     count: float
-    def __init__(self, upper_bound: _Optional[float] = ..., count: _Optional[float] = ...) -> None: ...
+    lower_bound: float
+    def __init__(self, upper_bound: _Optional[float] = ..., count: _Optional[float] = ..., lower_bound: _Optional[float] = ...) -> None: ...
+
+class MetricExemplar(_message.Message):
+    __slots__ = ("tags", "value", "timestamp", "trace_id", "span_id")
+    class TagsEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: str
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
+    TAGS_FIELD_NUMBER: _ClassVar[int]
+    VALUE_FIELD_NUMBER: _ClassVar[int]
+    TIMESTAMP_FIELD_NUMBER: _ClassVar[int]
+    TRACE_ID_FIELD_NUMBER: _ClassVar[int]
+    SPAN_ID_FIELD_NUMBER: _ClassVar[int]
+    tags: _containers.ScalarMap[str, str]
+    value: float
+    timestamp: str
+    trace_id: str
+    span_id: str
+    def __init__(self, tags: _Optional[_Mapping[str, str]] = ..., value: _Optional[float] = ..., timestamp: _Optional[str] = ..., trace_id: _Optional[str] = ..., span_id: _Optional[str] = ...) -> None: ...
 
 class MetricHistogram(_message.Message):
     __slots__ = ("tags", "buckets", "count", "sum")
@@ -1066,7 +1089,7 @@ class MetricHistogram(_message.Message):
     def __init__(self, tags: _Optional[_Mapping[str, str]] = ..., buckets: _Optional[_Iterable[_Union[HistogramBucket, _Mapping]]] = ..., count: _Optional[int] = ..., sum: _Optional[float] = ...) -> None: ...
 
 class QueryMetricSeriesResponse(_message.Message):
-    __slots__ = ("project_id", "name", "type", "temporality", "aggregation", "interval", "series", "histograms", "downsampled", "truncated")
+    __slots__ = ("project_id", "name", "type", "temporality", "aggregation", "interval", "series", "histograms", "downsampled", "truncated", "exemplars")
     PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     TYPE_FIELD_NUMBER: _ClassVar[int]
@@ -1077,6 +1100,7 @@ class QueryMetricSeriesResponse(_message.Message):
     HISTOGRAMS_FIELD_NUMBER: _ClassVar[int]
     DOWNSAMPLED_FIELD_NUMBER: _ClassVar[int]
     TRUNCATED_FIELD_NUMBER: _ClassVar[int]
+    EXEMPLARS_FIELD_NUMBER: _ClassVar[int]
     project_id: int
     name: str
     type: int
@@ -1087,4 +1111,133 @@ class QueryMetricSeriesResponse(_message.Message):
     histograms: _containers.RepeatedCompositeFieldContainer[MetricHistogram]
     downsampled: bool
     truncated: bool
-    def __init__(self, project_id: _Optional[int] = ..., name: _Optional[str] = ..., type: _Optional[int] = ..., temporality: _Optional[int] = ..., aggregation: _Optional[str] = ..., interval: _Optional[str] = ..., series: _Optional[_Iterable[_Union[MetricSeries, _Mapping]]] = ..., histograms: _Optional[_Iterable[_Union[MetricHistogram, _Mapping]]] = ..., downsampled: bool = ..., truncated: bool = ...) -> None: ...
+    exemplars: _containers.RepeatedCompositeFieldContainer[MetricExemplar]
+    def __init__(self, project_id: _Optional[int] = ..., name: _Optional[str] = ..., type: _Optional[int] = ..., temporality: _Optional[int] = ..., aggregation: _Optional[str] = ..., interval: _Optional[str] = ..., series: _Optional[_Iterable[_Union[MetricSeries, _Mapping]]] = ..., histograms: _Optional[_Iterable[_Union[MetricHistogram, _Mapping]]] = ..., downsampled: bool = ..., truncated: bool = ..., exemplars: _Optional[_Iterable[_Union[MetricExemplar, _Mapping]]] = ...) -> None: ...
+
+class GetTraceLogsRequest(_message.Message):
+    __slots__ = ("project_id", "trace_id", "span_id", "limit")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    TRACE_ID_FIELD_NUMBER: _ClassVar[int]
+    SPAN_ID_FIELD_NUMBER: _ClassVar[int]
+    LIMIT_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    trace_id: str
+    span_id: str
+    limit: int
+    def __init__(self, project_id: _Optional[int] = ..., trace_id: _Optional[str] = ..., span_id: _Optional[str] = ..., limit: _Optional[int] = ...) -> None: ...
+
+class GetTraceLogsResponse(_message.Message):
+    __slots__ = ("logs", "truncated")
+    LOGS_FIELD_NUMBER: _ClassVar[int]
+    TRUNCATED_FIELD_NUMBER: _ClassVar[int]
+    logs: _containers.RepeatedCompositeFieldContainer[LogEntry]
+    truncated: bool
+    def __init__(self, logs: _Optional[_Iterable[_Union[LogEntry, _Mapping]]] = ..., truncated: bool = ...) -> None: ...
+
+class GetServiceMapRequest(_message.Message):
+    __slots__ = ("project_id", "from_time", "to_time")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    FROM_TIME_FIELD_NUMBER: _ClassVar[int]
+    TO_TIME_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    from_time: str
+    to_time: str
+    def __init__(self, project_id: _Optional[int] = ..., from_time: _Optional[str] = ..., to_time: _Optional[str] = ...) -> None: ...
+
+class ServiceNode(_message.Message):
+    __slots__ = ("service", "calls", "errors", "p95_ms")
+    SERVICE_FIELD_NUMBER: _ClassVar[int]
+    CALLS_FIELD_NUMBER: _ClassVar[int]
+    ERRORS_FIELD_NUMBER: _ClassVar[int]
+    P95_MS_FIELD_NUMBER: _ClassVar[int]
+    service: str
+    calls: int
+    errors: int
+    p95_ms: float
+    def __init__(self, service: _Optional[str] = ..., calls: _Optional[int] = ..., errors: _Optional[int] = ..., p95_ms: _Optional[float] = ...) -> None: ...
+
+class ServiceEdge(_message.Message):
+    __slots__ = ("caller", "callee", "calls", "errors", "p95_ms")
+    CALLER_FIELD_NUMBER: _ClassVar[int]
+    CALLEE_FIELD_NUMBER: _ClassVar[int]
+    CALLS_FIELD_NUMBER: _ClassVar[int]
+    ERRORS_FIELD_NUMBER: _ClassVar[int]
+    P95_MS_FIELD_NUMBER: _ClassVar[int]
+    caller: str
+    callee: str
+    calls: int
+    errors: int
+    p95_ms: float
+    def __init__(self, caller: _Optional[str] = ..., callee: _Optional[str] = ..., calls: _Optional[int] = ..., errors: _Optional[int] = ..., p95_ms: _Optional[float] = ...) -> None: ...
+
+class GetServiceMapResponse(_message.Message):
+    __slots__ = ("nodes", "edges", "from_time", "to_time", "downsampled")
+    NODES_FIELD_NUMBER: _ClassVar[int]
+    EDGES_FIELD_NUMBER: _ClassVar[int]
+    FROM_TIME_FIELD_NUMBER: _ClassVar[int]
+    TO_TIME_FIELD_NUMBER: _ClassVar[int]
+    DOWNSAMPLED_FIELD_NUMBER: _ClassVar[int]
+    nodes: _containers.RepeatedCompositeFieldContainer[ServiceNode]
+    edges: _containers.RepeatedCompositeFieldContainer[ServiceEdge]
+    from_time: str
+    to_time: str
+    downsampled: bool
+    def __init__(self, nodes: _Optional[_Iterable[_Union[ServiceNode, _Mapping]]] = ..., edges: _Optional[_Iterable[_Union[ServiceEdge, _Mapping]]] = ..., from_time: _Optional[str] = ..., to_time: _Optional[str] = ..., downsampled: bool = ...) -> None: ...
+
+class GetServiceRedRequest(_message.Message):
+    __slots__ = ("project_id", "service", "from_time", "to_time", "interval")
+    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    SERVICE_FIELD_NUMBER: _ClassVar[int]
+    FROM_TIME_FIELD_NUMBER: _ClassVar[int]
+    TO_TIME_FIELD_NUMBER: _ClassVar[int]
+    INTERVAL_FIELD_NUMBER: _ClassVar[int]
+    project_id: int
+    service: str
+    from_time: str
+    to_time: str
+    interval: str
+    def __init__(self, project_id: _Optional[int] = ..., service: _Optional[str] = ..., from_time: _Optional[str] = ..., to_time: _Optional[str] = ..., interval: _Optional[str] = ...) -> None: ...
+
+class RedPoint(_message.Message):
+    __slots__ = ("bucket", "calls", "errors", "p50_ms", "p95_ms", "p99_ms")
+    BUCKET_FIELD_NUMBER: _ClassVar[int]
+    CALLS_FIELD_NUMBER: _ClassVar[int]
+    ERRORS_FIELD_NUMBER: _ClassVar[int]
+    P50_MS_FIELD_NUMBER: _ClassVar[int]
+    P95_MS_FIELD_NUMBER: _ClassVar[int]
+    P99_MS_FIELD_NUMBER: _ClassVar[int]
+    bucket: str
+    calls: int
+    errors: int
+    p50_ms: float
+    p95_ms: float
+    p99_ms: float
+    def __init__(self, bucket: _Optional[str] = ..., calls: _Optional[int] = ..., errors: _Optional[int] = ..., p50_ms: _Optional[float] = ..., p95_ms: _Optional[float] = ..., p99_ms: _Optional[float] = ...) -> None: ...
+
+class RedSeries(_message.Message):
+    __slots__ = ("service", "operation", "points", "calls", "errors", "p95_ms")
+    SERVICE_FIELD_NUMBER: _ClassVar[int]
+    OPERATION_FIELD_NUMBER: _ClassVar[int]
+    POINTS_FIELD_NUMBER: _ClassVar[int]
+    CALLS_FIELD_NUMBER: _ClassVar[int]
+    ERRORS_FIELD_NUMBER: _ClassVar[int]
+    P95_MS_FIELD_NUMBER: _ClassVar[int]
+    service: str
+    operation: str
+    points: _containers.RepeatedCompositeFieldContainer[RedPoint]
+    calls: int
+    errors: int
+    p95_ms: float
+    def __init__(self, service: _Optional[str] = ..., operation: _Optional[str] = ..., points: _Optional[_Iterable[_Union[RedPoint, _Mapping]]] = ..., calls: _Optional[int] = ..., errors: _Optional[int] = ..., p95_ms: _Optional[float] = ...) -> None: ...
+
+class GetServiceRedResponse(_message.Message):
+    __slots__ = ("interval", "series", "from_time", "to_time")
+    INTERVAL_FIELD_NUMBER: _ClassVar[int]
+    SERIES_FIELD_NUMBER: _ClassVar[int]
+    FROM_TIME_FIELD_NUMBER: _ClassVar[int]
+    TO_TIME_FIELD_NUMBER: _ClassVar[int]
+    interval: str
+    series: _containers.RepeatedCompositeFieldContainer[RedSeries]
+    from_time: str
+    to_time: str
+    def __init__(self, interval: _Optional[str] = ..., series: _Optional[_Iterable[_Union[RedSeries, _Mapping]]] = ..., from_time: _Optional[str] = ..., to_time: _Optional[str] = ...) -> None: ...

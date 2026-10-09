@@ -1,6 +1,6 @@
 -- Logs DB bootstrap. Kept in sync with
 -- services/migrations/migration_service/alembic/logs/versions/*
--- (current head: 018) and with the ORM models in
+-- (current head: 024) and with the ORM models in
 -- services/ingestion/ingestion_service/models.py and
 -- services/query/query_service/models.py.
 --
@@ -43,6 +43,12 @@ CREATE TABLE IF NOT EXISTS logs (
     log_id VARCHAR(64),
     client_channel VARCHAR(20),
     client_country CHAR(2),
+    -- The record's OTLP resource is stored once in `resources`; `attributes`
+    -- holds only the record's own attributes.
+    resource_hash BIGINT,
+    service_name VARCHAR(255),
+    trace_id CHAR(32),
+    span_id CHAR(16),
     PRIMARY KEY (id, timestamp)
 ) PARTITION BY RANGE (timestamp);
 
@@ -343,6 +349,7 @@ CREATE TABLE IF NOT EXISTS spans (
     attributes        JSONB NOT NULL DEFAULT '{}'::jsonb,
     events            JSONB,
     error_fingerprint CHAR(64),
+    resource_hash     BIGINT,
     PRIMARY KEY (span_id, start_time)
 ) PARTITION BY RANGE (start_time);
 
@@ -367,6 +374,21 @@ CREATE TABLE IF NOT EXISTS span_latency_1h (
 );
 CREATE INDEX IF NOT EXISTS idx_sl1h_project_bucket ON span_latency_1h (project_id, bucket DESC);
 
+-- Hourly service-graph rollup behind long-window service maps (analytics job
+-- service_edges_1h_rollup). caller '' marks requests entering `callee` (its
+-- entry spans); p95_ns is that hour's p95.
+CREATE TABLE IF NOT EXISTS service_edges_1h (
+    project_id      BIGINT NOT NULL,
+    bucket          TIMESTAMPTZ NOT NULL,
+    caller          TEXT NOT NULL,
+    callee          TEXT NOT NULL,
+    calls           BIGINT NOT NULL,
+    errors          BIGINT NOT NULL,
+    duration_ns_sum BIGINT NOT NULL,
+    p95_ns          BIGINT,
+    PRIMARY KEY (project_id, bucket, caller, callee)
+);
+
 -- ============================================
 -- 7. METRIC POINTS (OTLP metrics) + hourly rollup
 -- ============================================
@@ -389,6 +411,14 @@ CREATE TABLE IF NOT EXISTS metric_points (
     -- series is a running total and has to be differenced reset-aware on read;
     -- a delta series is already per-interval.
     temporality     SMALLINT,
+    resource_hash   BIGINT,
+    -- OTLP exponential histogram: {"scale", "zero_count", "positive": {"offset",
+    -- "counts"}, "negative": {...}}
+    exp_histogram   JSONB,
+    -- OTLP summary: [[quantile, value], ...]
+    quantiles       JSONB,
+    -- [{"v", "ts", "trace_id", "span_id"}, ...] linking the point to traces
+    exemplars       JSONB,
     PRIMARY KEY (project_id, name, tags_hash, ts)
 ) PARTITION BY RANGE (ts);
 
@@ -416,7 +446,23 @@ CREATE TABLE IF NOT EXISTS metric_points_1h (
 );
 
 -- ============================================
--- 8. IP COUNTRY RANGES (client IP -> country lookup source)
+-- 8. RESOURCES (OTLP resources, stored once per project)
+-- ============================================
+-- logs, spans and metric_points reference a row here by resource_hash (a
+-- 64-bit hash of the canonical attribute JSON). last_seen is refreshed at most
+-- daily by the ingestion worker and drives retention.
+
+CREATE TABLE IF NOT EXISTS resources (
+    project_id    BIGINT NOT NULL,
+    resource_hash BIGINT NOT NULL,
+    attributes    JSONB NOT NULL,
+    first_seen    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_seen     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (project_id, resource_hash)
+);
+
+-- ============================================
+-- 9. IP COUNTRY RANGES (client IP -> country lookup source)
 -- ============================================
 -- Source of truth for the ingestion worker's in-memory bisect table (see
 -- services/ingestion/ingestion_service/services/ip_country.py). Populated

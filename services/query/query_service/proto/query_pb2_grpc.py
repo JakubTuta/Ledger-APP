@@ -149,6 +149,21 @@ class QueryServiceStub(object):
                 request_serializer=query__pb2.QueryMetricSeriesRequest.SerializeToString,
                 response_deserializer=query__pb2.QueryMetricSeriesResponse.FromString,
                 _registered_method=True)
+        self.GetTraceLogs = channel.unary_unary(
+                '/query.QueryService/GetTraceLogs',
+                request_serializer=query__pb2.GetTraceLogsRequest.SerializeToString,
+                response_deserializer=query__pb2.GetTraceLogsResponse.FromString,
+                _registered_method=True)
+        self.GetServiceMap = channel.unary_unary(
+                '/query.QueryService/GetServiceMap',
+                request_serializer=query__pb2.GetServiceMapRequest.SerializeToString,
+                response_deserializer=query__pb2.GetServiceMapResponse.FromString,
+                _registered_method=True)
+        self.GetServiceRed = channel.unary_unary(
+                '/query.QueryService/GetServiceRed',
+                request_serializer=query__pb2.GetServiceRedRequest.SerializeToString,
+                response_deserializer=query__pb2.GetServiceRedResponse.FromString,
+                _registered_method=True)
 
 
 class QueryServiceServicer(object):
@@ -295,6 +310,26 @@ class QueryServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetTraceLogs(self, request, context):
+        """Correlation: logs of a trace, the service dependency graph, and
+        rate/errors/duration per service derived from spans
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetServiceMap(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetServiceRed(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_QueryServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -412,6 +447,21 @@ def add_QueryServiceServicer_to_server(servicer, server):
                     servicer.QueryMetricSeries,
                     request_deserializer=query__pb2.QueryMetricSeriesRequest.FromString,
                     response_serializer=query__pb2.QueryMetricSeriesResponse.SerializeToString,
+            ),
+            'GetTraceLogs': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetTraceLogs,
+                    request_deserializer=query__pb2.GetTraceLogsRequest.FromString,
+                    response_serializer=query__pb2.GetTraceLogsResponse.SerializeToString,
+            ),
+            'GetServiceMap': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetServiceMap,
+                    request_deserializer=query__pb2.GetServiceMapRequest.FromString,
+                    response_serializer=query__pb2.GetServiceMapResponse.SerializeToString,
+            ),
+            'GetServiceRed': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetServiceRed,
+                    request_deserializer=query__pb2.GetServiceRedRequest.FromString,
+                    response_serializer=query__pb2.GetServiceRedResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -1035,6 +1085,87 @@ class QueryService(object):
             '/query.QueryService/QueryMetricSeries',
             query__pb2.QueryMetricSeriesRequest.SerializeToString,
             query__pb2.QueryMetricSeriesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetTraceLogs(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/query.QueryService/GetTraceLogs',
+            query__pb2.GetTraceLogsRequest.SerializeToString,
+            query__pb2.GetTraceLogsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetServiceMap(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/query.QueryService/GetServiceMap',
+            query__pb2.GetServiceMapRequest.SerializeToString,
+            query__pb2.GetServiceMapResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetServiceRed(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/query.QueryService/GetServiceRed',
+            query__pb2.GetServiceRedRequest.SerializeToString,
+            query__pb2.GetServiceRedResponse.FromString,
             options,
             channel_credentials,
             insecure,

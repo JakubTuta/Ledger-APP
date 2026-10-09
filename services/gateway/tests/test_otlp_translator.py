@@ -22,6 +22,11 @@ def _sv(value: str) -> common_pb2.AnyValue:
     return common_pb2.AnyValue(string_value=value)
 
 
+def _stored_attributes(log: ingestion_pb2.LogEntry) -> dict:
+    """The JSONB a log row stores; the field is left unset when nothing remains."""
+    return json.loads(log.attributes) if log.HasField("attributes") else {}
+
+
 class TestAnyValueToPython:
     def test_string_value(self):
         assert otlp_translator.any_value_to_python(_sv("hello")) == "hello"
@@ -81,13 +86,13 @@ class TestSpanTranslation:
 
     def test_ids_hex_encoded(self):
         request = self._build_request(trace_pb2.Span.SPAN_KIND_SERVER)
-        spans = otlp_translator.otlp_spans_to_proto(request)
+        spans = otlp_translator.otlp_spans_to_proto(request).items
         assert spans[0].trace_id == "a" * 32
         assert spans[0].span_id == "b" * 16
 
     def test_service_name_from_resource(self):
         request = self._build_request(trace_pb2.Span.SPAN_KIND_SERVER)
-        spans = otlp_translator.otlp_spans_to_proto(request)
+        spans = otlp_translator.otlp_spans_to_proto(request).items
         assert spans[0].service_name == "checkout"
 
     def test_missing_service_name_defaults(self):
@@ -97,7 +102,7 @@ class TestSpanTranslation:
         span = ss.spans.add()
         span.trace_id = TRACE_ID
         span.span_id = SPAN_ID
-        spans = otlp_translator.otlp_spans_to_proto(request)
+        spans = otlp_translator.otlp_spans_to_proto(request).items
         assert spans[0].service_name == "unknown_service"
 
     @pytest.mark.parametrize(
@@ -113,25 +118,25 @@ class TestSpanTranslation:
     )
     def test_kind_mapping(self, otlp_kind, expected):
         request = self._build_request(otlp_kind)
-        spans = otlp_translator.otlp_spans_to_proto(request)
+        spans = otlp_translator.otlp_spans_to_proto(request).items
         assert spans[0].kind == expected
 
     def test_status_passthrough(self):
         request = self._build_request(
             trace_pb2.Span.SPAN_KIND_SERVER, trace_pb2.Status.STATUS_CODE_ERROR
         )
-        spans = otlp_translator.otlp_spans_to_proto(request)
+        spans = otlp_translator.otlp_spans_to_proto(request).items
         assert spans[0].status == ingestion_pb2.ERROR
 
     def test_attribute_key_normalization(self):
         request = self._build_request(trace_pb2.Span.SPAN_KIND_SERVER)
-        spans = otlp_translator.otlp_spans_to_proto(request)
+        spans = otlp_translator.otlp_spans_to_proto(request).items
         assert spans[0].attributes["http.method"] == "GET"
         assert spans[0].attributes["http.status_code"] == "200"
 
     def test_events_translated(self):
         request = self._build_request(trace_pb2.Span.SPAN_KIND_SERVER)
-        spans = otlp_translator.otlp_spans_to_proto(request)
+        spans = otlp_translator.otlp_spans_to_proto(request).items
         assert len(spans[0].events) == 1
         assert spans[0].events[0].name == "exception"
         assert spans[0].events[0].attrs["exception.type"] == "ValueError"
@@ -144,7 +149,7 @@ class TestSpanTranslation:
         request.resource_spans[0].scope_spans[0].spans[0].attributes.append(
             _kv("client.address", _sv("203.0.113.42"))
         )
-        spans = otlp_translator.otlp_spans_to_proto(request)
+        spans = otlp_translator.otlp_spans_to_proto(request).items
         assert spans[0].attributes["http.client_ip"] == "203.0.113.0/24"
 
     def test_already_truncated_client_ip_left_equivalent(self):
@@ -152,7 +157,7 @@ class TestSpanTranslation:
         request.resource_spans[0].scope_spans[0].spans[0].attributes.append(
             _kv("client.address", _sv("203.0.113.0/24"))
         )
-        spans = otlp_translator.otlp_spans_to_proto(request)
+        spans = otlp_translator.otlp_spans_to_proto(request).items
         assert spans[0].attributes["http.client_ip"] == "203.0.113.0/24"
 
     def test_unparseable_client_ip_dropped(self):
@@ -160,7 +165,7 @@ class TestSpanTranslation:
         request.resource_spans[0].scope_spans[0].spans[0].attributes.append(
             _kv("client.address", _sv("not-an-ip"))
         )
-        spans = otlp_translator.otlp_spans_to_proto(request)
+        spans = otlp_translator.otlp_spans_to_proto(request).items
         assert "http.client_ip" not in spans[0].attributes
 
 
@@ -207,7 +212,7 @@ class TestDecodeTraceRequest:
         }
         body = json.dumps(data).encode()
         decoded = otlp_translator.decode_trace_request(body, "application/json")
-        spans = otlp_translator.otlp_spans_to_proto(decoded)
+        spans = otlp_translator.otlp_spans_to_proto(decoded).items
         assert spans[0].trace_id == "a" * 32
         assert spans[0].span_id == "b" * 16
         assert spans[0].kind == ingestion_pb2.CLIENT
@@ -265,7 +270,7 @@ class TestLogTranslation:
     )
     def test_severity_number_mapping(self, severity_number, expected_level):
         request = self._build_log_record(severity_number=severity_number)
-        logs = otlp_translator.otlp_logs_to_proto(request)
+        logs = otlp_translator.otlp_logs_to_proto(request).items
         assert logs[0].level == expected_level
 
     @pytest.mark.parametrize(
@@ -274,41 +279,41 @@ class TestLogTranslation:
     )
     def test_severity_text_fallback(self, severity_text, expected_level):
         request = self._build_log_record(severity_number=0, severity_text=severity_text)
-        logs = otlp_translator.otlp_logs_to_proto(request)
+        logs = otlp_translator.otlp_logs_to_proto(request).items
         assert logs[0].level == expected_level
 
     def test_exception_log_type_inferred(self):
         request = self._build_log_record(
             attrs={"exception.type": "ValueError", "exception.message": "bad"}
         )
-        logs = otlp_translator.otlp_logs_to_proto(request)
+        logs = otlp_translator.otlp_logs_to_proto(request).items
         assert logs[0].log_type == "exception"
         assert logs[0].error_type == "ValueError"
         assert logs[0].error_message == "bad"
 
     def test_exception_missing_fields_downgrades_to_custom(self):
         request = self._build_log_record(attrs={"exception.type": "ValueError"})
-        logs = otlp_translator.otlp_logs_to_proto(request)
+        logs = otlp_translator.otlp_logs_to_proto(request).items
         assert logs[0].log_type == "custom"
 
     def test_database_log_type_inferred(self):
         request = self._build_log_record(attrs={"db.system": "postgresql"})
-        logs = otlp_translator.otlp_logs_to_proto(request)
+        logs = otlp_translator.otlp_logs_to_proto(request).items
         assert logs[0].log_type == "database"
 
     def test_logger_log_type_inferred(self):
         request = self._build_log_record(attrs={"code.function": "handler"})
-        logs = otlp_translator.otlp_logs_to_proto(request)
+        logs = otlp_translator.otlp_logs_to_proto(request).items
         assert logs[0].log_type == "logger"
 
     def test_default_log_type_custom(self):
         request = self._build_log_record()
-        logs = otlp_translator.otlp_logs_to_proto(request)
+        logs = otlp_translator.otlp_logs_to_proto(request).items
         assert logs[0].log_type == "custom"
 
     def test_explicit_ledger_log_type_wins(self):
         request = self._build_log_record(attrs={"ledger.log_type": "console"})
-        logs = otlp_translator.otlp_logs_to_proto(request)
+        logs = otlp_translator.otlp_logs_to_proto(request).items
         assert logs[0].log_type == "console"
 
     def test_endpoint_synthesis_complete(self):
@@ -320,7 +325,7 @@ class TestLogTranslation:
                 "ledger.duration_ms": "12.5",
             }
         )
-        logs = otlp_translator.otlp_logs_to_proto(request)
+        logs = otlp_translator.otlp_logs_to_proto(request).items
         assert logs[0].log_type == "endpoint"
         attributes = json.loads(logs[0].attributes)
         assert attributes["endpoint"]["method"] == "GET"
@@ -332,12 +337,12 @@ class TestLogTranslation:
         request = self._build_log_record(
             attrs={"http.request.method": "GET", "http.response.status_code": "200"}
         )
-        logs = otlp_translator.otlp_logs_to_proto(request)
+        logs = otlp_translator.otlp_logs_to_proto(request).items
         assert logs[0].log_type == "custom"
 
     def test_importance_derived_from_level(self):
         request = self._build_log_record(severity_number=21)
-        logs = otlp_translator.otlp_logs_to_proto(request)
+        logs = otlp_translator.otlp_logs_to_proto(request).items
         assert logs[0].importance == "critical"
 
     def test_resource_metadata_mapped(self):
@@ -352,41 +357,41 @@ class TestLogTranslation:
         record.severity_number = 9
         record.body.string_value = "hi"
 
-        logs = otlp_translator.otlp_logs_to_proto(request)
+        logs = otlp_translator.otlp_logs_to_proto(request).items
         assert logs[0].environment == "production"
         assert logs[0].release == "1.2.3"
         assert logs[0].platform == "python"
 
-    def test_trace_and_span_id_added_to_attributes(self):
+    def test_trace_and_span_id_get_their_own_fields(self):
         request = self._build_log_record()
         request.resource_logs[0].scope_logs[0].log_records[0].trace_id = TRACE_ID
         request.resource_logs[0].scope_logs[0].log_records[0].span_id = SPAN_ID
 
-        logs = otlp_translator.otlp_logs_to_proto(request)
-        attributes = json.loads(logs[0].attributes)
-        assert attributes["trace_id"] == "a" * 32
-        assert attributes["span_id"] == "b" * 16
+        logs = otlp_translator.otlp_logs_to_proto(request).items
+        assert logs[0].trace_id == "a" * 32
+        assert logs[0].span_id == "b" * 16
+        assert "trace_id" not in _stored_attributes(logs[0])
 
     def test_message_truncated(self):
         request = self._build_log_record(body="x" * 20000)
-        logs = otlp_translator.otlp_logs_to_proto(request)
+        logs = otlp_translator.otlp_logs_to_proto(request).items
         assert len(logs[0].message) == 10000
 
     def test_ledger_log_id_mapped_to_proto_field(self):
         request = self._build_log_record(attrs={"ledger.log_id": "abc123"})
-        logs = otlp_translator.otlp_logs_to_proto(request)
+        logs = otlp_translator.otlp_logs_to_proto(request).items
         assert logs[0].log_id == "abc123"
 
     def test_missing_ledger_log_id_leaves_field_unset(self):
         request = self._build_log_record()
-        logs = otlp_translator.otlp_logs_to_proto(request)
+        logs = otlp_translator.otlp_logs_to_proto(request).items
         assert not logs[0].HasField("log_id")
 
     def test_channel_and_country_promoted_to_typed_fields(self):
         request = self._build_log_record(
             attrs={"ledger.client.channel": "api_client", "ledger.client.country": "DE"}
         )
-        logs = otlp_translator.otlp_logs_to_proto(request)
+        logs = otlp_translator.otlp_logs_to_proto(request).items
         assert logs[0].client_channel == "api_client"
         assert logs[0].client_country == "DE"
 
@@ -394,8 +399,8 @@ class TestLogTranslation:
         request = self._build_log_record(
             attrs={"ledger.client.channel": "api_client", "ledger.client.country": "DE"}
         )
-        logs = otlp_translator.otlp_logs_to_proto(request)
-        attributes = json.loads(logs[0].attributes)
+        logs = otlp_translator.otlp_logs_to_proto(request).items
+        attributes = _stored_attributes(logs[0])
         assert "ledger.client.channel" not in attributes
         assert "ledger.client.country" not in attributes
 
@@ -406,7 +411,7 @@ class TestLogTranslation:
                 "ledger.client.browser_family": "Chrome",
             }
         )
-        logs = otlp_translator.otlp_logs_to_proto(request)
+        logs = otlp_translator.otlp_logs_to_proto(request).items
         attributes = json.loads(logs[0].attributes)
         assert attributes["client"]["ip_prefix"] == "203.0.113.0/24"
         assert attributes["client"]["browser_family"] == "Chrome"
@@ -414,7 +419,7 @@ class TestLogTranslation:
 
     def test_raw_ip_prefix_attribute_defensively_truncated(self):
         request = self._build_log_record(attrs={"ledger.client.ip_prefix": "203.0.113.42"})
-        logs = otlp_translator.otlp_logs_to_proto(request)
+        logs = otlp_translator.otlp_logs_to_proto(request).items
         attributes = json.loads(logs[0].attributes)
         assert attributes["client"]["ip_prefix"] == "203.0.113.0/24"
 
@@ -422,15 +427,14 @@ class TestLogTranslation:
         # Old SDK behavior: raw client.address as a flat log attribute (not
         # under the ledger.client.* namespace at all).
         request = self._build_log_record(attrs={"client.address": "203.0.113.42"})
-        logs = otlp_translator.otlp_logs_to_proto(request)
+        logs = otlp_translator.otlp_logs_to_proto(request).items
         attributes = json.loads(logs[0].attributes)
         assert attributes["client.address"] == "203.0.113.0/24"
 
     def test_no_client_attrs_no_client_key(self):
         request = self._build_log_record()
-        logs = otlp_translator.otlp_logs_to_proto(request)
-        attributes = json.loads(logs[0].attributes)
-        assert "client" not in attributes
+        logs = otlp_translator.otlp_logs_to_proto(request).items
+        assert "client" not in _stored_attributes(logs[0])
 
 
 class TestDecodeLogsRequest:
@@ -455,14 +459,82 @@ class TestDecodeLogsRequest:
         }
         body = json.dumps(data).encode()
         decoded = otlp_translator.decode_logs_request(body, "application/json")
-        logs = otlp_translator.otlp_logs_to_proto(decoded)
-        attributes = json.loads(logs[0].attributes)
-        assert attributes["trace_id"] == "a" * 32
-        assert attributes["span_id"] == "b" * 16
+        logs = otlp_translator.otlp_logs_to_proto(decoded).items
+        assert logs[0].trace_id == "a" * 32
+        assert logs[0].span_id == "b" * 16
 
     def test_malformed_json_rejected(self):
         with pytest.raises(otlp_translator.TranslationError):
             otlp_translator.decode_logs_request(b"{not json", "application/json")
+
+
+class TestResourceStoredOnce:
+    def _request(self, records: int = 3) -> logs_service_pb2.ExportLogsServiceRequest:
+        request = logs_service_pb2.ExportLogsServiceRequest()
+        rl = request.resource_logs.add()
+        rl.resource.attributes.append(_kv("service.name", _sv("checkout")))
+        rl.resource.attributes.append(_kv("telemetry.sdk.language", _sv("python")))
+        rl.resource.attributes.append(_kv("deployment.environment.name", _sv("production")))
+        sl = rl.scope_logs.add()
+        for i in range(records):
+            record = sl.log_records.add()
+            record.time_unix_nano = 1_700_000_000_000_000_000 + i
+            record.severity_number = 9
+            record.body.string_value = f"log {i}"
+            record.attributes.append(_kv("code.function", _sv("handler")))
+        return request
+
+    def test_rows_reference_one_resource_instead_of_repeating_it(self):
+        translated = otlp_translator.otlp_logs_to_proto(self._request())
+
+        (resource_hash,) = translated.resources
+        assert json.loads(translated.resources[resource_hash]) == {
+            "deployment.environment.name": "production",
+            "service.name": "checkout",
+            "telemetry.sdk.language": "python",
+        }
+        for log in translated.items:
+            assert log.resource_hash == resource_hash
+            assert _stored_attributes(log) == {"code.function": "handler"}
+
+    def test_resource_still_drives_promoted_columns(self):
+        (log, *_) = otlp_translator.otlp_logs_to_proto(self._request()).items
+
+        assert log.service_name == "checkout"
+        assert log.environment == "production"
+        assert log.platform == "python"
+
+    def test_same_resource_hashes_the_same_across_exports(self):
+        first = otlp_translator.otlp_logs_to_proto(self._request(records=1)).resources
+        second = otlp_translator.otlp_logs_to_proto(self._request(records=5)).resources
+        assert first.keys() == second.keys()
+
+    def test_exception_fields_are_not_stored_twice(self):
+        request = self._request(records=1)
+        record = request.resource_logs[0].scope_logs[0].log_records[0]
+        record.severity_number = 17
+        for key, value in (
+            ("exception.type", "ValueError"),
+            ("exception.message", "bad input"),
+            ("exception.stacktrace", "Traceback ..."),
+        ):
+            record.attributes.append(_kv(key, _sv(value)))
+
+        (log,) = otlp_translator.otlp_logs_to_proto(request).items
+
+        assert log.log_type == "exception"
+        assert log.stack_trace == "Traceback ..."
+        assert _stored_attributes(log) == {"code.function": "handler"}
+
+    def test_exception_fields_stay_when_the_log_is_not_an_exception(self):
+        request = self._request(records=1)
+        record = request.resource_logs[0].scope_logs[0].log_records[0]
+        record.attributes.append(_kv("exception.stacktrace", _sv("Traceback ...")))
+
+        (log,) = otlp_translator.otlp_logs_to_proto(request).items
+
+        assert log.log_type == "custom"
+        assert _stored_attributes(log)["exception.stacktrace"] == "Traceback ..."
 
 
 class TestMetricTranslation:
@@ -498,7 +570,7 @@ class TestMetricTranslation:
                 },
             }
         )
-        points = otlp_translator.otlp_metrics_to_proto(request)
+        points = otlp_translator.otlp_metrics_to_proto(request).items
         assert len(points) == 1
         assert points[0].name == "queue.depth"
         assert points[0].type == ingestion_pb2.GAUGE
@@ -518,7 +590,7 @@ class TestMetricTranslation:
                 },
             }
         )
-        points = otlp_translator.otlp_metrics_to_proto(request)
+        points = otlp_translator.otlp_metrics_to_proto(request).items
         assert len(points) == 1
         assert points[0].type == ingestion_pb2.SUM
         assert points[0].value == 7.0
@@ -535,7 +607,7 @@ class TestMetricTranslation:
                 },
             }
         )
-        points = otlp_translator.otlp_metrics_to_proto(request)
+        points = otlp_translator.otlp_metrics_to_proto(request).items
         assert points[0].temporality == ingestion_pb2.TEMPORALITY_DELTA
 
     def test_unset_temporality_stays_unspecified(self):
@@ -545,7 +617,7 @@ class TestMetricTranslation:
                 "sum": {"dataPoints": [{"timeUnixNano": "1000000000", "asInt": "7"}]},
             }
         )
-        points = otlp_translator.otlp_metrics_to_proto(request)
+        points = otlp_translator.otlp_metrics_to_proto(request).items
         assert points[0].temporality == ingestion_pb2.TEMPORALITY_UNSPECIFIED
 
     def test_gauge_carries_no_temporality(self):
@@ -555,7 +627,7 @@ class TestMetricTranslation:
                 "gauge": {"dataPoints": [{"timeUnixNano": "1000000000", "asDouble": 1.0}]},
             }
         )
-        points = otlp_translator.otlp_metrics_to_proto(request)
+        points = otlp_translator.otlp_metrics_to_proto(request).items
         assert points[0].temporality == ingestion_pb2.TEMPORALITY_UNSPECIFIED
 
     def test_histogram_point_translated(self):
@@ -576,7 +648,7 @@ class TestMetricTranslation:
                 },
             }
         )
-        points = otlp_translator.otlp_metrics_to_proto(request)
+        points = otlp_translator.otlp_metrics_to_proto(request).items
         assert len(points) == 1
         point = points[0]
         assert point.type == ingestion_pb2.HISTOGRAM
@@ -597,7 +669,7 @@ class TestMetricTranslation:
                 },
             }
         )
-        points = otlp_translator.otlp_metrics_to_proto(request)
+        points = otlp_translator.otlp_metrics_to_proto(request).items
         assert len(points) == 2
 
     def test_name_truncated_to_255_chars(self):
@@ -607,7 +679,7 @@ class TestMetricTranslation:
                 "gauge": {"dataPoints": [{"timeUnixNano": "1000000000", "asDouble": 1.0}]},
             }
         )
-        points = otlp_translator.otlp_metrics_to_proto(request)
+        points = otlp_translator.otlp_metrics_to_proto(request).items
         assert len(points[0].name) == 255
 
     def test_missing_service_name_defaults_to_unknown(self):
@@ -634,8 +706,144 @@ class TestMetricTranslation:
         decoded = otlp_translator.decode_metrics_request(
             json.dumps(data).encode(), "application/json"
         )
-        points = otlp_translator.otlp_metrics_to_proto(decoded)
+        points = otlp_translator.otlp_metrics_to_proto(decoded).items
         assert points[0].service_name == "unknown_service"
+
+    def test_only_identifying_resource_keys_become_series_tags(self):
+        data = {
+            "resourceMetrics": [
+                {
+                    "resource": {
+                        "attributes": [
+                            {"key": key, "value": {"stringValue": value}}
+                            for key, value in (
+                                ("service.name", "checkout"),
+                                ("service.instance.id", "i-1"),
+                                ("telemetry.sdk.version", "1.43.0"),
+                                ("process.command_line", "python app.py --workers 4"),
+                            )
+                        ]
+                    },
+                    "scopeMetrics": [
+                        {
+                            "metrics": [
+                                {
+                                    "name": "queue.depth",
+                                    "gauge": {
+                                        "dataPoints": [
+                                            {
+                                                "timeUnixNano": "1000000000",
+                                                "asDouble": 1.0,
+                                                "attributes": [
+                                                    {"key": "queue", "value": {"stringValue": "a"}}
+                                                ],
+                                            }
+                                        ]
+                                    },
+                                }
+                            ]
+                        }
+                    ],
+                }
+            ]
+        }
+        translated = otlp_translator.otlp_metrics_to_proto(
+            otlp_translator.decode_metrics_request(json.dumps(data).encode(), "application/json")
+        )
+
+        (point,) = translated.items
+        assert dict(point.tags) == {
+            "service.name": "checkout",
+            "service.instance.id": "i-1",
+            "queue": "a",
+        }
+        assert json.loads(translated.resources[point.resource_hash])["telemetry.sdk.version"] == (
+            "1.43.0"
+        )
+
+    def test_exponential_histogram_point_translated(self):
+        request = self._build_request(
+            {
+                "name": "request.duration",
+                "exponentialHistogram": {
+                    "aggregationTemporality": "AGGREGATION_TEMPORALITY_DELTA",
+                    "dataPoints": [
+                        {
+                            "timeUnixNano": "1000000000",
+                            "count": "6",
+                            "sum": 21.0,
+                            "scale": 1,
+                            "zeroCount": "1",
+                            "positive": {"offset": 2, "bucketCounts": ["2", "3"]},
+                        }
+                    ],
+                },
+            }
+        )
+        (point,) = otlp_translator.otlp_metrics_to_proto(request).items
+
+        assert point.type == ingestion_pb2.EXPONENTIAL_HISTOGRAM
+        assert point.temporality == ingestion_pb2.TEMPORALITY_DELTA
+        assert (point.count, point.sum, point.scale, point.zero_count) == (6, 21.0, 1, 1)
+        assert point.positive_offset == 2
+        assert list(point.positive_counts) == [2, 3]
+        assert list(point.negative_counts) == []
+
+    def test_summary_point_translated_as_cumulative(self):
+        request = self._build_request(
+            {
+                "name": "gc.pause",
+                "summary": {
+                    "dataPoints": [
+                        {
+                            "timeUnixNano": "1000000000",
+                            "count": "40",
+                            "sum": 12.5,
+                            "quantileValues": [
+                                {"quantile": 0.5, "value": 0.2},
+                                {"quantile": 0.99, "value": 1.4},
+                            ],
+                        }
+                    ]
+                },
+            }
+        )
+        (point,) = otlp_translator.otlp_metrics_to_proto(request).items
+
+        assert point.type == ingestion_pb2.SUMMARY
+        assert point.temporality == ingestion_pb2.TEMPORALITY_CUMULATIVE
+        assert (point.count, point.sum) == (40, 12.5)
+        assert list(point.quantiles) == [0.5, 0.99]
+        assert list(point.quantile_values) == [0.2, 1.4]
+
+    def test_exemplars_linking_a_trace_are_kept(self):
+        request = self._build_request(
+            {
+                "name": "request.duration",
+                "histogram": {
+                    "dataPoints": [
+                        {
+                            "timeUnixNano": "1000000000",
+                            "count": "1",
+                            "bucketCounts": ["1"],
+                            "exemplars": [
+                                {
+                                    "timeUnixNano": "1000000000",
+                                    "asDouble": 812.0,
+                                    "traceId": "a" * 32,
+                                    "spanId": "b" * 16,
+                                },
+                                {"timeUnixNano": "1000000000", "asDouble": 3.0},
+                            ],
+                        }
+                    ]
+                },
+            }
+        )
+        (point,) = otlp_translator.otlp_metrics_to_proto(request).items
+
+        (exemplar,) = point.exemplars
+        assert (exemplar.value, exemplar.trace_id, exemplar.span_id) == (812.0, "a" * 32, "b" * 16)
 
 
 class TestDecodeMetricsRequest:

@@ -13,6 +13,7 @@ from analytics_workers.jobs.notification_cleanup import cleanup_expired_notifica
 from analytics_workers.jobs.partition_manager import manage_partitions
 from analytics_workers.jobs.retention import enforce_retention
 from analytics_workers.jobs.rir_refresh import refresh_ip_country_ranges
+from analytics_workers.jobs.service_edges_1h_rollup import rollup_service_edges_1h
 from analytics_workers.jobs.top_errors import compute_top_errors
 from analytics_workers.jobs.usage_stats import generate_usage_stats
 
@@ -27,6 +28,7 @@ __all__ = [
     "rollup_log_volume_1d",
     "rollup_log_facets_1h",
     "rollup_metric_points_1h",
+    "rollup_service_edges_1h",
     "manage_partitions",
     "evaluate_alert_rules",
     "cleanup_expired_notifications",

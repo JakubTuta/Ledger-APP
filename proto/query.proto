@@ -32,6 +32,12 @@ service QueryService {
     rpc ListMetricNames(ListMetricNamesRequest) returns (ListMetricNamesResponse);
     rpc GetMetricTags(GetMetricTagsRequest) returns (GetMetricTagsResponse);
     rpc QueryMetricSeries(QueryMetricSeriesRequest) returns (QueryMetricSeriesResponse);
+
+    // Correlation: logs of a trace, the service dependency graph, and
+    // rate/errors/duration per service derived from spans
+    rpc GetTraceLogs(GetTraceLogsRequest) returns (GetTraceLogsResponse);
+    rpc GetServiceMap(GetServiceMapRequest) returns (GetServiceMapResponse);
+    rpc GetServiceRed(GetServiceRedRequest) returns (GetServiceRedResponse);
 }
 
 message QueryLogsRequest {
@@ -619,6 +625,16 @@ message MetricSeries {
 message HistogramBucket {
     double upper_bound = 1;  // +Inf for the overflow bucket
     double count       = 2;
+    double lower_bound = 3;  // -Inf for the first bucket of an explicit-bounds histogram
+}
+
+// A sample measurement that links a metric to the trace that produced it.
+message MetricExemplar {
+    map<string, string> tags = 1;  // the series' group-by tags
+    double value     = 2;
+    string timestamp = 3;
+    string trace_id  = 4;
+    string span_id   = 5;
 }
 
 // Distribution over the whole queried window, one per series - the companion to
@@ -641,5 +657,84 @@ message QueryMetricSeriesResponse {
     repeated MetricHistogram histograms = 8;  // populated for HISTOGRAM metrics
     bool   downsampled = 9;  // true when served from metric_points_1h
     bool   truncated   = 10;  // histogram row cap hit; series cover part of the window
+    repeated MetricExemplar exemplars = 11;  // capped per series, largest values first
+}
+
+// ==================== Correlation Messages ====================
+
+message GetTraceLogsRequest {
+    int64  project_id       = 1;
+    string trace_id         = 2;
+    optional string span_id = 3;  // narrow to the logs emitted inside one span
+    int32  limit            = 4;
+}
+
+message GetTraceLogsResponse {
+    repeated LogEntry logs = 1;  // oldest first
+    bool truncated = 2;           // more logs matched than `limit`
+}
+
+message GetServiceMapRequest {
+    int64  project_id         = 1;
+    optional string from_time = 2;
+    optional string to_time   = 3;
+}
+
+message ServiceNode {
+    string service = 1;
+    int64  calls   = 2;  // entry spans (server/consumer kind or trace roots)
+    int64  errors  = 3;
+    double p95_ms  = 4;
+}
+
+message ServiceEdge {
+    string caller = 1;
+    string callee = 2;
+    int64  calls  = 3;  // spans of `callee` whose parent span belongs to `caller`
+    int64  errors = 4;
+    double p95_ms = 5;
+}
+
+message GetServiceMapResponse {
+    repeated ServiceNode nodes = 1;
+    repeated ServiceEdge edges = 2;
+    string from_time = 3;
+    string to_time   = 4;
+    // Served from the hourly rollup (windows over a few hours): calls/errors
+    // are exact per hour, p95 is the highest hourly p95 in the window.
+    bool   downsampled = 5;
+}
+
+message GetServiceRedRequest {
+    int64  project_id         = 1;
+    optional string service   = 2;  // set: one series per operation of this service
+    optional string from_time = 3;
+    optional string to_time   = 4;
+    optional string interval  = 5;  // 1m|5m|1h|1d; resolved from span when unset
+}
+
+message RedPoint {
+    string bucket = 1;
+    int64  calls  = 2;
+    int64  errors = 3;
+    double p50_ms = 4;
+    double p95_ms = 5;
+    double p99_ms = 6;
+}
+
+message RedSeries {
+    string service   = 1;
+    string operation = 2;  // empty for a service-level series
+    repeated RedPoint points = 3;
+    int64  calls  = 4;     // whole window
+    int64  errors = 5;
+    double p95_ms = 6;
+}
+
+message GetServiceRedResponse {
+    string interval = 1;
+    repeated RedSeries series = 2;
+    string from_time = 3;
+    string to_time   = 4;
 }
 

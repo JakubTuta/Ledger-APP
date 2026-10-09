@@ -24,9 +24,11 @@ VALID_PANEL_TYPES = (
     "latency_overview",
     "country_map",
     "metric_series",
+    "service_map",
+    "service_red",
 )
 
-VALID_METRIC_AGGREGATIONS = ("avg", "sum", "min", "max", "count", "p50", "p95", "p99")
+VALID_METRIC_AGGREGATIONS = ("avg", "sum", "min", "max", "count", "p50", "p90", "p95", "p99")
 VALID_METRIC_INTERVALS = ("1m", "5m", "1h", "1d")
 
 

@@ -1,4 +1,5 @@
 import logging
+import math
 
 import fastapi
 import gateway_service.proto.query_pb2 as query_pb2
@@ -9,10 +10,16 @@ from pydantic import BaseModel
 router = fastapi.APIRouter(tags=["Metrics"])
 logger = logging.getLogger(__name__)
 
-_METRIC_TYPES = {0: "sum", 1: "gauge", 2: "histogram"}
+_METRIC_TYPES = {
+    0: "sum",
+    1: "gauge",
+    2: "histogram",
+    3: "exponential_histogram",
+    4: "summary",
+}
 _TEMPORALITIES = {0: "unspecified", 1: "delta", 2: "cumulative"}
 
-_AGGREGATIONS = ("avg", "sum", "min", "max", "count", "p50", "p95", "p99")
+_AGGREGATIONS = ("avg", "sum", "min", "max", "count", "p50", "p90", "p95", "p99")
 _INTERVALS = ("1m", "5m", "1h", "1d")
 
 
@@ -53,8 +60,19 @@ class MetricSeriesResponse(BaseModel):
 
 
 class HistogramBucketResponse(BaseModel):
+    # JSON has no infinity: an open edge (the explicit-bounds histogram's first
+    # and +Inf overflow buckets) is null.
+    lower_bound: float | None
     upper_bound: float | None
     count: float
+
+
+class MetricExemplarResponse(BaseModel):
+    tags: dict[str, str]
+    value: float
+    timestamp: str
+    trace_id: str
+    span_id: str | None
 
 
 class MetricHistogramResponse(BaseModel):
@@ -75,6 +93,11 @@ class MetricSeriesQueryResponse(BaseModel):
     histograms: list[MetricHistogramResponse]
     downsampled: bool
     truncated: bool
+    exemplars: list[MetricExemplarResponse]
+
+
+def _finite_or_none(value: float) -> float | None:
+    return value if math.isfinite(value) else None
 
 
 def _parse_tag_filters(raw: list[str]) -> dict[str, str]:
@@ -261,11 +284,8 @@ async def query_metric_series(
                 tags=dict(histogram.tags),
                 buckets=[
                     HistogramBucketResponse(
-                        # JSON has no infinity; the OTLP overflow bucket's open
-                        # upper edge becomes null rather than an invalid literal.
-                        upper_bound=None
-                        if bucket.upper_bound == float("inf")
-                        else bucket.upper_bound,
+                        lower_bound=_finite_or_none(bucket.lower_bound),
+                        upper_bound=_finite_or_none(bucket.upper_bound),
                         count=bucket.count,
                     )
                     for bucket in histogram.buckets
@@ -277,4 +297,14 @@ async def query_metric_series(
         ],
         downsampled=response.downsampled,
         truncated=response.truncated,
+        exemplars=[
+            MetricExemplarResponse(
+                tags=dict(exemplar.tags),
+                value=exemplar.value,
+                timestamp=exemplar.timestamp,
+                trace_id=exemplar.trace_id,
+                span_id=exemplar.span_id or None,
+            )
+            for exemplar in response.exemplars
+        ],
     )

@@ -1,5 +1,3 @@
-import os
-
 import aio_pika
 import grpc.aio as grpc_aio
 import msgpack
@@ -12,6 +10,8 @@ import ingestion_service.grpc.servicers as servicers
 import ingestion_service.proto.ingestion_pb2_grpc as ingestion_pb2_grpc
 import ingestion_service.services.rabbitmq_client as rabbitmq_client
 import ingestion_service.services.redis_client as redis_client
+import ingestion_service.worker as worker
+import tests.infra as infra
 
 
 class BaseIngestionTest:
@@ -19,23 +19,13 @@ class BaseIngestionTest:
     async def setup_method(self, test_db_manager):
         self.test_db_manager = test_db_manager
 
-        test_redis_host = os.getenv("TEST_REDIS_HOST", "localhost")
-        redis_password = config.settings.REDIS_PASSWORD
-        redis_db = config.settings.REDIS_DB
-
-        if redis_password:
-            test_redis_url = f"redis://:{redis_password}@{test_redis_host}:{config.settings.REDIS_PORT}/{redis_db}"
-        else:
-            test_redis_url = f"redis://{test_redis_host}:{config.settings.REDIS_PORT}/{redis_db}"
-
-        self.redis = redis_async.Redis.from_url(test_redis_url, decode_responses=False)
-        await self.redis.flushdb()
+        self.redis = redis_async.Redis.from_url(infra.redis_url(), decode_responses=False)
+        await infra.reset_redis(self.redis)
         redis_client._redis_client = self.redis
 
-        test_rabbitmq_host = os.getenv("TEST_RABBITMQ_HOST", "localhost")
         rabbitmq_url = (
             f"amqp://{config.settings.RABBITMQ_USER}:{config.settings.RABBITMQ_PASSWORD}"
-            f"@{test_rabbitmq_host}:{config.settings.RABBITMQ_PORT}/"
+            f"@{infra.RABBITMQ_HOST}:{infra.RABBITMQ_PORT}/"
         )
 
         rabbitmq_client._connection = None
@@ -120,6 +110,7 @@ class BaseIngestionTest:
             if project_id is not None:
                 for log in logs:
                     log.setdefault("project_id", project_id)
+            worker._attach_resources(logs, envelope)
             return logs
         return [envelope]
 
@@ -157,6 +148,7 @@ class BaseIngestionTest:
             if project_id is not None:
                 for span in spans:
                     span.setdefault("project_id", project_id)
+            worker._attach_resources(spans, envelope)
             return spans
         return [envelope]
 
@@ -196,6 +188,7 @@ class BaseIngestionTest:
             if project_id is not None:
                 for point in points:
                     point.setdefault("project_id", project_id)
+            worker._attach_resources(points, envelope)
             return points
         return [envelope]
 
