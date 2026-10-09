@@ -28,7 +28,7 @@ services:
     image: postgres:15-alpine
     container_name: ledger-postgres
     restart: unless-stopped
-    env_file: ../secrets/.env.ledger
+    env_file: .env
     environment:
       POSTGRES_DB: ${AUTH_DB_NAME}
       POSTGRES_USER: ${AUTH_DB_USER}
@@ -68,7 +68,7 @@ services:
     image: postgres:15-alpine
     container_name: ledger-postgres-logs
     restart: unless-stopped
-    env_file: ../secrets/.env.ledger
+    env_file: .env
     environment:
       POSTGRES_DB: ${LOGS_DB_NAME}
       POSTGRES_USER: ${LOGS_DB_USER}
@@ -110,7 +110,7 @@ services:
     image: rabbitmq:3.13-alpine
     container_name: ledger-rabbitmq
     restart: unless-stopped
-    env_file: ../secrets/.env.ledger
+    env_file: .env
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
@@ -145,7 +145,7 @@ services:
     image: redis:7-alpine
     container_name: ledger-redis
     restart: unless-stopped
-    env_file: ../secrets/.env.ledger
+    env_file: .env
     volumes:
       - ledger-redis-data:/data
     healthcheck:
@@ -186,7 +186,7 @@ services:
     image: container-registry.jtuta.cloud/ledger/migrations:latest
     container_name: ledger-migrations
     restart: "no"
-    env_file: ../secrets/.env.ledger
+    env_file: .env
     environment:
       AUTH_DB_HOST: ledger-postgres
       LOGS_DB_HOST: ledger-postgres-logs
@@ -216,7 +216,7 @@ services:
     image: container-registry.jtuta.cloud/ledger/auth:latest
     container_name: ledger-auth-service
     restart: unless-stopped
-    env_file: ../secrets/.env.ledger
+    env_file: .env
     environment:
       AUTH_DB_HOST: ledger-postgres
       REDIS_HOST: ledger-redis
@@ -243,7 +243,7 @@ services:
           "CMD",
           "python",
           "-c",
-          "import grpc; channel = grpc.insecure_channel('localhost:50051'); channel.close()",
+          "import grpc; grpc.channel_ready_future(grpc.insecure_channel('localhost:50051')).result(timeout=5)",
         ]
       interval: 60s
       timeout: 30s
@@ -258,7 +258,7 @@ services:
     image: container-registry.jtuta.cloud/ledger/gateway:latest
     container_name: ledger-gateway
     restart: unless-stopped
-    env_file: ../secrets/.env.ledger
+    env_file: .env
     environment:
       REDIS_HOST: ledger-redis
       AUTH_SERVICE_HOST: ledger-auth-service
@@ -279,7 +279,7 @@ services:
       resources:
         limits:
           cpus: "0.5"
-          memory: 384M
+          memory: 512M
         reservations:
           cpus: "0.15"
           memory: 192M
@@ -301,7 +301,7 @@ services:
     image: container-registry.jtuta.cloud/ledger/ingestion:latest
     container_name: ledger-ingestion
     restart: unless-stopped
-    env_file: ../secrets/.env.ledger
+    env_file: .env
     environment:
       REDIS_HOST: ledger-redis
       LOGS_DB_HOST: ledger-postgres-logs
@@ -332,7 +332,7 @@ services:
           "CMD",
           "python",
           "-c",
-          "import grpc; channel = grpc.insecure_channel('localhost:50052'); channel.close()",
+          "import grpc; grpc.channel_ready_future(grpc.insecure_channel('localhost:50052')).result(timeout=5)",
         ]
       interval: 60s
       timeout: 10s
@@ -347,7 +347,7 @@ services:
     image: container-registry.jtuta.cloud/ledger/ingestion:latest
     container_name: ledger-ingestion-worker
     restart: unless-stopped
-    env_file: ../secrets/.env.ledger
+    env_file: .env
     environment:
       REDIS_HOST: ledger-redis
       LOGS_DB_HOST: ledger-postgres-logs
@@ -387,7 +387,7 @@ services:
     image: container-registry.jtuta.cloud/ledger/analytics:latest
     container_name: ledger-analytics-workers
     restart: unless-stopped
-    env_file: ../secrets/.env.ledger
+    env_file: .env
     environment:
       REDIS_HOST: ledger-redis
       LOGS_DB_HOST: ledger-postgres-logs
@@ -422,7 +422,7 @@ services:
     image: container-registry.jtuta.cloud/ledger/query:latest
     container_name: ledger-query
     restart: unless-stopped
-    env_file: ../secrets/.env.ledger
+    env_file: .env
     environment:
       REDIS_HOST: ledger-redis
       LOGS_DB_HOST: ledger-postgres-logs
@@ -450,7 +450,7 @@ services:
           "CMD",
           "python",
           "-c",
-          "import grpc; channel = grpc.insecure_channel('localhost:${QUERY_GRPC_PORT:-50053}'); channel.close()",
+          "import grpc; grpc.channel_ready_future(grpc.insecure_channel('localhost:${QUERY_GRPC_PORT:-50053}')).result(timeout=5)",
         ]
       interval: 60s
       timeout: 10s

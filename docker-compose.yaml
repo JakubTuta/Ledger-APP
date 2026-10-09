@@ -203,7 +203,7 @@ services:
           "CMD",
           "python",
           "-c",
-          "import grpc; channel = grpc.insecure_channel('localhost:50051'); channel.close()",
+          "import grpc; grpc.channel_ready_future(grpc.insecure_channel('localhost:50051')).result(timeout=5)",
         ]
       interval: 60s
       timeout: 30s
@@ -285,7 +285,7 @@ services:
           "CMD",
           "python",
           "-c",
-          "import grpc; channel = grpc.insecure_channel('localhost:50052'); channel.close()",
+          "import grpc; grpc.channel_ready_future(grpc.insecure_channel('localhost:50052')).result(timeout=5)",
         ]
       interval: 60s
       timeout: 10s
@@ -400,7 +400,7 @@ services:
           "CMD",
           "python",
           "-c",
-          "import grpc; channel = grpc.insecure_channel('localhost:${QUERY_GRPC_PORT:-50053}'); channel.close()",
+          "import grpc; grpc.channel_ready_future(grpc.insecure_channel('localhost:${QUERY_GRPC_PORT:-50053}')).result(timeout=5)",
         ]
       interval: 60s
       timeout: 10s
