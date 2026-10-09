@@ -14,9 +14,11 @@ class BaseGatewayTest:
     async def setup_method(self):
         self.mock_redis = mocks.MockRedisClient()
         self.mock_grpc_pool = mocks.MockGRPCPool()
+        self.pubsub_hub = mocks.FakePubSubHub()
 
         main.app.state.redis_client = self.mock_redis
         main.app.state.grpc_pool = self.mock_grpc_pool
+        main.app.state.pubsub_hub = self.pubsub_hub
 
         for middleware in main.app.user_middleware:
             if hasattr(middleware, "kwargs"):
@@ -62,6 +64,10 @@ class BaseGatewayTest:
             "exp": now + datetime.timedelta(minutes=15),
         }
         return jwt.encode(payload, config.settings.JWT_SECRET, algorithm="HS256")
+
+    def session_headers(self, account_id: int = 1) -> dict[str, str]:
+        """Authorization header for account-level routes, which API keys cannot use."""
+        return {"Authorization": f"Bearer {self.make_session_token(account_id=account_id)}"}
 
     async def set_api_key_cache(
         self,

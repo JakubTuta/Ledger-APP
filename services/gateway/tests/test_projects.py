@@ -11,22 +11,10 @@ class TestCreateProject(BaseGatewayTest):
 
     async def test_create_project_success(self):
         """Test successful project creation."""
-        api_key = "ledger_test_api_key_123"
-        await self.mock_redis.set_cached_api_key(
-            api_key,
-            {
-                "project_id": 1,
-                "account_id": 1,
-                "rate_limit_per_minute": 1000,
-                "rate_limit_per_hour": 50000,
-                "logs_daily_quota": 1000000,
-                "current_usage": 0,
-            },
-        )
 
         response = await self.client.post(
             "/api/v1/projects",
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers=self.session_headers(),
             json={
                 "name": "My Test Project",
                 "slug": "my-test-project",
@@ -46,18 +34,6 @@ class TestCreateProject(BaseGatewayTest):
 
     async def test_create_project_duplicate_slug(self):
         """Test creating project with duplicate slug fails."""
-        api_key = "ledger_test_api_key_123"
-        await self.mock_redis.set_cached_api_key(
-            api_key,
-            {
-                "project_id": 1,
-                "account_id": 1,
-                "rate_limit_per_minute": 1000,
-                "rate_limit_per_hour": 50000,
-                "logs_daily_quota": 1000000,
-                "current_usage": 0,
-            },
-        )
 
         stub = self.get_mock_auth_stub()
 
@@ -71,7 +47,7 @@ class TestCreateProject(BaseGatewayTest):
 
         response = await self.client.post(
             "/api/v1/projects",
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers=self.session_headers(),
             json={
                 "name": "Duplicate Project",
                 "slug": "existing-slug",
@@ -85,18 +61,6 @@ class TestCreateProject(BaseGatewayTest):
 
     async def test_create_project_invalid_slug_format(self):
         """Test slug validation."""
-        api_key = "ledger_test_api_key_123"
-        await self.mock_redis.set_cached_api_key(
-            api_key,
-            {
-                "project_id": 1,
-                "account_id": 1,
-                "rate_limit_per_minute": 1000,
-                "rate_limit_per_hour": 50000,
-                "logs_daily_quota": 1000000,
-                "current_usage": 0,
-            },
-        )
 
         invalid_slugs = [
             "MY-PROJECT",
@@ -108,7 +72,7 @@ class TestCreateProject(BaseGatewayTest):
         for slug in invalid_slugs:
             response = await self.client.post(
                 "/api/v1/projects",
-                headers={"Authorization": f"Bearer {api_key}"},
+                headers=self.session_headers(),
                 json={
                     "name": "Test Project",
                     "slug": slug,
@@ -121,22 +85,10 @@ class TestCreateProject(BaseGatewayTest):
 
     async def test_create_project_slug_lowercase_conversion(self):
         """Test slug is converted to lowercase."""
-        api_key = "ledger_test_api_key_123"
-        await self.mock_redis.set_cached_api_key(
-            api_key,
-            {
-                "project_id": 1,
-                "account_id": 1,
-                "rate_limit_per_minute": 1000,
-                "rate_limit_per_hour": 50000,
-                "logs_daily_quota": 1000000,
-                "current_usage": 0,
-            },
-        )
 
         response = await self.client.post(
             "/api/v1/projects",
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers=self.session_headers(),
             json={
                 "name": "Test Project",
                 "slug": "test-project",
@@ -150,22 +102,10 @@ class TestCreateProject(BaseGatewayTest):
 
     async def test_create_project_invalid_environment(self):
         """Test environment validation."""
-        api_key = "ledger_test_api_key_123"
-        await self.mock_redis.set_cached_api_key(
-            api_key,
-            {
-                "project_id": 1,
-                "account_id": 1,
-                "rate_limit_per_minute": 1000,
-                "rate_limit_per_hour": 50000,
-                "logs_daily_quota": 1000000,
-                "current_usage": 0,
-            },
-        )
 
         response = await self.client.post(
             "/api/v1/projects",
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers=self.session_headers(),
             json={
                 "name": "Test Project",
                 "slug": "test-project",
@@ -197,18 +137,6 @@ class TestListProjects(BaseGatewayTest):
 
     async def test_list_projects_success(self):
         """Test successful project listing."""
-        api_key = "ledger_test_api_key_123"
-        await self.mock_redis.set_cached_api_key(
-            api_key,
-            {
-                "project_id": 1,
-                "account_id": 1,
-                "rate_limit_per_minute": 1000,
-                "rate_limit_per_hour": 50000,
-                "logs_daily_quota": 1000000,
-                "current_usage": 0,
-            },
-        )
 
         stub = self.get_mock_auth_stub()
         stub.get_projects_response = auth_pb2.GetProjectsResponse(
@@ -234,7 +162,7 @@ class TestListProjects(BaseGatewayTest):
 
         response = await self.client.get(
             "/api/v1/projects",
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers=self.session_headers(),
         )
 
         assert response.status_code == 200
@@ -247,22 +175,10 @@ class TestListProjects(BaseGatewayTest):
 
     async def test_list_projects_empty(self):
         """Test listing when no projects exist."""
-        api_key = "ledger_test_api_key_123"
-        await self.mock_redis.set_cached_api_key(
-            api_key,
-            {
-                "project_id": 1,
-                "account_id": 1,
-                "rate_limit_per_minute": 1000,
-                "rate_limit_per_hour": 50000,
-                "logs_daily_quota": 1000000,
-                "current_usage": 0,
-            },
-        )
 
         response = await self.client.get(
             "/api/v1/projects",
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers=self.session_headers(),
         )
 
         assert response.status_code == 200

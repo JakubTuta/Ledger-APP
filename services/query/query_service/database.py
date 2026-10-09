@@ -17,9 +17,13 @@ async def init_db() -> None:
         settings.LOGS_DATABASE_URL,
         pool_size=settings.DB_POOL_SIZE,
         max_overflow=settings.DB_MAX_OVERFLOW,
+        pool_timeout=settings.DB_POOL_TIMEOUT,
         pool_pre_ping=True,
         pool_recycle=3600,
         echo=settings.DEBUG,
+        connect_args={
+            "server_settings": {"statement_timeout": str(settings.DB_STATEMENT_TIMEOUT_MS)}
+        },
     )
 
     logs_session_maker = async_sqlalchemy.async_sessionmaker(

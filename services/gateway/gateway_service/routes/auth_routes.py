@@ -8,7 +8,7 @@ import gateway_service.schemas as schemas
 import grpc
 from gateway_service import config, dependencies
 from gateway_service.proto import auth_pb2, auth_pb2_grpc
-from gateway_service.services import grpc_pool, redis_client
+from gateway_service.services import attempt_limits, grpc_pool, redis_client
 
 logger = logging.getLogger(__name__)
 
@@ -159,6 +159,7 @@ async def _send_verification_email(to_email: str, token: str) -> None:
 )
 async def register_account(
     request: schemas.RegisterRequest,
+    http_request: fastapi.Request,
     response: fastapi.Response,
     background_tasks: fastapi.BackgroundTasks,
     grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
@@ -176,6 +177,9 @@ async def register_account(
     Returns the created account details including an access token for immediate use.
     This eliminates the need for a separate login call after registration.
     """
+    await attempt_limits.enforce(
+        redis, attempt_limits.REGISTER_PER_IP, attempt_limits.client_ip(http_request)
+    )
 
     try:
         stub = grpc_pool.get_stub("auth", auth_pb2_grpc.AuthServiceStub)
@@ -271,6 +275,7 @@ async def register_account(
 )
 async def login_account(
     request: schemas.LoginRequest,
+    http_request: fastapi.Request,
     response: fastapi.Response,
     grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
     redis: redis_client.RedisClient = fastapi.Depends(dependencies.get_redis_client),
@@ -284,6 +289,10 @@ async def login_account(
 
     The token is also cached in Redis for fast validation.
     """
+    await attempt_limits.enforce(
+        redis, attempt_limits.LOGIN_PER_IP, attempt_limits.client_ip(http_request)
+    )
+    await attempt_limits.enforce(redis, attempt_limits.LOGIN_PER_EMAIL, request.email)
 
     try:
         stub = grpc_pool.get_stub("auth", auth_pb2_grpc.AuthServiceStub)
@@ -386,6 +395,7 @@ async def refresh_token(
     response: fastapi.Response,
     body: schemas.RefreshTokenRequest | None = fastapi.Body(default=None),
     grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
+    redis: redis_client.RedisClient = fastapi.Depends(dependencies.get_redis_client),
 ):
     """
     Refresh access token using a valid refresh token.
@@ -403,6 +413,9 @@ async def refresh_token(
 
     This enables users to stay logged in without re-entering credentials.
     """
+    await attempt_limits.enforce(
+        redis, attempt_limits.REFRESH_PER_IP, attempt_limits.client_ip(request)
+    )
 
     raw_refresh_token = _get_refresh_token_from_request(
         request, body.refresh_token if body else None
@@ -800,9 +813,15 @@ async def change_password(
     },
 )
 async def verify_email(
+    request: fastapi.Request,
     body: schemas.VerifyEmailRequest,
     grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
+    redis: redis_client.RedisClient = fastapi.Depends(dependencies.get_redis_client),
 ):
+    await attempt_limits.enforce(
+        redis, attempt_limits.VERIFY_EMAIL_PER_IP, attempt_limits.client_ip(request)
+    )
+
     try:
         stub = grpc_pool.get_stub("auth", auth_pb2_grpc.AuthServiceStub)
 
@@ -857,12 +876,17 @@ async def resend_verification(
     request: fastapi.Request,
     background_tasks: fastapi.BackgroundTasks,
     grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
+    redis: redis_client.RedisClient = fastapi.Depends(dependencies.get_redis_client),
 ):
     if not hasattr(request.state, "account_id"):
         raise fastapi.HTTPException(
             status_code=fastapi.status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required",
         )
+    # Every call sends an email from our domain to the account's address.
+    await attempt_limits.enforce(
+        redis, attempt_limits.RESEND_VERIFICATION_PER_ACCOUNT, str(request.state.account_id)
+    )
 
     try:
         stub = grpc_pool.get_stub("auth", auth_pb2_grpc.AuthServiceStub)
@@ -1092,12 +1116,23 @@ async def complete_2fa_login(
     grpc_pool: grpc_pool.GRPCPoolManager = fastapi.Depends(dependencies.get_grpc_pool),
     redis: redis_client.RedisClient = fastapi.Depends(dependencies.get_redis_client),
 ):
+    await attempt_limits.enforce(
+        redis, attempt_limits.TOTP_PER_IP, attempt_limits.client_ip(request)
+    )
     account_id = await redis.get_totp_session(body.totp_session_token)
     if account_id is None:
         raise fastapi.HTTPException(
             status_code=fastapi.status.HTTP_401_UNAUTHORIZED,
             detail="2FA session expired or invalid — please log in again",
         )
+    try:
+        await attempt_limits.enforce(
+            redis, attempt_limits.TOTP_PER_SESSION, body.totp_session_token
+        )
+    except fastapi.HTTPException:
+        # Out of guesses for this password entry: the user has to sign in again.
+        await redis.delete_totp_session(body.totp_session_token)
+        raise
 
     try:
         stub = grpc_pool.get_stub("auth", auth_pb2_grpc.AuthServiceStub)

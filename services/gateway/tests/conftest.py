@@ -29,6 +29,7 @@ def mock_grpc_pool():
 async def async_client(mock_redis, mock_grpc_pool):
     main.app.state.redis_client = mock_redis
     main.app.state.grpc_pool = mock_grpc_pool
+    main.app.state.pubsub_hub = mocks.FakePubSubHub()
 
     for middleware in main.app.user_middleware:
         if hasattr(middleware, "kwargs"):

@@ -1,4 +1,9 @@
 import asyncio
+import os
+
+# Connector create/update encrypts credentials and refuses to run without a
+# key. Fixed test-only key, set before auth_service.config is first imported.
+os.environ.setdefault("CONNECTOR_SECRETS_KEY", "IFmJbAUZIllVQ4ShSzg7B4tGgQ2R1A_wQzzMmlqSUMI=")
 
 import pytest_asyncio
 

@@ -1,10 +1,8 @@
-import asyncio
 import json
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-import redis.asyncio as redis
 
 import gateway_service.main as main
 import gateway_service.proto.auth_pb2 as auth_pb2
@@ -65,50 +63,36 @@ class TestNotificationsSSE(BaseGatewayTest):
             assert response.status_code == 503
             assert "disabled" in response.json()["detail"].lower()
 
-    @pytest.mark.slow
     async def test_sse_receives_error_notification(self):
         await self.set_api_key_cache("test-api-key", project_id=1, account_id=1)
 
-        redis_client = redis.Redis.from_url("redis://localhost:6379/0", decode_responses=True)
+        notification = {
+            "project_id": 1,
+            "level": "error",
+            "log_type": "exception",
+            "message": "Test error notification",
+            "error_type": "TestError",
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }
+        scope = build_http_scope(
+            "GET",
+            "/api/v1/notifications/stream",
+            headers={"X-API-Key": "test-api-key"},
+        )
+        async with ASGISSEStream(main.app, scope, timeout=5.0) as stream:
+            assert stream.status_code == 200
 
-        try:
+            event = await stream.next_event()
+            assert event["event"] == "connected"
 
-            async def publish_notification():
-                await asyncio.sleep(0.5)
-                notification = {
-                    "project_id": 1,
-                    "level": "error",
-                    "log_type": "exception",
-                    "message": "Test error notification",
-                    "error_type": "TestError",
-                    "timestamp": datetime.utcnow().isoformat() + "Z",
-                }
-                await redis_client.publish("notifications:errors:1", json.dumps(notification))
+            self.pubsub_hub.publish("notifications:errors:1", json.dumps(notification))
 
-            publisher_task = asyncio.create_task(publish_notification())
+            error_event = await stream.next_event()
+            assert error_event["event"] == "error_notification"
+            error_data = json.loads(error_event["data"])
 
-            scope = build_http_scope(
-                "GET",
-                "/api/v1/notifications/stream",
-                headers={"X-API-Key": "test-api-key"},
-            )
-            async with ASGISSEStream(main.app, scope, timeout=5.0) as stream:
-                assert stream.status_code == 200
-
-                event = await stream.next_event()
-                assert event["event"] == "connected"
-
-                error_event = await stream.next_event()
-                assert error_event["event"] == "error_notification"
-                error_data = json.loads(error_event["data"])
-
-            await publisher_task
-
-            assert error_data["level"] == "error"
-            assert error_data["message"] == "Test error notification"
-
-        finally:
-            await redis_client.close()
+        assert error_data["level"] == "error"
+        assert error_data["message"] == "Test error notification"
 
     @pytest.mark.slow
     async def test_sse_heartbeat_events(self):
@@ -138,55 +122,28 @@ class TestNotificationsSSE(BaseGatewayTest):
     async def test_sse_filters_by_project_access(self):
         await self.set_api_key_cache("test-api-key", project_id=1, account_id=1)
 
-        redis_client = redis.Redis.from_url("redis://localhost:6379/0", decode_responses=True)
+        scope = build_http_scope(
+            "GET",
+            "/api/v1/notifications/stream",
+            headers={"X-API-Key": "test-api-key"},
+        )
+        received_notifications = []
+        async with ASGISSEStream(main.app, scope, timeout=5.0) as stream:
+            assert stream.status_code == 200
 
-        try:
+            event = await stream.next_event()
+            assert event["event"] == "connected"
 
-            async def publish_wrong_project():
-                await asyncio.sleep(0.3)
-                notification = {
-                    "project_id": 999,
-                    "level": "error",
-                    "message": "Wrong project error",
-                }
-                await redis_client.publish("notifications:errors:999", json.dumps(notification))
+            wrong = {"project_id": 999, "level": "error", "message": "Wrong project error"}
+            right = {"project_id": 1, "level": "error", "message": "Correct project error"}
+            assert self.pubsub_hub.publish("notifications:errors:999", json.dumps(wrong)) == 0
+            self.pubsub_hub.publish("notifications:errors:1", json.dumps(right))
 
-            async def publish_correct_project():
-                await asyncio.sleep(0.5)
-                notification = {
-                    "project_id": 1,
-                    "level": "error",
-                    "message": "Correct project error",
-                }
-                await redis_client.publish("notifications:errors:1", json.dumps(notification))
+            error_event = await stream.next_event()
+            assert error_event["event"] == "error_notification"
+            received_notifications.append(json.loads(error_event["data"]))
 
-            publisher_task1 = asyncio.create_task(publish_wrong_project())
-            publisher_task2 = asyncio.create_task(publish_correct_project())
-
-            scope = build_http_scope(
-                "GET",
-                "/api/v1/notifications/stream",
-                headers={"X-API-Key": "test-api-key"},
-            )
-            received_notifications = []
-            async with ASGISSEStream(main.app, scope, timeout=5.0) as stream:
-                assert stream.status_code == 200
-
-                event = await stream.next_event()
-                assert event["event"] == "connected"
-
-                error_event = await stream.next_event()
-                assert error_event["event"] == "error_notification"
-                received_notifications.append(json.loads(error_event["data"]))
-
-            await publisher_task1
-            await publisher_task2
-
-            assert len(received_notifications) >= 1
-            assert all(n["project_id"] == 1 for n in received_notifications)
-
-        finally:
-            await redis_client.close()
+        assert received_notifications == [right]
 
     async def test_sse_multiple_concurrent_connections(self):
         await self.set_api_key_cache("test-api-key", project_id=1, account_id=1)

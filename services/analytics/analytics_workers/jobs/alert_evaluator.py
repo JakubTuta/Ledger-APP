@@ -15,6 +15,7 @@ import analytics_workers.config as config
 import analytics_workers.database as database
 import analytics_workers.jobs.net_guard as net_guard
 import analytics_workers.redis_client as redis_client
+import analytics_workers.services.connector_secrets as connector_secrets
 import analytics_workers.utils.logging as logging
 import sqlalchemy as sa
 
@@ -32,6 +33,15 @@ _COMPARATORS: dict[str, typing.Callable[[float, float], bool]] = {
     ">=": lambda v, t: v >= t,
     "<=": lambda v, t: v <= t,
 }
+
+# Connectors are account-owned and their ids are sequential. Delivering only
+# through connectors whose owner belongs to the rule's project keeps a rule
+# (including any created before the gateway validated connector ids) from
+# paging another account's Slack/PagerDuty/email.
+_CONNECTOR_OWNED_BY_PROJECT_MEMBER = (
+    "EXISTS (SELECT 1 FROM project_members pm "
+    "WHERE pm.project_id = :pid AND pm.account_id = c.account_id)"
+)
 
 _LOOKBACK_MINUTES = 10
 _LATENCY_LOOKBACK_MINUTES = 60
@@ -375,8 +385,14 @@ async def _maybe_escalate(
         return
 
     connector_result = await auth_session.execute(
-        sa.text("SELECT id, kind, name, config FROM connectors WHERE id = :cid AND enabled = TRUE"),
-        {"cid": escalate_connector_id},
+        sa.text(
+            f"""
+            SELECT c.id, c.kind, c.name, c.config
+            FROM connectors c
+            WHERE c.id = :cid AND c.enabled = TRUE AND {_CONNECTOR_OWNED_BY_PROJECT_MEMBER}
+            """
+        ),
+        {"cid": escalate_connector_id, "pid": project_id},
     )
     connector = connector_result.fetchone()
     if connector is None:
@@ -704,14 +720,14 @@ async def _dispatch(
 ) -> list[dict]:
     connectors_result = await auth_session.execute(
         sa.text(
-            """
+            f"""
             SELECT c.id, c.kind, c.name, c.config
             FROM alert_rule_connectors arc
             JOIN connectors c ON c.id = arc.connector_id
-            WHERE arc.rule_id = :rid AND c.enabled = TRUE
+            WHERE arc.rule_id = :rid AND c.enabled = TRUE AND {_CONNECTOR_OWNED_BY_PROJECT_MEMBER}
             """
         ),
-        {"rid": rule_id},
+        {"rid": rule_id, "pid": project_id},
     )
     connectors = connectors_result.fetchall()
     return await _dispatch_to_connectors(
@@ -777,7 +793,20 @@ async def _dispatch_to_connectors(
         connector_id = connector[0]
         connector_kind = connector[1]
         connector_name = connector[2]
-        connector_config = connector[3] or {}
+        try:
+            connector_config = connector_secrets.decrypt_config(connector[3] or {})
+        except connector_secrets.ConnectorSecretsError as e:
+            logger.error(f"Rule {rule_id} connector {connector_id}: {e}")
+            connectors_sent.append(
+                {
+                    "id": connector_id,
+                    "kind": connector_kind,
+                    "name": connector_name,
+                    "delivered": False,
+                    "error": str(e),
+                }
+            )
+            continue
 
         delivered = True
         error: str | None = None
@@ -1074,7 +1103,7 @@ async def _post_webhook(url: str, secret: str, payload: dict) -> tuple[bool, str
     sig = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
 
     try:
-        async with aiohttp.ClientSession() as http:
+        async with net_guard.guarded_session() as http:
             response = await http.post(
                 url,
                 data=body,
@@ -1083,6 +1112,7 @@ async def _post_webhook(url: str, secret: str, payload: dict) -> tuple[bool, str
                     "X-Ledger-Signature": f"sha256={sig}",
                 },
                 timeout=aiohttp.ClientTimeout(total=10),
+                allow_redirects=False,
             )
             if response.status >= 400:
                 return False, f"Webhook returned HTTP {response.status}"
@@ -1104,11 +1134,12 @@ async def _post_chat_webhook(url: str, json_body: dict, label: str) -> tuple[boo
         return False, str(e)
 
     try:
-        async with aiohttp.ClientSession() as http:
+        async with net_guard.guarded_session() as http:
             response = await http.post(
                 url,
                 json=json_body,
                 timeout=aiohttp.ClientTimeout(total=10),
+                allow_redirects=False,
             )
             if response.status >= 400:
                 return False, f"{label} webhook returned HTTP {response.status}"

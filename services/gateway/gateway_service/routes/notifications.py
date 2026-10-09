@@ -1,66 +1,15 @@
-import asyncio
 import datetime
-import json
 import logging
-from typing import AsyncGenerator
 
 import fastapi
 import grpc
-import redis.asyncio as redis
 from gateway_service import config
 from gateway_service.proto import auth_pb2, auth_pb2_grpc
+from gateway_service.services import pubsub_hub
 from sse_starlette.sse import EventSourceResponse
 
 router = fastapi.APIRouter(tags=["Notifications"])
 logger = logging.getLogger(__name__)
-
-
-class NotificationStream:
-    def __init__(self, redis_url: str, project_ids: set[int]):
-        self.redis_url = redis_url
-        self.project_ids = project_ids
-        self.redis_client = None
-        self.pubsub = None
-
-    async def subscribe(self):
-        self.redis_client = redis.Redis.from_url(
-            self.redis_url, decode_responses=True, max_connections=10
-        )
-        self.pubsub = self.redis_client.pubsub()
-        channels = [f"notifications:errors:{pid}" for pid in self.project_ids]
-        await self.pubsub.subscribe(*channels)
-        logger.info(f"Subscribed to {len(channels)} notification channels")
-
-    async def unsubscribe(self):
-        if self.pubsub:
-            await self.pubsub.unsubscribe()
-            await self.pubsub.close()
-        if self.redis_client:
-            await self.redis_client.close()
-        logger.info("Unsubscribed from notification channels")
-
-    async def listen(self) -> AsyncGenerator[dict, None]:
-        try:
-            async for message in self.pubsub.listen():
-                if message["type"] == "message":
-                    try:
-                        data = json.loads(message["data"])
-
-                        yield {
-                            "event": "error_notification",
-                            "data": json.dumps(data),
-                        }
-                    except json.JSONDecodeError:
-                        logger.error(f"Failed to decode notification message: {message['data']}")
-        except asyncio.CancelledError:
-            logger.info("Notification stream cancelled")
-            raise
-        except Exception as e:
-            logger.error(f"Error in notification stream: {e}", exc_info=True)
-            yield {
-                "event": "error",
-                "data": json.dumps({"error": "Stream error occurred"}),
-            }
 
 
 async def get_user_projects(grpc_pool, account_id: int) -> set[int]:
@@ -83,6 +32,19 @@ async def get_user_projects(grpc_pool, account_id: int) -> set[int]:
         return set()
 
 
+async def _streamed_project_ids(request: fastapi.Request) -> set[int]:
+    if getattr(request.state, "auth_type", None) == "api_key":
+        return {request.state.project_id}
+
+    account_id = getattr(request.state, "account_id", None)
+    if not account_id:
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
+    return await get_user_projects(request.app.state.grpc_pool, account_id)
+
+
 @router.get(
     "/notifications/stream",
     summary="Real-time error notifications stream (SSE)",
@@ -91,7 +53,7 @@ Server-Sent Events (SSE) stream for real-time error notifications.
 
 Automatically receives notifications when error or critical logs are ingested for projects you have access to.
 
-**Authentication:** Required (API Key or Session Token)
+**Authentication:** Required (Session Token, or an API Key for its own project)
 
 **Events:**
 - `connected` - Initial connection confirmation with project list
@@ -100,28 +62,17 @@ Automatically receives notifications when error or critical logs are ingested fo
 
 **Connection Handling:**
 - Browser's EventSource automatically reconnects on disconnect
-- Up to 5 concurrent connections per user (configurable)
 - Filters notifications by projects you have access to
 
 **Example usage (JavaScript):**
 ```javascript
 const eventSource = new EventSource('/api/v1/notifications/stream', {
-  headers: { 'X-API-Key': 'your-api-key' }
+  headers: { 'Authorization': 'Bearer <session-token>' }
 });
 
 eventSource.addEventListener('error_notification', (event) => {
   const error = JSON.parse(event.data);
   console.log('New error:', error);
-  showToast({
-    title: error.error_type,
-    message: error.message,
-    level: error.level
-  });
-});
-
-eventSource.addEventListener('connected', (event) => {
-  const data = JSON.parse(event.data);
-  console.log('Connected, watching projects:', data.projects);
 });
 ```
     """,
@@ -154,85 +105,21 @@ async def stream_error_notifications(request: fastapi.Request):
             detail="Notifications are currently disabled",
         )
 
-    project_id = getattr(request.state, "project_id", None)
-    account_id = getattr(request.state, "account_id", None)
-
-    if not account_id:
-        raise fastapi.HTTPException(
-            status_code=fastapi.status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
-        )
-
-    grpc_pool = request.app.state.grpc_pool
-
-    if project_id:
-        project_ids = {project_id}
-    else:
-        project_ids = await get_user_projects(grpc_pool, account_id)
-
+    project_ids = sorted(await _streamed_project_ids(request))
     if not project_ids:
-        logger.warning(
-            f"No projects available for notification stream (account: {account_id}). "
-            "Stream will receive no events until projects are assigned."
+        logger.warning("No projects available for notification stream; it will stay idle")
+
+    connected_payload = {
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "projects": project_ids,
+        "warning": "No projects available — stream idle" if not project_ids else None,
+    }
+    return EventSourceResponse(
+        pubsub_hub.channel_events(
+            request.app.state.pubsub_hub,
+            [f"notifications:errors:{project_id}" for project_id in project_ids],
+            "error_notification",
+            connected_payload,
+            config.settings.NOTIFICATIONS_HEARTBEAT_INTERVAL,
         )
-
-    stream = NotificationStream(config.settings.REDIS_URL, project_ids)
-    if project_ids:
-        await stream.subscribe()
-
-    async def event_generator():
-        queue: asyncio.Queue = asyncio.Queue()
-        tasks: list[asyncio.Task] = []
-
-        async def pump_stream():
-            async for event in stream.listen():
-                await queue.put(event)
-
-        async def pump_heartbeat():
-            while True:
-                await asyncio.sleep(config.settings.NOTIFICATIONS_HEARTBEAT_INTERVAL)
-                await queue.put(
-                    {
-                        "event": "heartbeat",
-                        "data": json.dumps(
-                            {"timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()}
-                        ),
-                    }
-                )
-
-        try:
-            yield {
-                "event": "connected",
-                "data": json.dumps(
-                    {
-                        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                        "projects": list(project_ids),
-                        "warning": (
-                            "No projects available — stream idle" if not project_ids else None
-                        ),
-                    }
-                ),
-            }
-
-            tasks.append(asyncio.create_task(pump_heartbeat()))
-            if project_ids:
-                tasks.append(asyncio.create_task(pump_stream()))
-
-            while True:
-                event = await queue.get()
-                yield event
-
-        except asyncio.CancelledError:
-            logger.info(f"Client disconnected from notification stream (account: {account_id})")
-        finally:
-            for task in tasks:
-                task.cancel()
-            for task in tasks:
-                try:
-                    await task
-                except (asyncio.CancelledError, Exception):
-                    pass
-            if project_ids:
-                await stream.unsubscribe()
-
-    return EventSourceResponse(event_generator())
+    )

@@ -23,6 +23,19 @@ end
 return {1, current}
 """
 
+# Returns a reservation that was never used, without dropping below zero and
+# without creating the key (a refund that lands after the UTC day rolled over
+# must not start the new day's counter negative).
+_QUOTA_REFUND_LUA = """
+local current = redis.call('GET', KEYS[1])
+if not current then
+    return 0
+end
+local refunded = math.max(0, tonumber(current) - tonumber(ARGV[1]))
+redis.call('SET', KEYS[1], refunded, 'KEEPTTL')
+return refunded
+"""
+
 
 class RedisClient:
     def __init__(self, url: str, max_connections: int = 50, decode_responses: bool = False):
@@ -248,47 +261,28 @@ class RedisClient:
             logger.error(f"Quota consume error: {e}")
             return True, 0
 
-    async def get_circuit_state(self, service_name: str) -> str:
-        key = f"circuit:{service_name}:state"
+    async def refund_quota(self, project_id: int, signal: str, amount: int) -> None:
+        """Give back items reserved by try_consume_quota that were never ingested."""
+        key = self._daily_usage_key(project_id, signal, self._utc_day())
 
         try:
-            state = await self.client.get(key)  # type: ignore
-            return state.decode() if state else "CLOSED"
-
-        except RedisError:
-            return "CLOSED"
-
-    async def set_circuit_state(self, service_name: str, state: str, ttl: int = 300):
-        key = f"circuit:{service_name}:state"
-
-        try:
-            await self.client.setex(key, ttl, state)  # type: ignore
-
+            await self.client.eval(_QUOTA_REFUND_LUA, 1, key, amount)  # type: ignore
         except RedisError as e:
-            logger.error(f"Set circuit state error: {e}")
+            logger.error(f"Quota refund error: {e}")
 
-    async def increment_circuit_failures(self, service_name: str) -> int:
-        key = f"circuit:{service_name}:failures"
+    async def increment_window_counter(self, key: str, window_seconds: int) -> int:
+        """Count a hit in the current fixed window of `key`; 0 if Redis is unavailable."""
+        window_key = f"{key}:{int(time.time()) // window_seconds}"
 
         try:
-            pipe = self.client.pipeline()  # type: ignore
-            pipe.incr(key)
-            pipe.expire(key, 60)
+            pipe = self.client.pipeline(transaction=False)  # type: ignore
+            pipe.incr(window_key)
+            pipe.expire(window_key, window_seconds)
             count, _ = await pipe.execute()
             return count
-
         except RedisError as e:
-            logger.error(f"Increment failures error: {e}")
+            logger.error(f"Window counter error: {e}")
             return 0
-
-    async def reset_circuit_failures(self, service_name: str):
-        key = f"circuit:{service_name}:failures"
-
-        try:
-            await self.client.delete(key)  # type: ignore
-
-        except RedisError as e:
-            logger.error(f"Reset failures error: {e}")
 
     async def batch_get(self, keys: list[str]) -> list[bytes | None]:
         if not keys:

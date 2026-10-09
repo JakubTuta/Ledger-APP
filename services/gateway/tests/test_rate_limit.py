@@ -24,7 +24,7 @@ class TestRateLimitMiddleware(BaseGatewayTest):
 
         for i in range(5):
             response = await self.client.get(
-                "/api/v1/projects",
+                "/api/v1/logs?project_id=1&period=today",
                 headers={"X-API-Key": api_key},
             )
             assert response.status_code == 200
@@ -47,13 +47,13 @@ class TestRateLimitMiddleware(BaseGatewayTest):
 
         for i in range(3):
             response = await self.client.get(
-                "/api/v1/projects",
+                "/api/v1/logs?project_id=1&period=today",
                 headers={"X-API-Key": api_key},
             )
             assert response.status_code == 200
 
         response = await self.client.get(
-            "/api/v1/projects",
+            "/api/v1/logs?project_id=1&period=today",
             headers={"X-API-Key": api_key},
         )
 
@@ -79,13 +79,13 @@ class TestRateLimitMiddleware(BaseGatewayTest):
 
         for i in range(5):
             response = await self.client.get(
-                "/api/v1/projects",
+                "/api/v1/logs?project_id=1&period=today",
                 headers={"X-API-Key": api_key},
             )
             assert response.status_code == 200
 
         response = await self.client.get(
-            "/api/v1/projects",
+            "/api/v1/logs?project_id=1&period=today",
             headers={"X-API-Key": api_key},
         )
 
@@ -109,7 +109,7 @@ class TestRateLimitMiddleware(BaseGatewayTest):
         )
 
         response = await self.client.get(
-            "/api/v1/projects",
+            "/api/v1/logs?project_id=1&period=today",
             headers={"X-API-Key": api_key},
         )
 
@@ -149,19 +149,19 @@ class TestRateLimitMiddleware(BaseGatewayTest):
 
         for i in range(3):
             response = await self.client.get(
-                "/api/v1/projects",
+                "/api/v1/logs?project_id=1&period=today",
                 headers={"X-API-Key": api_key_1},
             )
             assert response.status_code == 200
 
         response = await self.client.get(
-            "/api/v1/projects",
+            "/api/v1/logs?project_id=1&period=today",
             headers={"X-API-Key": api_key_1},
         )
         assert response.status_code == 429
 
         response = await self.client.get(
-            "/api/v1/projects",
+            "/api/v1/logs?project_id=2&period=today",
             headers={"X-API-Key": api_key_2},
         )
         assert response.status_code == 200
@@ -185,7 +185,7 @@ class TestRateLimitMiddleware(BaseGatewayTest):
         self.mock_redis.data["daily_usage:1:logs"] = 10
 
         response = await self.client.get(
-            "/api/v1/projects",
+            "/api/v1/logs?project_id=1&period=today",
             headers={"X-API-Key": api_key},
         )
 
@@ -206,9 +206,11 @@ class TestRateLimitExemptions(BaseGatewayTest):
 
         print("✅ Health endpoint not rate limited")
 
-    async def test_public_auth_endpoints_not_rate_limited(self):
-        """Test public auth endpoints bypass rate limiting."""
-        for i in range(10):
+    async def test_registration_is_attempt_limited_per_ip(self):
+        """Public auth endpoints skip the per-project limiter but have their own
+        per-client attempt budget (attempt_limits.REGISTER_PER_IP)."""
+        statuses = []
+        for i in range(6):
             response = await self.client.post(
                 "/api/v1/accounts/register",
                 json={
@@ -217,9 +219,10 @@ class TestRateLimitExemptions(BaseGatewayTest):
                     "name": "Test User",
                 },
             )
-            assert response.status_code in [201, 409, 422]
+            statuses.append(response.status_code)
 
-        print("✅ Public endpoints not rate limited")
+        assert statuses[:5] == [201] * 5
+        assert statuses[5] == 429
 
 
 @pytest.mark.asyncio
@@ -261,7 +264,7 @@ class TestRateLimitMetrics(BaseGatewayTest):
         statuses = []
         for i in range(4):
             response = await self.client.get(
-                "/api/v1/projects",
+                "/api/v1/logs?project_id=1&period=today",
                 headers={"X-API-Key": api_key},
             )
             statuses.append(response.status_code)

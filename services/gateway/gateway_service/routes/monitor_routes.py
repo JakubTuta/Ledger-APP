@@ -6,6 +6,7 @@ import gateway_service.proto.auth_pb2 as auth_pb2
 import gateway_service.proto.auth_pb2_grpc as auth_pb2_grpc
 import grpc
 from gateway_service import dependencies
+from gateway_service.services import attempt_limits
 from pydantic import BaseModel, Field
 
 router = fastapi.APIRouter(tags=["Monitors"])
@@ -217,6 +218,10 @@ async def delete_monitor(
     description="Public dead-man's-switch ping endpoint for heartbeat monitors. Call this on a schedule from the monitored job/service; no JWT or API key required, the token in the URL is the credential.",
 )
 async def heartbeat_ping(token: str, request: fastapi.Request) -> None:
+    # Unauthenticated, and each ping is a monitor_checks row.
+    await attempt_limits.enforce(
+        request.app.state.redis_client, attempt_limits.HEARTBEAT_PER_TOKEN, token
+    )
     try:
         response = await _stub(request).RecordHeartbeatPing(
             auth_pb2.RecordHeartbeatPingRequest(token=token), timeout=5.0

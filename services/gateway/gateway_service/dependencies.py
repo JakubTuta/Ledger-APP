@@ -158,10 +158,27 @@ async def get_project_role(
     return (response.is_member, response.role)
 
 
+def _require_api_key_project(request: fastapi.Request, project_id: int) -> int:
+    """An API key reads only its own project, and never mutates through this path."""
+    if request.method not in ("GET", "HEAD"):
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_403_FORBIDDEN,
+            detail="API keys are read-only outside OTLP ingestion",
+        )
+    if project_id != request.state.project_id:
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_403_FORBIDDEN,
+            detail="This API key does not belong to the requested project",
+        )
+    return project_id
+
+
 async def require_project_member(
     request: fastapi.Request,
     project_id: int = fastapi.Query(..., gt=0),
 ) -> int:
+    if getattr(request.state, "auth_type", None) == "api_key":
+        return _require_api_key_project(request, project_id)
     if not hasattr(request.state, "account_id"):
         raise fastapi.HTTPException(
             status_code=fastapi.status.HTTP_401_UNAUTHORIZED,
@@ -343,21 +360,3 @@ async def check_endpoint_rate_limit(request: fastapi.Request, endpoint_limit: in
             detail="Rate limit exceeded for this endpoint",
             headers={"Retry-After": "60"},
         )
-
-
-def get_circuit_breakers(request: fastapi.Request):
-    """
-    Get circuit breaker manager.
-
-    Usage:
-        @router.get("/endpoint")
-        async def handler(
-            breakers = Depends(get_circuit_breakers)
-        ):
-            breaker = breakers.get_breaker("auth")
-            result = await breaker.call(some_grpc_call)
-    """
-    if not hasattr(request.state, "circuit_breakers"):
-        raise RuntimeError("Circuit breaker middleware not enabled")
-
-    return request.state.circuit_breakers

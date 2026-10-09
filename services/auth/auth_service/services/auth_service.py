@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import hashlib
 import logging
@@ -15,6 +16,36 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
+
+
+# bcrypt is deliberately slow (~0.25 s of CPU per call at 12 rounds, about 1 s
+# under the auth container's 0.25-CPU limit). Run inline it held the event loop
+# that also answers API-key validation and project-role checks, so a handful of
+# concurrent logins stalled every other auth RPC. bcrypt releases the GIL, so a
+# worker thread keeps the loop responsive.
+async def _hash_password(password: str) -> str:
+    salt = bcrypt.gensalt(rounds=config.settings.BCRYPT_ROUNDS)
+    hashed = await asyncio.to_thread(bcrypt.hashpw, password.encode(), salt)
+    return hashed.decode()
+
+
+async def _password_matches(password: str, password_hash: str) -> bool:
+    return await asyncio.to_thread(bcrypt.checkpw, password.encode(), password_hash.encode())
+
+
+_dummy_password_hash: str | None = None
+
+
+async def _spend_password_check_time(password: str) -> None:
+    """Run one bcrypt check against a throwaway hash.
+
+    Login for an unknown email otherwise returns ~0.25 s faster than for a
+    wrong password, which tells a caller which emails have accounts.
+    """
+    global _dummy_password_hash
+    if _dummy_password_hash is None:
+        _dummy_password_hash = await _hash_password(secrets.token_urlsafe(16))
+    await _password_matches(password, _dummy_password_hash)
 
 
 class AuthService:
@@ -50,9 +81,7 @@ class AuthService:
         if result.scalar_one_or_none():
             raise ValueError("Email already registered")
 
-        password_hash = bcrypt.hashpw(
-            password.encode(), bcrypt.gensalt(rounds=config.settings.BCRYPT_ROUNDS)
-        ).decode()
+        password_hash = await _hash_password(password)
 
         verification_token = secrets.token_hex(32)
 
@@ -91,9 +120,10 @@ class AuthService:
         account = result.scalar_one_or_none()
 
         if not account:
+            await _spend_password_check_time(password)
             raise ValueError("Invalid credentials")
 
-        if not bcrypt.checkpw(password.encode(), account.password_hash.encode()):
+        if not await _password_matches(password, account.password_hash):
             raise ValueError("Invalid credentials")
 
         return account
@@ -158,14 +188,10 @@ class AuthService:
         if not account:
             raise ValueError("Account not found")
 
-        if not bcrypt.checkpw(old_password.encode(), account.password_hash.encode()):
+        if not await _password_matches(old_password, account.password_hash):
             raise ValueError("Current password is incorrect")
 
-        new_password_hash = bcrypt.hashpw(
-            new_password.encode(), bcrypt.gensalt(rounds=config.settings.BCRYPT_ROUNDS)
-        ).decode()
-
-        account.password_hash = new_password_hash
+        account.password_hash = await _hash_password(new_password)
         await session.commit()
         await session.refresh(account)
 
@@ -261,6 +287,11 @@ class AuthService:
         if not account:
             raise ValueError("Account not found")
 
+        # The pending secret shares the column of the active one, so starting a
+        # new setup here would silently replace the working authenticator.
+        if account.totp_enabled:
+            raise ValueError("2FA is already enabled; disable it before setting up a new device")
+
         secret = pyotp.random_base32()
         account.totp_secret = secret
         await session.commit()
@@ -305,7 +336,7 @@ class AuthService:
         if not account:
             raise ValueError("Account not found")
 
-        if not bcrypt.checkpw(password.encode(), account.password_hash.encode()):
+        if not await _password_matches(password, account.password_hash):
             raise ValueError("Current password is incorrect")
 
         if not account.totp_enabled:

@@ -71,7 +71,7 @@ async def _check_http_monitors(auth_session: sa.ext.asyncio.AsyncSession) -> Non
     settings = config.get_settings()
     semaphore = asyncio.Semaphore(_HTTP_CONCURRENCY)
 
-    async with aiohttp.ClientSession() as http:
+    async with net_guard.guarded_session() as http:
 
         async def _probe(m: typing.Any):
             async with semaphore:
@@ -95,25 +95,24 @@ async def _probe_http(
     if not target_url:
         return False, None, None, "Monitor has no target_url configured"
 
+    start = time.perf_counter()
     try:
-        await net_guard.validate_webhook_url(
-            target_url, allow_http=settings.ALERT_WEBHOOK_ALLOW_HTTP
+        # Every redirect hop is re-validated: following a Location blindly would
+        # let a public monitor URL bounce the probe onto the internal network.
+        status = await net_guard.get_following_safe_redirects(
+            http,
+            target_url,
+            allow_http=settings.ALERT_WEBHOOK_ALLOW_HTTP,
+            timeout=aiohttp.ClientTimeout(total=m.timeout_s),
         )
+        latency_ms = int((time.perf_counter() - start) * 1000)
+        ok = status == m.expected_status
+        error = None if ok else f"Expected status {m.expected_status}, got {status}"
+        return ok, latency_ms, status, error
+
     except net_guard.UnsafeWebhookURLError as e:
         logger.warning(f"Blocked unsafe monitor target URL {target_url}: {e}")
         return False, None, None, f"Blocked unsafe target URL: {e}"
-
-    start = time.perf_counter()
-    try:
-        async with http.get(
-            target_url,
-            timeout=aiohttp.ClientTimeout(total=m.timeout_s),
-            allow_redirects=True,
-        ) as response:
-            latency_ms = int((time.perf_counter() - start) * 1000)
-            ok = response.status == m.expected_status
-            error = None if ok else f"Expected status {m.expected_status}, got {response.status}"
-            return ok, latency_ms, response.status, error
 
     except asyncio.TimeoutError:
         latency_ms = int((time.perf_counter() - start) * 1000)

@@ -1,6 +1,8 @@
 import logging
 
 import fastapi
+import gateway_service.proto.auth_pb2 as auth_pb2
+import gateway_service.proto.auth_pb2_grpc as auth_pb2_grpc
 import gateway_service.proto.query_pb2 as query_pb2
 import gateway_service.schemas as schemas
 import grpc
@@ -11,6 +13,17 @@ logger = logging.getLogger(__name__)
 router = fastapi.APIRouter(tags=["Dashboard"])
 
 VALID_PERIODS = {"today", "last7days", "last30days", "currentWeek", "currentMonth", "currentYear"}
+
+# One summary request fans out to grouped queries over every listed project.
+_MAX_PROJECTS_PER_REQUEST = 100
+
+
+async def _accessible_project_ids(request: fastapi.Request, account_id: int) -> set[int]:
+    stub = request.app.state.grpc_pool.get_stub("auth", auth_pb2_grpc.AuthServiceStub)
+    response = await stub.GetProjects(
+        auth_pb2.GetProjectsRequest(account_id=account_id), timeout=5.0
+    )
+    return {project.project_id for project in response.projects}
 
 
 @router.get(
@@ -37,6 +50,12 @@ async def get_health_summary(
     if not project_ids:
         raise fastapi.HTTPException(status_code=400, detail="project_ids is required")
 
+    if len(project_ids) > _MAX_PROJECTS_PER_REQUEST:
+        raise fastapi.HTTPException(
+            status_code=400,
+            detail=f"At most {_MAX_PROJECTS_PER_REQUEST} project_ids per request",
+        )
+
     try:
         int_project_ids = [int(pid) for pid in project_ids]
     except ValueError:
@@ -45,6 +64,14 @@ async def get_health_summary(
     grpc_pool = request.app.state.grpc_pool
 
     try:
+        # Silently narrowed rather than rejected: a project the caller just left
+        # may still be listed by an open dashboard, and one stale id should not
+        # blank the whole health strip.
+        accessible = await _accessible_project_ids(request, account_id)
+        int_project_ids = [pid for pid in int_project_ids if pid in accessible]
+        if not int_project_ids:
+            return schemas.HealthSummaryResponse(summaries=[])
+
         async with grpc_pool.get_query_stub() as stub:
             response = await stub.GetHealthSummary(
                 query_pb2.GetHealthSummaryRequest(

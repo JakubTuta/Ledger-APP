@@ -4,6 +4,7 @@ import datetime
 import pytest
 
 import gateway_service.services.redis_client as redis_client_module
+import tests.infra as infra
 
 
 def _usage_key(project_id: int, signal: str = "logs") -> str:
@@ -14,8 +15,9 @@ def _usage_key(project_id: int, signal: str = "logs") -> str:
 @pytest.mark.asyncio
 class TestTryConsumeQuotaAtomicity:
     async def _make_client(self) -> redis_client_module.RedisClient:
-        client = redis_client_module.RedisClient("redis://localhost:6379/0", decode_responses=False)
+        client = redis_client_module.RedisClient(infra.redis_url(), decode_responses=False)
         await client.connect()
+        await infra.reset_redis(client.client)
         return client
 
     @pytest.mark.parametrize("signal", ["logs", "spans", "metrics"])

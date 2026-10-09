@@ -16,7 +16,6 @@ class RateLimitMiddleware:
     EXEMPT_PATHS = {
         "/health",
         "/health/deep",
-        "/metrics",
     }
 
     # OTLP routes reserve quota atomically per-item before forwarding to gRPC and

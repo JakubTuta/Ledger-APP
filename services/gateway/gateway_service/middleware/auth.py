@@ -19,7 +19,6 @@ class AuthMiddleware:
     PUBLIC_PATHS = {
         "/health",
         "/health/deep",
-        "/metrics",
         "/docs",
         "/openapi.json",
         "/api/v1/accounts/register",
@@ -33,6 +32,16 @@ class AuthMiddleware:
         # session token yet — that's exactly what this endpoint mints.
         "/api/v1/accounts/2fa/login",
     }
+
+    # An API key is an ingestion credential that ships inside customer apps, so
+    # it never acts as its owner's account: it may write telemetry (these paths)
+    # and read its own project (GET routes, scoped by require_project_member).
+    API_KEY_WRITE_PATHS = {
+        "/v1/logs",
+        "/v1/traces",
+        "/v1/metrics",
+    }
+    API_KEY_READ_METHODS = {"GET", "HEAD"}
 
     def __init__(self, app: ASGIApp):
         self.app = app
@@ -67,11 +76,17 @@ class AuthMiddleware:
             if auth_type == "session":
                 auth_data = await self._validate_session_token(token)
             else:
+                self._ensure_api_key_allowed(scope)
                 auth_data = await self._validate_api_key(redis, grpc_pool, token)
 
             state = scope.setdefault("state", {})
+            state["auth_type"] = auth_type
             state["project_id"] = auth_data.get("project_id")
-            state["account_id"] = auth_data["account_id"]
+            # Only a session identifies an account. Leaving account_id unset for
+            # API keys makes every account-scoped route reject them (401) instead
+            # of acting as the project owner.
+            if auth_type == "session":
+                state["account_id"] = auth_data["account_id"]
             state["rate_limits"] = auth_data.get(
                 "rate_limits",
                 {
@@ -106,6 +121,17 @@ class AuthMiddleware:
                 content={"detail": "Authentication service error"},
             )
             await response(scope, receive, send)
+
+    def _ensure_api_key_allowed(self, scope: Scope) -> None:
+        if scope["method"] in self.API_KEY_READ_METHODS:
+            return
+        if scope["path"] in self.API_KEY_WRITE_PATHS:
+            return
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_403_FORBIDDEN,
+            detail="API keys can only ingest telemetry and read their own project; "
+            "use a session token for this endpoint",
+        )
 
     def _is_public_path(self, path: str) -> bool:
         if path in self.PUBLIC_PATHS:

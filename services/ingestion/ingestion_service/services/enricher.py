@@ -11,8 +11,8 @@ def generate_error_fingerprint(log_entry: schemas.LogEntry) -> str | None:
 
     stack_frames = parse_stack_trace(log_entry.stack_trace)
 
-    first_three_frames = stack_frames[:3]
-    frame_signature = "|".join([f"{frame['file']}:{frame['line']}" for frame in first_three_frames])
+    innermost_frames = stack_frames[:3]
+    frame_signature = "|".join([f"{frame['file']}:{frame['line']}" for frame in innermost_frames])
 
     platform = log_entry.platform or "unknown"
     error_type = log_entry.error_type or "UnknownError"
@@ -23,11 +23,16 @@ def generate_error_fingerprint(log_entry: schemas.LogEntry) -> str | None:
 
 
 def parse_stack_trace(stack_trace: str) -> list[dict[str, str]]:
+    """Frames ordered innermost (where the error was raised) first."""
     frames = []
 
+    # Python prints the outermost frame first ("most recent call last"), the
+    # opposite of Node and Java. Taken as-is, the leading frames of every web
+    # request's traceback are the same framework entry points, which merged
+    # unrelated errors of one exception type into a single group.
     python_pattern = r'File "([^"]+)", line (\d+)'
     matches = re.findall(python_pattern, stack_trace)
-    for file_path, line_number in matches:
+    for file_path, line_number in reversed(matches):
         frames.append({"file": file_path, "line": line_number})
 
     if not frames:

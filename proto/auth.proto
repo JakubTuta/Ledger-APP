@@ -852,7 +852,7 @@ message Connector {
   int64 account_id = 2;
   string kind = 3;
   string name = 4;
-  string config = 5;  // JSON string (without hmac_secret in responses)
+  string config = 5;  // JSON string (without hmac_secret/integration_key/api_key unless include_secrets)
   bool enabled = 6;
   string created_at = 7;
 }
@@ -868,6 +868,9 @@ message ListConnectorsResponse {
 message GetConnectorRequest {
   int64 connector_id = 1;
   int64 account_id = 2;
+  // Internal callers only (connector test-fire): return hmac_secret /
+  // integration_key / api_key too. The gateway never forwards them to clients.
+  bool include_secrets = 3;
 }
 
 message GetConnectorResponse {

@@ -1250,12 +1250,14 @@ class ListConnectorsResponse(_message.Message):
     def __init__(self, connectors: _Optional[_Iterable[_Union[Connector, _Mapping]]] = ...) -> None: ...
 
 class GetConnectorRequest(_message.Message):
-    __slots__ = ("connector_id", "account_id")
+    __slots__ = ("connector_id", "account_id", "include_secrets")
     CONNECTOR_ID_FIELD_NUMBER: _ClassVar[int]
     ACCOUNT_ID_FIELD_NUMBER: _ClassVar[int]
+    INCLUDE_SECRETS_FIELD_NUMBER: _ClassVar[int]
     connector_id: int
     account_id: int
-    def __init__(self, connector_id: _Optional[int] = ..., account_id: _Optional[int] = ...) -> None: ...
+    include_secrets: bool
+    def __init__(self, connector_id: _Optional[int] = ..., account_id: _Optional[int] = ..., include_secrets: bool = ...) -> None: ...
 
 class GetConnectorResponse(_message.Message):
     __slots__ = ("connector", "found")

@@ -1,12 +1,11 @@
-import os
-
 import pytest_asyncio
 import auth_service.database as database
-import auth_service.config as config
 import auth_service.grpc.servicers as servicers
 import auth_service.proto.auth_pb2_grpc as auth_pb2_grpc
 import grpc.aio as grpc_aio
 import redis.asyncio as redis_async
+
+import tests.infra as infra
 
 
 class BaseGrpcTest:
@@ -14,17 +13,8 @@ class BaseGrpcTest:
     async def setup_method(self, test_db_manager):
         self.test_db_manager = test_db_manager
 
-        test_redis_host = os.getenv("TEST_REDIS_HOST", "localhost")
-        redis_password = config.settings.REDIS_PASSWORD
-        redis_db = config.settings.REDIS_DB
-
-        if redis_password:
-            test_redis_url = f"redis://:{redis_password}@{test_redis_host}:{config.settings.REDIS_PORT}/{redis_db}"
-        else:
-            test_redis_url = f"redis://{test_redis_host}:{config.settings.REDIS_PORT}/{redis_db}"
-
-        self.redis = redis_async.Redis.from_url(test_redis_url, decode_responses=False)
-        await self.redis.flushdb()
+        self.redis = redis_async.Redis.from_url(infra.redis_url(), decode_responses=False)
+        await infra.reset_redis(self.redis)
 
         database._session_factory = self.test_db_manager.session_factory
         database._engine = self.test_db_manager.engine

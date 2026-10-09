@@ -1,24 +1,19 @@
 import asyncio
 
 import asyncpg
-import auth_service.config as config
 import auth_service.database as database
 import sqlalchemy
 import sqlalchemy.ext.asyncio as sa_async
 import sqlalchemy.pool as sa_pool
 
-TEST_DB_HOST = "localhost"
-TEST_DB_PORT = "5432"
-TEST_DB_NAME = "test_auth_db"
-TEST_DB_URL = (
-    f"postgresql+asyncpg://{config.settings.AUTH_DB_USER}:{config.settings.AUTH_DB_PASSWORD}"
-    f"@{TEST_DB_HOST}:{TEST_DB_PORT}/{TEST_DB_NAME}"
-)
+import tests.infra as infra
 
-POSTGRES_URL = (
-    f"postgresql://{config.settings.AUTH_DB_USER}:{config.settings.AUTH_DB_PASSWORD}"
-    f"@{TEST_DB_HOST}:{TEST_DB_PORT}/postgres"
+TEST_DB_NAME = infra.require_test_database_name("test_auth_db")
+_SERVER = (
+    f"{infra.POSTGRES_USER}:{infra.POSTGRES_PASSWORD}@{infra.POSTGRES_HOST}:{infra.POSTGRES_PORT}"
 )
+TEST_DB_URL = f"postgresql+asyncpg://{_SERVER}/{TEST_DB_NAME}"
+POSTGRES_URL = f"postgresql://{_SERVER}/postgres"
 
 
 class TestDatabase:

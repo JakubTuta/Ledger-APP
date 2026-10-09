@@ -1,3 +1,4 @@
+import grpc
 import pyotp
 import pytest
 from auth_service.proto import auth_pb2
@@ -111,6 +112,27 @@ class TestTwoFactorAuth(BaseGrpcTest):
             auth_pb2.GetAccountRequest(account_id=login.account_id)
         )
         assert account.totp_enabled is True
+
+    async def test_setup_2fa_cannot_replace_an_active_authenticator(self):
+        login = await _register_and_login(self.stub, "2fareplace@example.com")
+        setup = await self.stub.Setup2FA(auth_pb2.Setup2FARequest(account_id=login.account_id))
+        await self.stub.Verify2FASetup(
+            auth_pb2.Verify2FASetupRequest(
+                account_id=login.account_id, code=pyotp.TOTP(setup.secret).now()
+            )
+        )
+
+        with pytest.raises(grpc.aio.AioRpcError) as exc_info:
+            await self.stub.Setup2FA(auth_pb2.Setup2FARequest(account_id=login.account_id))
+
+        assert exc_info.value.code() == grpc.StatusCode.INVALID_ARGUMENT
+        # The enrolled authenticator keeps working.
+        login_response = await self.stub.VerifyTOTPLogin(
+            auth_pb2.VerifyTOTPLoginRequest(
+                account_id=login.account_id, code=pyotp.TOTP(setup.secret).now()
+            )
+        )
+        assert login_response.success is True
 
     async def test_verify_2fa_setup_wrong_code_fails(self):
         login = await _register_and_login(self.stub, "2fawrong@example.com")

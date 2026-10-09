@@ -10,22 +10,10 @@ class TestCreateApiKey(BaseGatewayTest):
 
     async def test_create_api_key_success(self):
         """Test successful API key creation."""
-        api_key = "ledger_test_api_key_123"
-        await self.mock_redis.set_cached_api_key(
-            api_key,
-            {
-                "project_id": 1,
-                "account_id": 1,
-                "rate_limit_per_minute": 1000,
-                "rate_limit_per_hour": 50000,
-                "logs_daily_quota": 1000000,
-                "current_usage": 0,
-            },
-        )
 
         response = await self.client.post(
             "/api/v1/projects/1/api-keys",
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers=self.session_headers(),
             json={"name": "Production API Key"},
         )
 
@@ -41,18 +29,6 @@ class TestCreateApiKey(BaseGatewayTest):
 
     async def test_create_api_key_with_name(self):
         """Test API key creation with custom name."""
-        api_key = "ledger_test_api_key_123"
-        await self.mock_redis.set_cached_api_key(
-            api_key,
-            {
-                "project_id": 1,
-                "account_id": 1,
-                "rate_limit_per_minute": 1000,
-                "rate_limit_per_hour": 50000,
-                "logs_daily_quota": 1000000,
-                "current_usage": 0,
-            },
-        )
 
         names = [
             "Production Key",
@@ -64,7 +40,7 @@ class TestCreateApiKey(BaseGatewayTest):
         for name in names:
             response = await self.client.post(
                 "/api/v1/projects/1/api-keys",
-                headers={"Authorization": f"Bearer {api_key}"},
+                headers=self.session_headers(),
                 json={"name": name},
             )
 
@@ -73,18 +49,6 @@ class TestCreateApiKey(BaseGatewayTest):
 
     async def test_create_api_key_project_not_found(self):
         """Test creating API key for non-existent project."""
-        api_key = "ledger_test_api_key_123"
-        await self.mock_redis.set_cached_api_key(
-            api_key,
-            {
-                "project_id": 1,
-                "account_id": 1,
-                "rate_limit_per_minute": 1000,
-                "rate_limit_per_hour": 50000,
-                "logs_daily_quota": 1000000,
-                "current_usage": 0,
-            },
-        )
 
         stub = self.get_mock_auth_stub()
 
@@ -98,7 +62,7 @@ class TestCreateApiKey(BaseGatewayTest):
 
         response = await self.client.post(
             "/api/v1/projects/999/api-keys",
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers=self.session_headers(),
             json={"name": "Test Key"},
         )
 
@@ -108,18 +72,6 @@ class TestCreateApiKey(BaseGatewayTest):
 
     async def test_create_api_key_permission_denied(self):
         """Test creating API key for project user doesn't own."""
-        api_key = "ledger_test_api_key_123"
-        await self.mock_redis.set_cached_api_key(
-            api_key,
-            {
-                "project_id": 1,
-                "account_id": 1,
-                "rate_limit_per_minute": 1000,
-                "rate_limit_per_hour": 50000,
-                "logs_daily_quota": 1000000,
-                "current_usage": 0,
-            },
-        )
 
         stub = self.get_mock_auth_stub()
 
@@ -133,7 +85,7 @@ class TestCreateApiKey(BaseGatewayTest):
 
         response = await self.client.post(
             "/api/v1/projects/2/api-keys",
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers=self.session_headers(),
             json={"name": "Test Key"},
         )
 
@@ -153,22 +105,10 @@ class TestCreateApiKey(BaseGatewayTest):
 
     async def test_create_api_key_validation_empty_name(self):
         """Test API key name validation."""
-        api_key = "ledger_test_api_key_123"
-        await self.mock_redis.set_cached_api_key(
-            api_key,
-            {
-                "project_id": 1,
-                "account_id": 1,
-                "rate_limit_per_minute": 1000,
-                "rate_limit_per_hour": 50000,
-                "logs_daily_quota": 1000000,
-                "current_usage": 0,
-            },
-        )
 
         response = await self.client.post(
             "/api/v1/projects/1/api-keys",
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers=self.session_headers(),
             json={"name": ""},
         )
 
@@ -177,24 +117,12 @@ class TestCreateApiKey(BaseGatewayTest):
 
     async def test_create_api_key_validation_long_name(self):
         """Test API key name length validation."""
-        api_key = "ledger_test_api_key_123"
-        await self.mock_redis.set_cached_api_key(
-            api_key,
-            {
-                "project_id": 1,
-                "account_id": 1,
-                "rate_limit_per_minute": 1000,
-                "rate_limit_per_hour": 50000,
-                "logs_daily_quota": 1000000,
-                "current_usage": 0,
-            },
-        )
 
         long_name = "a" * 256
 
         response = await self.client.post(
             "/api/v1/projects/1/api-keys",
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers=self.session_headers(),
             json={"name": long_name},
         )
 
@@ -208,22 +136,10 @@ class TestRevokeApiKey(BaseGatewayTest):
 
     async def test_revoke_api_key_success(self):
         """Test successful API key revocation."""
-        api_key = "ledger_test_api_key_123"
-        await self.mock_redis.set_cached_api_key(
-            api_key,
-            {
-                "project_id": 1,
-                "account_id": 1,
-                "rate_limit_per_minute": 1000,
-                "rate_limit_per_hour": 50000,
-                "logs_daily_quota": 1000000,
-                "current_usage": 0,
-            },
-        )
 
         response = await self.client.delete(
             "/api/v1/api-keys/1",
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers=self.session_headers(),
         )
 
         assert response.status_code == 200
@@ -234,18 +150,6 @@ class TestRevokeApiKey(BaseGatewayTest):
 
     async def test_revoke_api_key_not_found(self):
         """Test revoking non-existent API key."""
-        api_key = "ledger_test_api_key_123"
-        await self.mock_redis.set_cached_api_key(
-            api_key,
-            {
-                "project_id": 1,
-                "account_id": 1,
-                "rate_limit_per_minute": 1000,
-                "rate_limit_per_hour": 50000,
-                "logs_daily_quota": 1000000,
-                "current_usage": 0,
-            },
-        )
 
         stub = self.get_mock_auth_stub()
 
@@ -259,7 +163,7 @@ class TestRevokeApiKey(BaseGatewayTest):
 
         response = await self.client.delete(
             "/api/v1/api-keys/999",
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers=self.session_headers(),
         )
 
         assert response.status_code == 404
@@ -268,18 +172,6 @@ class TestRevokeApiKey(BaseGatewayTest):
 
     async def test_revoke_api_key_permission_denied(self):
         """Test revoking API key user doesn't own."""
-        api_key = "ledger_test_api_key_123"
-        await self.mock_redis.set_cached_api_key(
-            api_key,
-            {
-                "project_id": 1,
-                "account_id": 1,
-                "rate_limit_per_minute": 1000,
-                "rate_limit_per_hour": 50000,
-                "logs_daily_quota": 1000000,
-                "current_usage": 0,
-            },
-        )
 
         stub = self.get_mock_auth_stub()
 
@@ -293,7 +185,7 @@ class TestRevokeApiKey(BaseGatewayTest):
 
         response = await self.client.delete(
             "/api/v1/api-keys/2",
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers=self.session_headers(),
         )
 
         assert response.status_code == 403
@@ -309,18 +201,6 @@ class TestRevokeApiKey(BaseGatewayTest):
 
     async def test_revoke_api_key_cache_invalidation(self):
         """Test that revoking API key should invalidate cache."""
-        api_key = "ledger_test_api_key_123"
-        await self.mock_redis.set_cached_api_key(
-            api_key,
-            {
-                "project_id": 1,
-                "account_id": 1,
-                "rate_limit_per_minute": 1000,
-                "rate_limit_per_hour": 50000,
-                "logs_daily_quota": 1000000,
-                "current_usage": 0,
-            },
-        )
 
         revoked_key = "key_to_revoke_123"
         await self.mock_redis.set_cached_api_key(
@@ -340,7 +220,7 @@ class TestRevokeApiKey(BaseGatewayTest):
 
         response = await self.client.delete(
             "/api/v1/api-keys/1",
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers=self.session_headers(),
         )
 
         assert response.status_code == 200
@@ -377,7 +257,7 @@ class TestApiKeyValidation(BaseGatewayTest):
             # and treats everything else as a session JWT) - this test is about
             # whether varied key *contents* are accepted, not header classification.
             response = await self.client.get(
-                "/api/v1/projects",
+                "/api/v1/logs?project_id=1&period=today",
                 headers={"X-API-Key": key},
             )
 

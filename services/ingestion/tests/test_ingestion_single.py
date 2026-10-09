@@ -3,6 +3,7 @@ import datetime
 import pytest
 
 import ingestion_service.proto.ingestion_pb2 as ingestion_pb2
+import tests.infra as infra
 
 from .helpers import create_proto_log
 from .test_base import BaseIngestionTest
@@ -95,7 +96,7 @@ ConnectionError: Unable to connect to database server""",
         response1 = await self.stub.IngestLog(request1)
         assert response1.success is True
 
-        await self.redis.flushdb()
+        await infra.reset_redis(self.redis)
 
         log_dict2 = {
             "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),

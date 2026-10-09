@@ -34,11 +34,11 @@ jobs:
         run: ruff check .
 
   # ==================== Tests: gateway (mocked gRPC, real Redis) ====================
-  # gateway mocks gRPC (tests/mocks.py) for all tests, and mocks Redis for most -
-  # but test_log_tail.py/test_notifications.py open a real redis.asyncio pub/sub
-  # connection directly (MockRedisClient can't reproduce pub/sub semantics), and
-  # test_quota_atomicity.py exercises real Redis atomicity under concurrent
-  # asyncio.gather. Needs a real Redis service container.
+  # gateway mocks gRPC (tests/mocks.py) and Redis for every test except
+  # test_quota_atomicity.py, which exercises real Redis atomicity under
+  # concurrent asyncio.gather. Needs a real Redis service container.
+  # Test infrastructure addresses come from TEST_* variables whose defaults
+  # match these service containers (see each service's tests/infra.py).
   test-unit:
     name: Test (gateway)
     needs: lint

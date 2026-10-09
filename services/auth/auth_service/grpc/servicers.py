@@ -8,7 +8,7 @@ import sqlalchemy.dialects.postgresql as sa_postgresql
 from auth_service import config, database
 from auth_service import models
 from auth_service.proto import auth_pb2, auth_pb2_grpc
-from auth_service.services import auth_service, dashboard_service
+from auth_service.services import auth_service, connector_secrets, dashboard_service
 from auth_service.utils import jwt_utils
 from redis.asyncio import Redis
 
@@ -1667,7 +1667,10 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                 if not connector:
                     return auth_pb2.GetConnectorResponse(found=False)
                 return auth_pb2.GetConnectorResponse(
-                    connector=_connector_to_proto(connector), found=True
+                    connector=_connector_to_proto(
+                        connector, include_secrets=request.include_secrets
+                    ),
+                    found=True,
                 )
         except Exception as e:
             context.set_code(grpc.StatusCode.INTERNAL)
@@ -1686,7 +1689,7 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     account_id=request.account_id,
                     kind=request.kind,
                     name=request.name or request.kind,
-                    config=config_dict,
+                    config=connector_secrets.encrypt_config(config_dict),
                     enabled=True,
                 )
                 session.add(connector)
@@ -1723,10 +1726,10 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                 if request.HasField("config"):
                     new_config = json.loads(request.config) if request.config else {}
                     existing = dict(connector.config or {})
-                    for field in _CONNECTOR_SECRET_FIELDS:
+                    for field in _WRITE_ONLY_CONNECTOR_FIELDS:
                         if field in existing and field not in new_config:
                             new_config[field] = existing[field]
-                    connector.config = new_config
+                    connector.config = connector_secrets.encrypt_config(new_config)
                 await session.commit()
                 await session.refresh(connector)
                 return auth_pb2.UpdateConnectorResponse(connector=_connector_to_proto(connector))
@@ -2192,13 +2195,16 @@ def _alert_rule_to_proto(r: models.AlertRule, connector_ids: list[int]) -> auth_
     return rule
 
 
-_CONNECTOR_SECRET_FIELDS = ("hmac_secret", "integration_key", "api_key")
+# Credentials the browser may set but never reads back; an update that omits
+# one keeps the stored value.
+_WRITE_ONLY_CONNECTOR_FIELDS = ("hmac_secret", "integration_key", "api_key")
 
 
-def _connector_to_proto(c: models.Connector) -> auth_pb2.Connector:
-    config_safe = dict(c.config or {})
-    for field in _CONNECTOR_SECRET_FIELDS:
-        config_safe.pop(field, None)
+def _connector_to_proto(c: models.Connector, include_secrets: bool = False) -> auth_pb2.Connector:
+    config_safe = connector_secrets.decrypt_config(c.config or {})
+    if not include_secrets:
+        for field in _WRITE_ONLY_CONNECTOR_FIELDS:
+            config_safe.pop(field, None)
     return auth_pb2.Connector(
         id=c.id,
         account_id=c.account_id,

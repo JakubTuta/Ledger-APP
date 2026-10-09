@@ -169,6 +169,38 @@ def _stub(request: fastapi.Request) -> auth_pb2_grpc.AuthServiceStub:
     return auth_pb2_grpc.AuthServiceStub(channel)
 
 
+def _referenced_connector_ids(
+    connector_ids: list[int] | None, escalate_connector_id: int | None
+) -> list[int]:
+    referenced = list(connector_ids or [])
+    if escalate_connector_id is not None:
+        referenced.append(escalate_connector_id)
+    return referenced
+
+
+async def _ensure_own_connectors(
+    request: fastapi.Request, account_id: int, connector_ids: list[int]
+) -> None:
+    """A rule may only deliver through the caller's own connectors.
+
+    Connector ids are sequential, and the alert evaluator delivers to whatever
+    a rule references - without this check a rule could page through another
+    account's Slack/PagerDuty/email connector.
+    """
+    if not connector_ids:
+        return
+    try:
+        response = await _stub(request).ListConnectors(
+            auth_pb2.ListConnectorsRequest(account_id=account_id), timeout=5.0
+        )
+    except grpc.RpcError as e:
+        raise fastapi.HTTPException(status_code=502, detail=str(e.details()))
+    own_ids = {c.id for c in response.connectors}
+    unknown = sorted(set(connector_ids) - own_ids)
+    if unknown:
+        raise fastapi.HTTPException(status_code=400, detail=f"Unknown connector ids: {unknown}")
+
+
 @router.get(
     "/connectors",
     response_model=list[ConnectorResponse],
@@ -259,8 +291,12 @@ async def delete_connector(connector_id: int, request: fastapi.Request) -> None:
 async def test_connector(connector_id: int, request: fastapi.Request) -> None:
     account_id = _require_account(request)
     try:
+        # Secrets stay inside this handler: they are needed to deliver the test
+        # message and are never part of the response.
         ch_response = await _stub(request).GetConnector(
-            auth_pb2.GetConnectorRequest(connector_id=connector_id, account_id=account_id),
+            auth_pb2.GetConnectorRequest(
+                connector_id=connector_id, account_id=account_id, include_secrets=True
+            ),
             timeout=5.0,
         )
     except grpc.RpcError as e:
@@ -397,17 +433,14 @@ async def _guarded_post(url: str, **kwargs) -> None:
     hit fixed vendor hosts and don't go through this helper.
     """
     try:
-        await net_guard.validate_webhook_url(url)
-    except net_guard.UnsafeWebhookURLError as e:
-        raise fastapi.HTTPException(status_code=400, detail=f"Unsafe URL: {str(e)}")
-
-    try:
         async with httpx.AsyncClient(timeout=10.0) as http:
-            response = await http.post(url, **kwargs)
+            response = await net_guard.post_to_public_host(http, url, **kwargs)
             if response.status_code >= 400:
                 raise fastapi.HTTPException(
                     status_code=502, detail=f"Delivery returned HTTP {response.status_code}"
                 )
+    except net_guard.UnsafeWebhookURLError as e:
+        raise fastapi.HTTPException(status_code=400, detail=f"Unsafe URL: {str(e)}")
     except httpx.RequestError as e:
         raise fastapi.HTTPException(status_code=502, detail=f"Delivery failed: {str(e)}")
 
@@ -464,7 +497,13 @@ async def create_alert_rule(
     payload: CreateAlertRuleRequest,
     request: fastapi.Request,
 ) -> AlertRuleResponse:
-    _require_account(request)
+    account_id = _require_account(request)
+    await dependencies.require_project_member(request, payload.project_id)
+    await _ensure_own_connectors(
+        request,
+        account_id,
+        _referenced_connector_ids(payload.connector_ids, payload.escalate_connector_id),
+    )
     proto_req = auth_pb2.CreateAlertRuleRequest(
         project_id=payload.project_id,
         name=payload.name,
@@ -497,7 +536,12 @@ async def update_alert_rule(
     request: fastapi.Request,
     project_id: int = fastapi.Depends(dependencies.require_project_member),
 ) -> AlertRuleResponse:
-    _require_account(request)
+    account_id = _require_account(request)
+    await _ensure_own_connectors(
+        request,
+        account_id,
+        _referenced_connector_ids(payload.connector_ids, payload.escalate_connector_id),
+    )
     proto_req = auth_pb2.UpdateAlertRuleRequest(rule_id=rule_id, project_id=project_id)
     if payload.name is not None:
         proto_req.name = payload.name
@@ -636,6 +680,7 @@ async def create_maintenance_window(
     request: fastapi.Request,
 ) -> MaintenanceWindowResponse:
     _require_account(request)
+    await dependencies.require_project_member(request, payload.project_id)
     proto_req = auth_pb2.CreateMaintenanceWindowRequest(
         project_id=payload.project_id,
         name=payload.name,

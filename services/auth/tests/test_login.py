@@ -1,3 +1,8 @@
+import unittest.mock
+
+import auth_service.services.auth_service as auth_service_module
+import bcrypt
+import grpc
 import pytest
 from auth_service.proto import auth_pb2
 
@@ -156,41 +161,27 @@ class TestLoginEdgeCases(BaseGrpcTest):
 class TestLoginSecurity(BaseGrpcTest):
     """Test login security aspects."""
 
-    async def test_login_timing_attack_resistance(self):
-        """Test that login doesn't leak information via timing."""
-        import time
-
+    async def test_unknown_email_costs_the_same_bcrypt_work_as_a_wrong_password(self):
+        """Response time must not reveal which emails have accounts: both
+        failures run exactly one bcrypt check."""
         await self.stub.Register(
             auth_pb2.RegisterRequest(
                 email="timing@example.com", password="password123", plan="free"
             )
         )
 
-        start = time.time()
-        try:
-            await self.stub.Login(
-                auth_pb2.LoginRequest(email="nonexistent@example.com", password="password123")
-            )
-        except:
-            pass
-        nonexistent_time = time.time() - start
+        checks_per_failure = []
+        for email in ("nonexistent@example.com", "timing@example.com"):
+            with unittest.mock.patch.object(
+                auth_service_module.bcrypt, "checkpw", wraps=bcrypt.checkpw
+            ) as checkpw:
+                with pytest.raises(grpc.aio.AioRpcError):
+                    await self.stub.Login(
+                        auth_pb2.LoginRequest(email=email, password="wrongpassword")
+                    )
+            checks_per_failure.append(checkpw.call_count)
 
-        start = time.time()
-        try:
-            await self.stub.Login(
-                auth_pb2.LoginRequest(email="timing@example.com", password="wrongpassword")
-            )
-        except:
-            pass
-        wrong_password_time = time.time() - start
-
-        time_diff = abs(nonexistent_time - wrong_password_time)
-        print(f"Timing difference: {time_diff:.3f}s")
-
-        if time_diff > 0.5:
-            print("⚠️  Significant timing difference detected - potential timing attack")
-        else:
-            print("✅ Timing is relatively consistent")
+        assert checks_per_failure == [1, 1]
 
     async def test_login_multiple_failures(self):
         """Test multiple login failures (rate limiting consideration)."""
