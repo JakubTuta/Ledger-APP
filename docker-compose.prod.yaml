@@ -11,11 +11,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.25"
-          memory: 256M
+          cpus: "0.15"
+          memory: 128M
         reservations:
           cpus: "0.05"
-          memory: 128M
+          memory: 64M
     networks:
       - ledger-frontend-network
     logging:
@@ -46,11 +46,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.5"
-          memory: 512M
+          cpus: "0.25"
+          memory: 96M
         reservations:
-          cpus: "0.1"
-          memory: 128M
+          cpus: "0.05"
+          memory: 64M
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${AUTH_DB_USER}"]
       interval: 60s
@@ -88,11 +88,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.5"
+          cpus: "0.50"
           memory: 768M
         reservations:
-          cpus: "0.1"
-          memory: 256M
+          cpus: "0.05"
+          memory: 384M
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${LOGS_DB_USER}"]
       interval: 60s
@@ -123,11 +123,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.25"
-          memory: 768M
+          cpus: "0.40"
+          memory: 256M
         reservations:
           cpus: "0.05"
-          memory: 96M
+          memory: 192M
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
       interval: 120s
@@ -156,11 +156,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.25"
+          cpus: "0.15"
           memory: 128M
         reservations:
           cpus: "0.05"
-          memory: 32M
+          memory: 16M
     networks:
       - ledger-server-network
     command: >
@@ -230,8 +230,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.25"
-          memory: 192M
+          cpus: "0.40"
+          memory: 128M
         reservations:
           cpus: "0.05"
           memory: 96M
@@ -254,9 +254,9 @@ services:
         max-size: "5m"
         max-file: "2"
 
-  ledger-gateway:
+  ledger-gateway-service:
     image: container-registry.jtuta.cloud/ledger/gateway:latest
-    container_name: ledger-gateway
+    container_name: ledger-gateway-service
     restart: unless-stopped
     env_file: .env
     environment:
@@ -278,11 +278,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.5"
+          cpus: "0.25"
           memory: 512M
         reservations:
-          cpus: "0.15"
-          memory: 192M
+          cpus: "0.05"
+          memory: 384M
     networks:
       - ledger-server-network
     command: >
@@ -318,8 +318,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.25"
-          memory: 192M
+          cpus: "0.40"
+          memory: 128M
         reservations:
           cpus: "0.05"
           memory: 96M
@@ -369,11 +369,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.25"
-          memory: 256M
+          cpus: "0.15"
+          memory: 320M
         reservations:
           cpus: "0.05"
-          memory: 64M
+          memory: 256M
     networks:
       - ledger-server-network
     command: python -m ingestion_service.worker
@@ -404,11 +404,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.25"
+          cpus: "0.15"
           memory: 192M
         reservations:
           cpus: "0.05"
-          memory: 96M
+          memory: 128M
     networks:
       - ledger-server-network
     command: python -m analytics_workers.main
@@ -436,8 +436,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.25"
-          memory: 192M
+          cpus: "0.40"
+          memory: 128M
         reservations:
           cpus: "0.05"
           memory: 96M

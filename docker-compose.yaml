@@ -32,12 +32,6 @@ services:
       - ledger-postgres-data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-        reservations:
-          memory: 512M
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${AUTH_DB_USER}"]
       interval: 60s
@@ -74,12 +68,6 @@ services:
       - ledger-postgres-logs-data:/var/lib/postgresql/data
     ports:
       - "5433:5432"
-    deploy:
-      resources:
-        limits:
-          memory: 6G
-        reservations:
-          memory: 2G
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${LOGS_DB_USER}"]
       interval: 60s
@@ -130,12 +118,6 @@ services:
     ports:
       - "5672:5672"
       - "15672:15672"
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-        reservations:
-          memory: 256M
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
       interval: 120s
