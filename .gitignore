@@ -14,4 +14,5 @@ CLAUDE.md
 k8s/*secrets*.yaml
 !k8s/secrets.example.yaml
 benchmark_result/
-.ruff-cache/*.egg-info/
+.ruff-cache/
+*.egg-info/

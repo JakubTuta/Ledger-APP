@@ -1,5 +1,0 @@
-Metadata-Version: 2.4
-Name: ledger-common
-Version: 0.1.0
-Summary: Code shared by the Ledger services
-Requires-Python: >=3.12
