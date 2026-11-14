@@ -35,7 +35,7 @@ async def serve():
         config.settings.REDIS_URL,
         encoding="utf-8",
         decode_responses=False,
-        max_connections=50,
+        max_connections=config.settings.REDIS_MAX_CONNECTIONS,
     )
 
     server = grpc.aio.server(

@@ -3,7 +3,6 @@ import logging
 
 import grpc
 import ingestion_service.config as config
-import ingestion_service.database as database
 import ingestion_service.grpc.servicers as servicers
 import ingestion_service.proto.ingestion_pb2_grpc as ingestion_pb2_grpc
 import ingestion_service.services.rabbitmq_client as rabbitmq_client
@@ -21,8 +20,6 @@ async def serve():
     self_monitoring.start("ingestion")
     redis = redis_client.get_redis_client()
     await redis.ping()
-
-    db_engine = database.get_engine()
 
     await rabbitmq_client.setup_topology()
 
@@ -62,7 +59,6 @@ async def serve():
         await rabbitmq_client.close()
         await redis_client.close_redis()
 
-        await database.close_db()
         self_monitoring.stop()
 
 

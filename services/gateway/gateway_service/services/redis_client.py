@@ -37,6 +37,9 @@ return refunded
 """
 
 
+_FRESH_UNTIL_FIELD = "_fresh_until"
+
+
 class RedisClient:
     def __init__(self, url: str, max_connections: int = 50, decode_responses: bool = False):
         self.url = url
@@ -77,34 +80,51 @@ class RedisClient:
             return False
 
     async def get_cached_api_key(self, api_key: str) -> dict | None:
-        cache_key = self._api_key_cache_key(api_key)
-
-        try:
-            data = await self.client.get(cache_key)  # type: ignore
-            if data:
-                return json.loads(data)
+        """Return a cached key entry that is still within its fresh window."""
+        entry = await self._read_api_key_entry(api_key)
+        if entry is None:
             return None
-
-        except RedisError as e:
-            logger.error(f"Redis GET error: {e}")
+        fresh_until = entry.pop(_FRESH_UNTIL_FIELD, None)
+        if fresh_until is not None and fresh_until < time.time():
             return None
+        return entry
+
+    async def get_stale_cache(self, api_key: str) -> dict | None:
+        """Return a positive entry even past its fresh window (auth service down)."""
+        entry = await self._read_api_key_entry(api_key)
+        if entry is None or entry.get("__invalid__"):
+            return None
+        entry.pop(_FRESH_UNTIL_FIELD, None)
+        return entry
 
     async def set_cached_api_key(self, api_key: str, data: dict, ttl: int | None = None):
-        cache_key = self._api_key_cache_key(api_key)
+        """Cache a key entry for `ttl` seconds of freshness.
 
-        if ttl is None:
-            ttl = config.settings.API_KEY_CACHE_TTL
+        Positive entries stay in Redis for EMERGENCY_CACHE_TTL so get_stale_cache has
+        something to serve while the auth service is unreachable; negative entries
+        (`__invalid__`) expire with their freshness window and are never served stale.
+        """
+        fresh_ttl = config.settings.API_KEY_CACHE_TTL if ttl is None else ttl
+        if data.get("__invalid__"):
+            redis_ttl = fresh_ttl
+        else:
+            redis_ttl = max(fresh_ttl, config.settings.EMERGENCY_CACHE_TTL)
+        value = json.dumps({**data, _FRESH_UNTIL_FIELD: time.time() + fresh_ttl})
 
         try:
-            value = json.dumps(data)
-
-            await self.client.setex(cache_key, ttl, value)  # type: ignore
+            await self.client.setex(self._api_key_cache_key(api_key), redis_ttl, value)  # type: ignore
 
         except RedisError as e:
             logger.error(f"Redis SETEX error: {e}")
 
-    async def get_stale_cache(self, api_key: str) -> dict | None:
-        return await self.get_cached_api_key(api_key)
+    async def _read_api_key_entry(self, api_key: str) -> dict | None:
+        try:
+            raw = await self.client.get(self._api_key_cache_key(api_key))  # type: ignore
+            return json.loads(raw) if raw else None
+
+        except RedisError as e:
+            logger.error(f"Redis GET error: {e}")
+            return None
 
     async def check_rate_limit(
         self,

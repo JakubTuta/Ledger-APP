@@ -309,19 +309,6 @@ class AuthMiddleware:
                     logger.warning("Using stale cache due to auth service error")
                     return stale_data
 
-                if e.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
-                    logger.error("Auth Service timeout")
-                    raise fastapi.HTTPException(
-                        status_code=fastapi.status.HTTP_503_SERVICE_UNAVAILABLE,
-                        detail="Authentication service timeout",
-                    )
-
-            if e.code() == grpc.StatusCode.UNAVAILABLE:
-                stale_data = await redis.get_stale_cache(api_key)
-                if stale_data:
-                    logger.warning("Using stale cache due to service unavailability")
-                    return stale_data
-
                 raise fastapi.HTTPException(
                     status_code=fastapi.status.HTTP_503_SERVICE_UNAVAILABLE,
                     detail="Authentication service unavailable",

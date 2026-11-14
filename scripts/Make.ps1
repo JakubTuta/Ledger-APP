@@ -285,6 +285,7 @@ function Run-Benchmark {
 
 $PROD_REGISTRY = "container-registry.jtuta.cloud/ledger"
 $PROD_TAG = "latest"
+$PROD_SHA = (git rev-parse --short HEAD)
 $PROD_SERVICES = @("auth", "gateway", "ingestion", "analytics", "query", "migrations")
 
 function Assert-Docker {
@@ -312,8 +313,9 @@ function Assert-Registry {
 function Build-ProdImage {
     param([string]$ServiceName)
     $image = "$PROD_REGISTRY/${ServiceName}:${PROD_TAG}"
-    Write-Host "Building $ServiceName -> $image" -ForegroundColor Cyan
-    docker build --file "services/$ServiceName/Dockerfile" --tag $image --platform linux/amd64 "services/$ServiceName"
+    $shaImage = "$PROD_REGISTRY/${ServiceName}:${PROD_SHA}"
+    Write-Host "Building $ServiceName -> $image ($PROD_SHA)" -ForegroundColor Cyan
+    docker build --file "services/$ServiceName/Dockerfile" --tag $image --tag $shaImage --platform linux/amd64 "services/$ServiceName"
     if ($LASTEXITCODE -ne 0) { Write-Host "[ERROR] Failed to build $ServiceName" -ForegroundColor Red; return $false }
     Write-Host "[SUCCESS] $ServiceName built" -ForegroundColor Green
     return $true
@@ -321,10 +323,12 @@ function Build-ProdImage {
 
 function Push-ProdImage {
     param([string]$ServiceName)
-    $image = "$PROD_REGISTRY/${ServiceName}:${PROD_TAG}"
-    Write-Host "Pushing $image" -ForegroundColor Cyan
-    docker push $image
-    if ($LASTEXITCODE -ne 0) { Write-Host "[ERROR] Failed to push $ServiceName" -ForegroundColor Red; return $false }
+    foreach ($tag in @($PROD_TAG, $PROD_SHA)) {
+        $image = "$PROD_REGISTRY/${ServiceName}:${tag}"
+        Write-Host "Pushing $image" -ForegroundColor Cyan
+        docker push $image
+        if ($LASTEXITCODE -ne 0) { Write-Host "[ERROR] Failed to push $ServiceName" -ForegroundColor Red; return $false }
+    }
     Write-Host "[SUCCESS] $ServiceName pushed" -ForegroundColor Green
     return $true
 }

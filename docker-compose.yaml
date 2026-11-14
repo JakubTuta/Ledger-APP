@@ -115,6 +115,7 @@ services:
     volumes:
       - ledger-rabbitmq-data:/var/lib/rabbitmq
       - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
     ports:
       - "5672:5672"
       - "15672:15672"

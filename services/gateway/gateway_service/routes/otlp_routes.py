@@ -73,11 +73,25 @@ async def _consume_daily_quota(
     return None
 
 
+_RETRYABLE_RPC_CODES = frozenset(
+    {
+        grpc.StatusCode.RESOURCE_EXHAUSTED,
+        grpc.StatusCode.UNAVAILABLE,
+        grpc.StatusCode.DEADLINE_EXCEEDED,
+    }
+)
+
+
 def _http_error_for(rpc_error: grpc.RpcError, signal: str) -> fastapi.HTTPException:
-    if rpc_error.code() == grpc.StatusCode.RESOURCE_EXHAUSTED:
+    """Map a downstream gRPC failure to an HTTP status.
+
+    OTLP exporters retry only 429/502/503/504, so a transient failure (queue full,
+    broker blocked, timeout) must surface as 503 or the export is dropped for good.
+    """
+    if rpc_error.code() in _RETRYABLE_RPC_CODES:
         return fastapi.HTTPException(
             status_code=503,
-            detail="Service temporarily unavailable - queue full",
+            detail="Service temporarily unavailable - retry later",
             headers={"Retry-After": "60"},
         )
     if rpc_error.code() == grpc.StatusCode.INVALID_ARGUMENT:

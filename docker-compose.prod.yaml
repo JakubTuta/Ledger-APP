@@ -117,7 +117,8 @@ services:
       RABBITMQ_DEFAULT_VHOST: "/"
     volumes:
       - ledger-rabbitmq-data:/var/lib/rabbitmq
-      - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq/rabbitmq.prod.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
     ports:
       - "127.0.0.1:5672:5672"
     deploy:
@@ -166,7 +167,7 @@ services:
     command: >
       redis-server
       --maxmemory 64mb
-      --maxmemory-policy allkeys-lru
+      --maxmemory-policy volatile-ttl
       --appendonly yes
       --requirepass ${REDIS_PASSWORD}
       --bind 0.0.0.0
@@ -175,7 +176,7 @@ services:
       --save 900 1
       --tcp-keepalive 300
       --timeout 300
-      --maxclients 50
+      --maxclients 200
     logging:
       driver: "json-file"
       options:
@@ -183,7 +184,7 @@ services:
         max-file: "2"
 
   ledger-migrations:
-    image: container-registry.jtuta.cloud/ledger/migrations:latest
+    image: container-registry.jtuta.cloud/ledger/migrations:${IMAGE_TAG:-latest}
     container_name: ledger-migrations
     restart: "no"
     env_file: .env
@@ -213,7 +214,7 @@ services:
         max-file: "2"
 
   ledger-auth-service:
-    image: container-registry.jtuta.cloud/ledger/auth:latest
+    image: container-registry.jtuta.cloud/ledger/auth:${IMAGE_TAG:-latest}
     container_name: ledger-auth-service
     restart: unless-stopped
     env_file: .env
@@ -255,7 +256,7 @@ services:
         max-file: "2"
 
   ledger-gateway-service:
-    image: container-registry.jtuta.cloud/ledger/gateway:latest
+    image: container-registry.jtuta.cloud/ledger/gateway:${IMAGE_TAG:-latest}
     container_name: ledger-gateway-service
     restart: unless-stopped
     env_file: .env
@@ -285,6 +286,17 @@ services:
           memory: 384M
     networks:
       - ledger-server-network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)",
+        ]
+      interval: 60s
+      timeout: 10s
+      retries: 3
     command: >
       uvicorn gateway_service.main:app
       --host 0.0.0.0
@@ -298,7 +310,7 @@ services:
         max-file: "2"
 
   ledger-ingestion:
-    image: container-registry.jtuta.cloud/ledger/ingestion:latest
+    image: container-registry.jtuta.cloud/ledger/ingestion:${IMAGE_TAG:-latest}
     container_name: ledger-ingestion
     restart: unless-stopped
     env_file: .env
@@ -318,7 +330,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.40"
+          cpus: "0.20"
           memory: 128M
         reservations:
           cpus: "0.05"
@@ -344,7 +356,7 @@ services:
         max-file: "2"
 
   ledger-ingestion-worker:
-    image: container-registry.jtuta.cloud/ledger/ingestion:latest
+    image: container-registry.jtuta.cloud/ledger/ingestion:${IMAGE_TAG:-latest}
     container_name: ledger-ingestion-worker
     restart: unless-stopped
     env_file: .env
@@ -369,7 +381,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.15"
+          cpus: "0.35"
           memory: 320M
         reservations:
           cpus: "0.05"
@@ -384,7 +396,7 @@ services:
         max-file: "2"
 
   ledger-analytics-workers:
-    image: container-registry.jtuta.cloud/ledger/analytics:latest
+    image: container-registry.jtuta.cloud/ledger/analytics:${IMAGE_TAG:-latest}
     container_name: ledger-analytics-workers
     restart: unless-stopped
     env_file: .env
@@ -419,7 +431,7 @@ services:
         max-file: "2"
 
   ledger-query:
-    image: container-registry.jtuta.cloud/ledger/query:latest
+    image: container-registry.jtuta.cloud/ledger/query:${IMAGE_TAG:-latest}
     container_name: ledger-query
     restart: unless-stopped
     env_file: .env
@@ -461,6 +473,45 @@ services:
         max-size: "5m"
         max-file: "2"
 
+  ledger-backup:
+    image: postgres:15-alpine
+    container_name: ledger-backup
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      ledger-postgres:
+        condition: service_healthy
+    volumes:
+      - ledger-backup-data:/backups
+    deploy:
+      resources:
+        limits:
+          cpus: "0.10"
+          memory: 64M
+        reservations:
+          cpus: "0.01"
+          memory: 16M
+    networks:
+      - ledger-server-network
+    # Nightly custom-format dump of the Auth DB (accounts, keys, alert config,
+    # encrypted connector secrets). Keeps the newest BACKUP_KEEP files; copy the
+    # volume off the host to survive losing the VPS. Restore with pg_restore -d auth_db.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          stamp=$$(date -u +%Y%m%dT%H%M%SZ)
+          PGPASSWORD="$$AUTH_DB_PASSWORD" pg_dump -h "$$AUTH_DB_HOST" -U "$$AUTH_DB_USER" -d "$$AUTH_DB_NAME" -Fc -f "/backups/auth_db_$$stamp.tmp" \
+            && mv "/backups/auth_db_$$stamp.tmp" "/backups/auth_db_$$stamp.dump"
+          ls -1t /backups/auth_db_*.dump | tail -n +$$(( $${BACKUP_KEEP:-7} + 1 )) | xargs -r rm -f
+          sleep 86400
+        done
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
 volumes:
   ledger-postgres-data:
     name: ledger-postgres-data
@@ -470,6 +521,8 @@ volumes:
     name: ledger-redis-data
   ledger-rabbitmq-data:
     name: ledger-rabbitmq-data
+  ledger-backup-data:
+    name: ledger-backup-data
 
 networks:
   ledger-server-network:

@@ -11,7 +11,6 @@ import auth_service.utils.jwt_utils as jwt_utils
 import bcrypt
 import pyotp
 from redis.asyncio import Redis
-from redis.exceptions import RedisError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -585,36 +584,11 @@ class AuthService:
         Validate API key and return project info.
 
         Returns: (is_valid, project_id, project_info)
-        Uses a single O(1) indexed lookup by SHA-256 hash.
+        Uses a single O(1) indexed lookup by SHA-256 hash. Caching is the gateway's job
+        (its `api_key:<hash>` entry); this service keeps none, so the two can't collide.
         """
 
         key_hash = hashlib.sha256(api_key.encode()).hexdigest()
-        cache_key = f"api_key:{key_hash}"
-
-        try:
-            cached = await self.redis.hgetall(cache_key)
-        except RedisError as e:
-            logger.warning("Redis HGETALL failed for api_key cache (treating as miss): %s", e)
-            cached = {}
-        # A hash written by a pre-split-quota deploy won't have spans_daily_quota /
-        # metrics_daily_quota fields yet. Treat that as a cache miss so it falls
-        # through to the DB below and gets rewritten with the full field set,
-        # rather than silently defaulting quotas here (auth DB is the source of truth).
-        if cached and b"spans_daily_quota" in cached and b"metrics_daily_quota" in cached:
-            return (
-                True,
-                int(cached[b"project_id"]),
-                {
-                    "project_id": int(cached[b"project_id"]),
-                    "account_id": int(cached.get(b"account_id", 0)),
-                    "logs_daily_quota": int(cached[b"logs_daily_quota"]),
-                    "spans_daily_quota": int(cached[b"spans_daily_quota"]),
-                    "metrics_daily_quota": int(cached[b"metrics_daily_quota"]),
-                    "retention_days": int(cached[b"retention_days"]),
-                    "rate_limit_per_minute": int(cached[b"rate_limit_per_minute"]),
-                    "rate_limit_per_hour": int(cached[b"rate_limit_per_hour"]),
-                },
-            )
 
         result = await session.execute(
             select(models.ApiKey).where(
@@ -647,13 +621,6 @@ class AuthService:
             "rate_limit_per_minute": key_record.rate_limit_per_minute,
             "rate_limit_per_hour": key_record.rate_limit_per_hour,
         }
-
-        try:
-            await self.redis.hdel(cache_key, "daily_quota")
-            await self.redis.hset(cache_key, mapping=project_info)
-            await self.redis.expire(cache_key, config.settings.CACHE_TTL_SECONDS)
-        except RedisError as e:
-            logger.warning("Redis HSET failed for api_key cache: %s", e)
 
         return (True, project.id, project_info)
 

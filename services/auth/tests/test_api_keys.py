@@ -78,23 +78,20 @@ class TestApiKeyEndpoints(BaseGrpcTest):
 
         print("✅ Correctly rejected invalid API key")
 
-    async def test_validate_api_key_stale_cache_hash_falls_through_to_db(self):
-        """A Redis HASH written by a pre-quota-split deploy won't have
-        spans_daily_quota/metrics_daily_quota fields. That must be treated as a
-        cache miss (not a source of truth), falling through to the DB and
-        rewriting the cache with the full field set."""
+    async def test_validate_api_key_leaves_caching_to_the_gateway(self):
+        """The gateway owns the api_key:<hash> cache entry; validation must not write one."""
         import hashlib
 
         account = await self.stub.Register(
             auth_pb2.RegisterRequest(
-                email="stalehash@example.com", password="password123", plan="pro"
+                email="nocache@example.com", password="password123", plan="pro"
             )
         )
         project = await self.stub.CreateProject(
             auth_pb2.CreateProjectRequest(
                 account_id=account.account_id,
-                name="Stale Hash Test",
-                slug="stale-hash-test",
+                name="No Cache Test",
+                slug="no-cache-test",
                 environment="production",
             )
         )
@@ -102,33 +99,14 @@ class TestApiKeyEndpoints(BaseGrpcTest):
             auth_pb2.CreateApiKeyRequest(project_id=project.project_id, name="Test Key")
         )
 
-        key_hash = hashlib.sha256(api_key.full_key.encode()).hexdigest()
-        cache_key = f"api_key:{key_hash}"
-
-        await self.redis.hset(
-            cache_key,
-            mapping={
-                "project_id": project.project_id,
-                "account_id": account.account_id,
-                "logs_daily_quota": 100000,
-                "retention_days": 30,
-                "rate_limit_per_minute": 1000,
-                "rate_limit_per_hour": 50000,
-            },
+        response = await self.stub.ValidateApiKey(
+            auth_pb2.ValidateApiKeyRequest(api_key=api_key.full_key)
         )
-
-        request = auth_pb2.ValidateApiKeyRequest(api_key=api_key.full_key)
-        response = await self.stub.ValidateApiKey(request)
 
         assert response.valid is True
         assert response.spans_daily_quota > 0
-        assert response.metrics_daily_quota > 0
-
-        refreshed = await self.redis.hgetall(cache_key)
-        assert b"spans_daily_quota" in refreshed
-        assert b"metrics_daily_quota" in refreshed
-
-        print("✅ Stale cache hash treated as miss and refreshed from DB")
+        key_hash = hashlib.sha256(api_key.full_key.encode()).hexdigest()
+        assert await self.redis.exists(f"api_key:{key_hash}") == 0
 
     async def test_revoke_api_key(self):
         """Test revoking an API key."""

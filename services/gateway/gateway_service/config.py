@@ -60,7 +60,7 @@ class Settings(pydantic_settings.BaseSettings):
         description="Redis password",
     )
 
-    REDIS_MAX_CONNECTIONS: typing.ClassVar[int] = 50
+    REDIS_MAX_CONNECTIONS: typing.ClassVar[int] = 20
 
     @property
     def REDIS_URL(self) -> str:
@@ -166,7 +166,6 @@ class Settings(pydantic_settings.BaseSettings):
 
     API_KEY_CACHE_TTL: typing.ClassVar[int] = 300
     EMERGENCY_CACHE_TTL: typing.ClassVar[int] = 600
-    CACHE_TTL_SECONDS: typing.ClassVar[int] = 300
 
     RATE_LIMIT_WINDOW_MINUTE: typing.ClassVar[int] = 60
     RATE_LIMIT_WINDOW_HOUR: typing.ClassVar[int] = 3600

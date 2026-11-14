@@ -100,7 +100,7 @@ class Settings(pydantic_settings.BaseSettings):
     )
 
     REDIS_DB: typing.ClassVar[int] = 0
-    REDIS_MAX_CONNECTIONS: typing.ClassVar[int] = 50
+    REDIS_MAX_CONNECTIONS: typing.ClassVar[int] = 20
 
     REDIS_PASSWORD: str | None = pydantic.Field(
         default=None,

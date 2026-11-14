@@ -291,7 +291,8 @@ class TestQuotaRefund(test_base.BaseGatewayTest):
             headers={"X-API-Key": API_KEY, "Content-Type": "application/json"},
         )
 
-        assert response.status_code == 500
+        assert response.status_code == 503
+        assert response.headers["retry-after"] == "60"
         assert self.mock_redis.data.get("daily_usage:1:logs") == 0
 
 

@@ -103,6 +103,7 @@ class Settings(pydantic_settings.BaseSettings):
     )
 
     REDIS_DB: typing.ClassVar[int] = 0
+    REDIS_MAX_CONNECTIONS: typing.ClassVar[int] = 20
 
     REDIS_PASSWORD: str | None = pydantic.Field(
         default=None,
@@ -140,7 +141,6 @@ class Settings(pydantic_settings.BaseSettings):
     DEFAULT_SPANS_DAILY_QUOTA: typing.ClassVar[int] = 300_000
     DEFAULT_METRICS_DAILY_QUOTA: typing.ClassVar[int] = 100_000
 
-    CACHE_TTL_SECONDS: typing.ClassVar[int] = 300
     DASHBOARD_CACHE_TTL: typing.ClassVar[int] = 300
 
     LOG_LEVEL: typing.Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = pydantic.Field(

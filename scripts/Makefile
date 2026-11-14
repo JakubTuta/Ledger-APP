@@ -167,17 +167,18 @@ db-stamp:
 
 # ==================== Production ====================
 
-PROD_REGISTRY := container-repository.jtuta.cloud/ledger
+PROD_REGISTRY := container-registry.jtuta.cloud/ledger
 PROD_TAG := latest
+PROD_SHA := $(shell git rev-parse --short HEAD)
 SERVICES := auth gateway ingestion analytics query migrations
 
 .PHONY: prod-deploy
 prod-deploy:
 	@for service in $(SERVICES); do \
 		echo "Building $$service..."; \
-		docker build --file services/$$service/Dockerfile --tag $(PROD_REGISTRY)/$$service:$(PROD_TAG) --platform linux/amd64 services/$$service || exit 1; \
+		docker build --file services/$$service/Dockerfile --tag $(PROD_REGISTRY)/$$service:$(PROD_TAG) --tag $(PROD_REGISTRY)/$$service:$(PROD_SHA) --platform linux/amd64 services/$$service || exit 1; \
 		echo "Pushing $$service..."; \
-		docker push $(PROD_REGISTRY)/$$service:$(PROD_TAG) || exit 1; \
+		docker push $(PROD_REGISTRY)/$$service:$(PROD_TAG) || exit 1; \n		docker push $(PROD_REGISTRY)/$$service:$(PROD_SHA) || exit 1; \
 	done
 	@echo "All production images deployed"
 

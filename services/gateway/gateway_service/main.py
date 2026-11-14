@@ -41,7 +41,7 @@ class GatewayApp:
     async def startup(self):
         self.redis_client = redis_client.RedisClient(
             url=config.settings.REDIS_URL,
-            max_connections=50,
+            max_connections=config.settings.REDIS_MAX_CONNECTIONS,
             decode_responses=False,
         )
         await self.redis_client.connect()
