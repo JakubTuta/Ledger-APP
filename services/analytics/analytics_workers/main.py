@@ -64,7 +64,6 @@ def _count_job_run(event: scheduler_events.JobEvent) -> None:
 
 def setup_jobs() -> None:
     log_metrics_cron = _parse_cron_expression(settings.ANALYTICS_LOG_METRICS_CRON)
-    top_errors_cron = _parse_cron_expression(settings.ANALYTICS_TOP_ERRORS_CRON)
     usage_stats_cron = _parse_cron_expression(settings.ANALYTICS_USAGE_STATS_CRON)
     hourly_metrics_cron = _parse_cron_expression(settings.ANALYTICS_HOURLY_METRICS_CRON)
     available_routes_cron = _parse_cron_expression(settings.ANALYTICS_AVAILABLE_ROUTES_CRON)
@@ -86,14 +85,6 @@ def setup_jobs() -> None:
         trigger=cron_trigger.CronTrigger(**log_metrics_cron),
         id="aggregate_log_metrics",
         name="Aggregate Log Metrics",
-        replace_existing=True,
-    )
-
-    scheduler.add_job(
-        jobs.compute_top_errors,
-        trigger=cron_trigger.CronTrigger(**top_errors_cron),
-        id="compute_top_errors",
-        name="Compute Top Errors",
         replace_existing=True,
     )
 
@@ -219,7 +210,6 @@ def setup_jobs() -> None:
 
     logger.info("Scheduled jobs with cron expressions:")
     logger.info(f"  - Aggregate Log Metrics: {settings.ANALYTICS_LOG_METRICS_CRON}")
-    logger.info(f"  - Compute Top Errors: {settings.ANALYTICS_TOP_ERRORS_CRON}")
     logger.info(f"  - Generate Usage Stats: {settings.ANALYTICS_USAGE_STATS_CRON}")
     logger.info(f"  - Aggregate Hourly Metrics: {settings.ANALYTICS_HOURLY_METRICS_CRON}")
     logger.info(f"  - Update Available Routes: {settings.ANALYTICS_AVAILABLE_ROUTES_CRON}")

@@ -151,56 +151,6 @@ class ErrorOccurrenceSparklineResponse(pydantic.BaseModel):
     buckets: list[ErrorOccurrenceBucket]
 
 
-class ErrorRateData(pydantic.BaseModel):
-    timestamp: datetime.datetime
-    error_count: int
-    critical_count: int
-
-
-class ErrorRateResponse(pydantic.BaseModel):
-    project_id: int
-    interval: str
-    data: list[ErrorRateData]
-
-
-class LogVolumeData(pydantic.BaseModel):
-    timestamp: datetime.datetime
-    debug: int
-    info: int
-    warning: int
-    error: int
-    critical: int
-
-
-class LogVolumeResponse(pydantic.BaseModel):
-    project_id: int
-    interval: str
-    data: list[LogVolumeData]
-
-
-class TopErrorData(pydantic.BaseModel):
-    fingerprint: str
-    error_type: str
-    error_message: str | None
-    occurrence_count: int
-    first_seen: datetime.datetime
-    last_seen: datetime.datetime
-    status: str
-    sample_log_id: int | None
-
-    @pydantic.field_validator("fingerprint", mode="before")
-    @classmethod
-    def strip_fingerprint(cls, v: str | None) -> str | None:
-        if v is not None and isinstance(v, str):
-            return v.strip()
-        return v
-
-
-class TopErrorsResponse(pydantic.BaseModel):
-    project_id: int
-    errors: list[TopErrorData]
-
-
 class UsageStatsData(pydantic.BaseModel):
     date: datetime.date
     log_count: int

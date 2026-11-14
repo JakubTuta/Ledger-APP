@@ -1,5 +1,4 @@
 import datetime as dt
-import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import analytics_workers.jobs.log_metrics as log_metrics_job
@@ -26,91 +25,57 @@ def _mock_session(rows: list[tuple]):
     return mock_session
 
 
-@pytest.mark.asyncio
-async def test_aggregate_log_metrics_empty_database():
-    mock_redis = AsyncMock()
-    mock_session = _mock_session([])
-
-    with patch("analytics_workers.redis_client.get_redis", return_value=mock_redis):
-        with patch("analytics_workers.database.get_logs_session") as mock_get_session:
-            mock_get_session.return_value = mock_session
-            await log_metrics_job.aggregate_log_metrics()
-
-    mock_redis.setex.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_aggregate_log_metrics_writes_volume_and_error_caches():
-    mock_redis = AsyncMock()
-    bucket = dt.datetime(2025, 10, 19, 14, 5, 0, tzinfo=dt.timezone.utc)
-    rows = [
-        (1, bucket, "error", 42),
-        (1, bucket, "critical", 5),
-        (1, bucket, "warning", 120),
-        (1, bucket, "info", 1000),
-        (1, bucket, "debug", 500),
-        (2, bucket, "error", 12),
-    ]
+async def _run(rows: list[tuple]) -> AsyncMock:
     mock_session = _mock_session(rows)
-
-    with patch("analytics_workers.redis_client.get_redis", return_value=mock_redis):
-        with patch("analytics_workers.database.get_logs_session") as mock_get_session:
-            mock_get_session.return_value = mock_session
-            await log_metrics_job.aggregate_log_metrics()
-
-    cache = {call[0][0]: json.loads(call[0][2]) for call in mock_redis.setex.call_args_list}
-
-    volume = cache["metrics:log_volume:1:1hour"]
-    assert len(volume) == 1
-    assert volume[0]["timestamp"].startswith("2025-10-19T14:00:00")
-    assert volume[0]["error"] == 42
-    assert volume[0]["critical"] == 5
-    assert volume[0]["warning"] == 120
-    assert volume[0]["info"] == 1000
-    assert volume[0]["debug"] == 500
-
-    error = cache["metrics:error_rate:1:5min"]
-    assert len(error) == 1
-    assert error[0]["error_count"] == 42
-    assert error[0]["critical_count"] == 5
-    assert error[0]["timestamp"].startswith("2025-10-19T14:05:00")
-
-    assert "metrics:log_volume:2:1hour" in cache
-    assert "metrics:error_rate:2:5min" in cache
+    with patch("analytics_workers.database.get_logs_session", return_value=mock_session):
+        await log_metrics_job.aggregate_log_metrics()
+    return mock_session
 
 
-@pytest.mark.asyncio
-async def test_error_rate_total_includes_unknown_levels():
-    """error_rate total must count every row (parity with old unfiltered scan),
-    while log_volume only counts known levels."""
-    mock_redis = AsyncMock()
-    bucket = dt.datetime(2025, 10, 19, 14, 5, 0, tzinfo=dt.timezone.utc)
-    rows = [
-        (1, bucket, "error", 10),
-        (1, bucket, "info", 90),
-        (1, bucket, "trace", 50),
-    ]
-    mock_session = _mock_session(rows)
-
-    with patch("analytics_workers.redis_client.get_redis", return_value=mock_redis):
-        with patch("analytics_workers.database.get_logs_session") as mock_get_session:
-            mock_get_session.return_value = mock_session
-            await log_metrics_job.aggregate_log_metrics()
-
-    error_rate_call = next(
-        c
-        for c in mock_session.execute.call_args_list
-        if "INSERT INTO error_rate_5m" in str(c[0][0])
-    )
-    params = error_rate_call[0][1][0]
-    assert params["errors"] == 10
-    assert params["total"] == 150
-    assert params["ratio"] == pytest.approx(10 / 150)
-
-    volume_call = next(
+def _volume_insert_params(mock_session: AsyncMock) -> list[dict]:
+    call = next(
         c
         for c in mock_session.execute.call_args_list
         if "INSERT INTO log_volume_5m" in str(c[0][0])
     )
-    volume_params = volume_call[0][1]
-    assert {p["level"] for p in volume_params} == {"error", "info"}
+    return call[0][1]
+
+
+@pytest.mark.asyncio
+async def test_aggregate_log_metrics_empty_database_writes_nothing():
+    mock_session = await _run([])
+
+    assert not any(
+        "INSERT INTO log_volume_5m" in str(c[0][0]) for c in mock_session.execute.call_args_list
+    )
+
+
+@pytest.mark.asyncio
+async def test_aggregate_log_metrics_writes_one_row_per_project_level_bucket():
+    bucket = dt.datetime(2025, 10, 19, 14, 5, 0, tzinfo=dt.timezone.utc)
+    rows = [
+        (1, bucket, "error", 42),
+        (1, bucket, "critical", 5),
+        (1, bucket, "info", 1000),
+        (2, bucket, "error", 12),
+    ]
+
+    params = _volume_insert_params(await _run(rows))
+
+    assert {(p["project_id"], p["level"]): p["count"] for p in params} == {
+        (1, "error"): 42,
+        (1, "critical"): 5,
+        (1, "info"): 1000,
+        (2, "error"): 12,
+    }
+    assert all(p["bucket"] == bucket for p in params)
+
+
+@pytest.mark.asyncio
+async def test_unknown_levels_are_not_written_to_the_volume_rollup():
+    bucket = dt.datetime(2025, 10, 19, 14, 5, 0, tzinfo=dt.timezone.utc)
+    rows = [(1, bucket, "error", 10), (1, bucket, "info", 90), (1, bucket, "trace", 50)]
+
+    params = _volume_insert_params(await _run(rows))
+
+    assert {p["level"] for p in params} == {"error", "info"}

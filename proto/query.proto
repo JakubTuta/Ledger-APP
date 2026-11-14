@@ -6,9 +6,6 @@ service QueryService {
     rpc QueryLogs(QueryLogsRequest) returns (QueryLogsResponse);
     rpc GetLogFacets(GetLogFacetsRequest) returns (GetLogFacetsResponse);
     rpc SearchLogs(SearchLogsRequest) returns (SearchLogsResponse);
-    rpc GetErrorRate(GetErrorRateRequest) returns (GetErrorRateResponse);
-    rpc GetLogVolume(GetLogVolumeRequest) returns (GetLogVolumeResponse);
-    rpc GetTopErrors(GetTopErrorsRequest) returns (GetTopErrorsResponse);
     rpc GetUsageStats(GetUsageStatsRequest) returns (GetUsageStatsResponse);
     rpc GetAggregatedMetrics(GetAggregatedMetricsRequest) returns (GetAggregatedMetricsResponse);
     rpc GetErrorList(GetErrorListRequest) returns (GetErrorListResponse);
@@ -169,71 +166,6 @@ message SearchLogsResponse {
     repeated LogEntry logs = 1;
     int32 total = 2;
     bool has_more = 3;
-}
-
-message GetErrorRateRequest {
-    int64 project_id = 1;
-    optional string interval = 2;
-    optional string start_time = 3;
-    optional string end_time = 4;
-}
-
-message ErrorRateData {
-    string timestamp = 1;
-    int32 error_count = 2;
-    int32 critical_count = 3;
-}
-
-message GetErrorRateResponse {
-    int64 project_id = 1;
-    string interval = 2;
-    repeated ErrorRateData data = 3;
-}
-
-message GetLogVolumeRequest {
-    int64 project_id = 1;
-    optional string interval = 2;
-    optional string start_time = 3;
-    optional string end_time = 4;
-}
-
-message LogVolumeData {
-    string timestamp = 1;
-    int32 debug = 2;
-    int32 info = 3;
-    int32 warning = 4;
-    int32 error = 5;
-    int32 critical = 6;
-}
-
-message GetLogVolumeResponse {
-    int64 project_id = 1;
-    string interval = 2;
-    repeated LogVolumeData data = 3;
-}
-
-message GetTopErrorsRequest {
-    int64 project_id = 1;
-    optional int32 limit = 2;
-    optional string start_time = 3;
-    optional string end_time = 4;
-    optional string status = 5;
-}
-
-message TopErrorData {
-    string fingerprint = 1;
-    string error_type = 2;
-    optional string error_message = 3;
-    int32 occurrence_count = 4;
-    string first_seen = 5;
-    string last_seen = 6;
-    string status = 7;
-    optional int64 sample_log_id = 8;
-}
-
-message GetTopErrorsResponse {
-    int64 project_id = 1;
-    repeated TopErrorData errors = 2;
 }
 
 message GetUsageStatsRequest {

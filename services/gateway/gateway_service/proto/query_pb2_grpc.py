@@ -49,21 +49,6 @@ class QueryServiceStub(object):
                 request_serializer=query__pb2.SearchLogsRequest.SerializeToString,
                 response_deserializer=query__pb2.SearchLogsResponse.FromString,
                 _registered_method=True)
-        self.GetErrorRate = channel.unary_unary(
-                '/query.QueryService/GetErrorRate',
-                request_serializer=query__pb2.GetErrorRateRequest.SerializeToString,
-                response_deserializer=query__pb2.GetErrorRateResponse.FromString,
-                _registered_method=True)
-        self.GetLogVolume = channel.unary_unary(
-                '/query.QueryService/GetLogVolume',
-                request_serializer=query__pb2.GetLogVolumeRequest.SerializeToString,
-                response_deserializer=query__pb2.GetLogVolumeResponse.FromString,
-                _registered_method=True)
-        self.GetTopErrors = channel.unary_unary(
-                '/query.QueryService/GetTopErrors',
-                request_serializer=query__pb2.GetTopErrorsRequest.SerializeToString,
-                response_deserializer=query__pb2.GetTopErrorsResponse.FromString,
-                _registered_method=True)
         self.GetUsageStats = channel.unary_unary(
                 '/query.QueryService/GetUsageStats',
                 request_serializer=query__pb2.GetUsageStatsRequest.SerializeToString,
@@ -182,24 +167,6 @@ class QueryServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def SearchLogs(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def GetErrorRate(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def GetLogVolume(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def GetTopErrors(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -347,21 +314,6 @@ def add_QueryServiceServicer_to_server(servicer, server):
                     servicer.SearchLogs,
                     request_deserializer=query__pb2.SearchLogsRequest.FromString,
                     response_serializer=query__pb2.SearchLogsResponse.SerializeToString,
-            ),
-            'GetErrorRate': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetErrorRate,
-                    request_deserializer=query__pb2.GetErrorRateRequest.FromString,
-                    response_serializer=query__pb2.GetErrorRateResponse.SerializeToString,
-            ),
-            'GetLogVolume': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetLogVolume,
-                    request_deserializer=query__pb2.GetLogVolumeRequest.FromString,
-                    response_serializer=query__pb2.GetLogVolumeResponse.SerializeToString,
-            ),
-            'GetTopErrors': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetTopErrors,
-                    request_deserializer=query__pb2.GetTopErrorsRequest.FromString,
-                    response_serializer=query__pb2.GetTopErrorsResponse.SerializeToString,
             ),
             'GetUsageStats': grpc.unary_unary_rpc_method_handler(
                     servicer.GetUsageStats,
@@ -545,87 +497,6 @@ class QueryService(object):
             '/query.QueryService/SearchLogs',
             query__pb2.SearchLogsRequest.SerializeToString,
             query__pb2.SearchLogsResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def GetErrorRate(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/query.QueryService/GetErrorRate',
-            query__pb2.GetErrorRateRequest.SerializeToString,
-            query__pb2.GetErrorRateResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def GetLogVolume(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/query.QueryService/GetLogVolume',
-            query__pb2.GetLogVolumeRequest.SerializeToString,
-            query__pb2.GetLogVolumeResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def GetTopErrors(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/query.QueryService/GetTopErrors',
-            query__pb2.GetTopErrorsRequest.SerializeToString,
-            query__pb2.GetTopErrorsResponse.FromString,
             options,
             channel_credentials,
             insecure,

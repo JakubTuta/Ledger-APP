@@ -165,11 +165,6 @@ class Settings(pydantic_settings.BaseSettings):
         description="Combined log volume + error rate aggregation cron schedule (minute hour day month day_of_week)",
     )
 
-    ANALYTICS_TOP_ERRORS_CRON: str = pydantic.Field(
-        default="*/30 * * * *",
-        description="Top errors computation cron schedule",
-    )
-
     ANALYTICS_USAGE_STATS_CRON: str = pydantic.Field(
         default="*/10 * * * *",
         description="Usage stats generation cron schedule",
@@ -262,10 +257,6 @@ class Settings(pydantic_settings.BaseSettings):
     )
 
     ANALYTICS_MAX_SERIES_PER_PROJECT: typing.ClassVar[int] = 500
-    ANALYTICS_ERROR_RATE_TTL: typing.ClassVar[int] = 600
-    ANALYTICS_LOG_VOLUME_TTL: typing.ClassVar[int] = 600
-    ANALYTICS_TOP_ERRORS_TTL: typing.ClassVar[int] = 900
-    ANALYTICS_TOP_ERRORS_LIMIT: typing.ClassVar[int] = 50
     ANALYTICS_USAGE_STATS_TTL: typing.ClassVar[int] = 3600
     DEFAULT_LOGS_DAILY_QUOTA: typing.ClassVar[int] = 100_000
     DEFAULT_SPANS_DAILY_QUOTA: typing.ClassVar[int] = 300_000

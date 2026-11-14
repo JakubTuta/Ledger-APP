@@ -13,12 +13,10 @@ from analytics_workers.jobs.notification_cleanup import cleanup_expired_notifica
 from analytics_workers.jobs.retention import enforce_retention
 from analytics_workers.jobs.rir_refresh import refresh_ip_country_ranges
 from analytics_workers.jobs.service_edges_1h_rollup import rollup_service_edges_1h
-from analytics_workers.jobs.top_errors import compute_top_errors
 from analytics_workers.jobs.usage_stats import generate_usage_stats
 
 __all__ = [
     "aggregate_log_metrics",
-    "compute_top_errors",
     "generate_usage_stats",
     "aggregate_hourly_metrics",
     "update_available_routes",
