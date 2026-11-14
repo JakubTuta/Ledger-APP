@@ -9,7 +9,7 @@ from .helpers import poll_until
 pytestmark = [pytest.mark.e2e, pytest.mark.e2e_slow]
 
 
-def _endpoint_log_body(duration_ms: int) -> dict:
+def _log_body(duration_ms: int) -> dict:
     return {
         "resourceLogs": [
             {
@@ -23,7 +23,7 @@ def _endpoint_log_body(duration_ms: int) -> dict:
                         "logRecords": [
                             {
                                 "severityNumber": 9,
-                                "body": {"stringValue": "slow endpoint"},
+                                "body": {"stringValue": "e2e alert trigger"},
                                 "attributes": [
                                     {
                                         "key": "http.request.method",
@@ -71,16 +71,18 @@ class TestAlertFiringFlow:
         assert connector_response.status_code == 201, connector_response.text
         connector_id = connector_response.json()["id"]
 
+        # request_volume reads the live window; p95_latency reads the hourly rollup, which only
+        # exists after the top-of-hour job and made this test depend on the wall clock.
         rule_response = await client.post(
             "/api/v1/alerts/rules",
             headers=auth_headers,
             json={
                 "project_id": project["project_id"],
-                "name": "e2e p95 latency rule",
-                "metric": "p95_latency",
+                "name": "e2e request volume rule",
+                "metric": "request_volume",
                 "comparator": ">",
                 "threshold": 0,
-                "unit": "ms",
+                "unit": "count",
                 "connector_ids": [connector_id],
             },
         )
@@ -88,7 +90,7 @@ class TestAlertFiringFlow:
 
         ingest_response = await client.post(
             "/v1/logs",
-            content=json.dumps(_endpoint_log_body(duration_ms=500)).encode(),
+            content=json.dumps(_log_body(duration_ms=500)).encode(),
             headers={**api_key_headers, "Content-Type": "application/json"},
         )
         assert ingest_response.status_code == 200, ingest_response.text
@@ -117,7 +119,7 @@ class TestAlertFiringFlow:
             params={"project_id": project["project_id"]},
         )
         event = history_response.json()["events"][0]
-        assert event["metric"] == "p95_latency"
+        assert event["metric"] == "request_volume"
 
         async def _notification_created() -> bool:
             response = await client.get("/api/v1/notifications", headers=auth_headers)

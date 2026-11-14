@@ -34,9 +34,21 @@ async def _stack_healthy() -> None:
             )
 
 
+def _unique_client_ip() -> str:
+    octets = uuid.uuid4().bytes
+    return f"10.{octets[0]}.{octets[1]}.{octets[2] or 1}"
+
+
 @pytest_asyncio.fixture
 async def client():
-    async with httpx.AsyncClient(base_url=E2E_BASE_URL, timeout=30.0) as c:
+    # The suite talks to the gateway directly, so it plays the reverse proxy and
+    # gives every test its own caller address; otherwise the per-IP registration
+    # limit (5 per 10 minutes) rejects the 6th account created by the suite.
+    async with httpx.AsyncClient(
+        base_url=E2E_BASE_URL,
+        timeout=30.0,
+        headers={"X-Forwarded-For": _unique_client_ip()},
+    ) as c:
         yield c
 
 
