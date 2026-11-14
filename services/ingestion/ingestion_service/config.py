@@ -121,7 +121,6 @@ class Settings(pydantic_settings.BaseSettings):
     WORKER_METRICS_COUNT: typing.ClassVar[int] = 2
 
     PARTITION_MONTHS_AHEAD: typing.ClassVar[int] = 6
-    PARTITION_CREATE_CRON: typing.ClassVar[str] = "0 0 1 * *"
     PARTITION_CHECK_CRON: typing.ClassVar[str] = "30 0 * * *"
     PARTITION_MISFIRE_GRACE_TIME: typing.ClassVar[int] = 3600
 

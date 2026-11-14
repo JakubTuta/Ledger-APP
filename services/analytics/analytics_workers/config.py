@@ -218,11 +218,6 @@ class Settings(pydantic_settings.BaseSettings):
         "longer than a few hours (staggered off the metric_points_1h rollup)",
     )
 
-    ANALYTICS_PARTITION_MANAGER_CRON: str = pydantic.Field(
-        default="10 * * * *",
-        description="Partition manager cron schedule (staggered off the hour boundary)",
-    )
-
     ANALYTICS_ALERT_EVALUATOR_CRON: str = pydantic.Field(
         default="*/1 * * * *",
         description="Alert rule evaluator cron schedule",

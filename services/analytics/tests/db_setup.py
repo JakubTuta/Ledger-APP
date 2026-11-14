@@ -35,7 +35,7 @@ TEST_LOGS_DB_NAME = infra.require_test_database_name("test_logs_db")
 # here since analytics has no ORM model for them either.
 _LOGS_ROLLUP_DDL = [
     # Every rollup job reads and writes its watermark through get_logs_session(),
-    # and init_logs_db.sql puts the table in logs_db - so it belongs here, and
+    # and the table lives in logs_db - so it belongs here, and
     # has to be truncated here, or a watermark set by one test hides the next
     # test's fixtures from the job under test.
     """

@@ -10,7 +10,6 @@ from analytics_workers.jobs.log_volume_1h_rollup import rollup_log_volume_1h
 from analytics_workers.jobs.metric_points_1h_rollup import rollup_metric_points_1h
 from analytics_workers.jobs.monitor_checks import check_monitors
 from analytics_workers.jobs.notification_cleanup import cleanup_expired_notifications
-from analytics_workers.jobs.partition_manager import manage_partitions
 from analytics_workers.jobs.retention import enforce_retention
 from analytics_workers.jobs.rir_refresh import refresh_ip_country_ranges
 from analytics_workers.jobs.service_edges_1h_rollup import rollup_service_edges_1h
@@ -29,7 +28,6 @@ __all__ = [
     "rollup_log_facets_1h",
     "rollup_metric_points_1h",
     "rollup_service_edges_1h",
-    "manage_partitions",
     "evaluate_alert_rules",
     "cleanup_expired_notifications",
     "enforce_retention",

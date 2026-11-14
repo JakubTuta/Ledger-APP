@@ -17,7 +17,7 @@ class PartitionScheduler:
     async def create_future_partitions(self) -> None:
         try:
             async with database.get_session() as session:
-                result = await partition_manager.ensure_all_partitions(
+                await partition_manager.ensure_all_partitions(
                     session,
                     months_ahead=config.settings.PARTITION_MONTHS_AHEAD,
                 )
@@ -33,17 +33,7 @@ class PartitionScheduler:
             logger.warning("Partition scheduler is already running")
             return
 
-        create_cron = self._parse_cron_expression(config.settings.PARTITION_CREATE_CRON)
         check_cron = self._parse_cron_expression(config.settings.PARTITION_CHECK_CRON)
-
-        self.scheduler.add_job(
-            self.create_future_partitions,
-            trigger=CronTrigger(**create_cron),
-            id="create_future_partitions",
-            name="Create future log partitions",
-            replace_existing=True,
-            misfire_grace_time=config.settings.PARTITION_MISFIRE_GRACE_TIME,
-        )
 
         self.scheduler.add_job(
             self.create_future_partitions,
@@ -51,12 +41,10 @@ class PartitionScheduler:
             id="daily_partition_check",
             name="Daily partition check",
             replace_existing=True,
-            misfire_grace_time=config.settings.PARTITION_MISFIRE_GRACE_TIME // 2,
+            misfire_grace_time=config.settings.PARTITION_MISFIRE_GRACE_TIME,
         )
 
-        logger.info("Scheduled partition management jobs:")
-        logger.info(f"  - Create partitions: {config.settings.PARTITION_CREATE_CRON}")
-        logger.info(f"  - Daily check: {config.settings.PARTITION_CHECK_CRON}")
+        logger.info(f"Scheduled partition check: {config.settings.PARTITION_CHECK_CRON}")
 
         self.scheduler.start()
         self.running = True

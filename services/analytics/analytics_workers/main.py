@@ -74,7 +74,6 @@ def setup_jobs() -> None:
     log_facets_1h_cron = _parse_cron_expression(settings.ANALYTICS_LOG_FACETS_1H_ROLLUP_CRON)
     metric_points_1h_cron = _parse_cron_expression(settings.ANALYTICS_METRIC_POINTS_1H_ROLLUP_CRON)
     service_edges_1h_cron = _parse_cron_expression(settings.ANALYTICS_SERVICE_EDGES_1H_ROLLUP_CRON)
-    partition_cron = _parse_cron_expression(settings.ANALYTICS_PARTITION_MANAGER_CRON)
     alert_cron = _parse_cron_expression(settings.ANALYTICS_ALERT_EVALUATOR_CRON)
     notif_cleanup_cron = _parse_cron_expression(settings.ANALYTICS_NOTIFICATION_CLEANUP_CRON)
     retention_cron = _parse_cron_expression(settings.ANALYTICS_RETENTION_CRON)
@@ -171,14 +170,6 @@ def setup_jobs() -> None:
     )
 
     scheduler.add_job(
-        jobs.manage_partitions,
-        trigger=cron_trigger.CronTrigger(**partition_cron),
-        id="manage_partitions",
-        name="Manage Partitions",
-        replace_existing=True,
-    )
-
-    scheduler.add_job(
         jobs.evaluate_alert_rules,
         trigger=cron_trigger.CronTrigger(**alert_cron),
         id="evaluate_alert_rules",
@@ -237,7 +228,6 @@ def setup_jobs() -> None:
     logger.info(f"  - Rollup Log Volume 1d: {settings.ANALYTICS_LOG_VOLUME_1D_ROLLUP_CRON}")
     logger.info(f"  - Rollup Log Facets 1h: {settings.ANALYTICS_LOG_FACETS_1H_ROLLUP_CRON}")
     logger.info(f"  - Rollup Metric Points 1h: {settings.ANALYTICS_METRIC_POINTS_1H_ROLLUP_CRON}")
-    logger.info(f"  - Manage Partitions: {settings.ANALYTICS_PARTITION_MANAGER_CRON}")
     logger.info(f"  - Evaluate Alert Rules: {settings.ANALYTICS_ALERT_EVALUATOR_CRON}")
     logger.info(
         f"  - Cleanup Expired Notifications: {settings.ANALYTICS_NOTIFICATION_CLEANUP_CRON}"
