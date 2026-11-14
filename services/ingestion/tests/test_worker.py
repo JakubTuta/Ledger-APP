@@ -6,7 +6,8 @@ import msgpack
 import pytest
 import sqlalchemy
 from ingestion_service import models, schemas
-from ingestion_service.services import queue_service, self_monitoring
+import ledger_common.self_monitoring as self_monitoring
+from ingestion_service.services import queue_service
 from ingestion_service.worker import StorageWorker
 
 from .test_base import BaseIngestionTest

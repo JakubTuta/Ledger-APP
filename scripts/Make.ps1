@@ -42,6 +42,7 @@ function Show-Help {
     Write-Host "  up           - Build and start all dev services"
     Write-Host "  down         - Stop all dev services"
     Write-Host "  test         - Run all tests"
+    Write-Host "  test-common  - Run shared library (libs/ledger_common) tests"
     Write-Host "  test-auth    - Run auth service tests"
     Write-Host "  test-gateway - Run gateway service tests"
     Write-Host "  test-ingestion - Run ingestion service tests"
@@ -83,6 +84,9 @@ function Setup {
     }
 
     $pip = Get-VenvPip
+    Write-Host "Installing ledger_common..." -ForegroundColor Cyan
+    & $pip install -e libs/ledger_common
+    if ($LASTEXITCODE -ne 0) { Write-Host "Failed to install ledger_common" -ForegroundColor Red; exit 1 }
     foreach ($service in @("auth", "gateway", "ingestion", "analytics", "query", "migrations")) {
         Write-Host "Installing $service dependencies..." -ForegroundColor Cyan
         Push-Location "services\$service"
@@ -179,12 +183,13 @@ function Run-Tests {
     }
 
     $python = Get-VenvPython
-    $services = if ($Service) { @($Service) } else { @("auth", "gateway", "ingestion", "analytics", "query", "migrations") }
+    $services = if ($Service) { @($Service) } else { @("common", "auth", "gateway", "ingestion", "analytics", "query", "migrations") }
     $failed = @()
 
     foreach ($svc in $services) {
         Write-Host "Testing $svc..." -ForegroundColor Cyan
-        Push-Location "services\$svc"
+        $dir = if ($svc -eq "common") { "libs\ledger_common" } else { "services\$svc" }
+        Push-Location $dir
         & $python -m pytest tests/ -v
         if ($LASTEXITCODE -ne 0) { $failed += $svc }
         Pop-Location
@@ -315,7 +320,7 @@ function Build-ProdImage {
     $image = "$PROD_REGISTRY/${ServiceName}:${PROD_TAG}"
     $shaImage = "$PROD_REGISTRY/${ServiceName}:${PROD_SHA}"
     Write-Host "Building $ServiceName -> $image ($PROD_SHA)" -ForegroundColor Cyan
-    docker build --file "services/$ServiceName/Dockerfile" --tag $image --tag $shaImage --platform linux/amd64 "services/$ServiceName"
+    docker build --file "services/$ServiceName/Dockerfile" --tag $image --tag $shaImage --platform linux/amd64 .
     if ($LASTEXITCODE -ne 0) { Write-Host "[ERROR] Failed to build $ServiceName" -ForegroundColor Red; return $false }
     Write-Host "[SUCCESS] $ServiceName built" -ForegroundColor Green
     return $true
@@ -367,6 +372,7 @@ switch ($Command.ToLower()) {
     "bench-up"              { Start-BenchUnlimited }
     "bench-up-prod-parity"  { Start-BenchProdParity }
     "test"             { Run-Tests }
+    "test-common"      { Run-Tests -Service "common" }
     "test-auth"        { Run-Tests -Service "auth" }
     "test-gateway"     { Run-Tests -Service "gateway" }
     "test-ingestion"   { Run-Tests -Service "ingestion" }

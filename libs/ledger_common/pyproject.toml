@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ledger-common"
+version = "0.1.0"
+description = "Code shared by the Ledger services"
+requires-python = ">=3.12"
+# Deliberately empty: every consuming service pins sqlalchemy, redis, grpcio, pydantic-settings
+# and cryptography in its own requirements.txt, and a second set of constraints here would only
+# conflict with them. A module imports a third-party package only if all its consumers have it.
+dependencies = []
+
+[tool.setuptools.packages.find]
+include = ["ledger_common*"]

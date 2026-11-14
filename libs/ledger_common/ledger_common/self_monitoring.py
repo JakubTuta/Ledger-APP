@@ -7,18 +7,23 @@ dashboard like any other project, visible only to that project's members - no
 extra infrastructure. Unset, every helper here is a no-op and the SDK is never
 imported.
 
-The same module ships in every service (they share no package); keep the copies
-in sync.
+Every service calls `start(service, settings)` with its own settings object, which only
+needs SELF_MONITORING_API_KEY, SELF_MONITORING_URL and ENV (see ledger_common.settings).
 """
 
 import logging
 import time
 import typing
 
-import query_service.config as config
-
 if typing.TYPE_CHECKING:
     import ledger
+
+
+class SelfMonitoringConfig(typing.Protocol):
+    SELF_MONITORING_API_KEY: str
+    SELF_MONITORING_URL: str
+    ENV: str
+
 
 logger = logging.getLogger(__name__)
 
@@ -49,19 +54,19 @@ def _forward_warnings_and_up(root: logging.Logger) -> None:
             handler.addFilter(_is_forwarded)
 
 
-def start(service: str) -> "ledger.LedgerClient | None":
+def start(service: str, settings: "SelfMonitoringConfig") -> "ledger.LedgerClient | None":
     """Begin reporting this process's telemetry, if self-monitoring is configured."""
     global _client
-    if _client is not None or not config.settings.SELF_MONITORING_API_KEY:
+    if _client is not None or not settings.SELF_MONITORING_API_KEY:
         return _client
 
     import ledger
 
     _client = ledger.LedgerClient(
-        api_key=config.settings.SELF_MONITORING_API_KEY,
-        base_url=config.settings.SELF_MONITORING_URL,
+        api_key=settings.SELF_MONITORING_API_KEY,
+        base_url=settings.SELF_MONITORING_URL,
         service_name=f"ledger-{service}",
-        environment=config.settings.ENV,
+        environment=settings.ENV,
     )
     _client.instrument_logging()
     _forward_warnings_and_up(logging.getLogger())

@@ -3,12 +3,13 @@ import concurrent.futures
 import logging
 
 import grpc
+import ledger_common.self_monitoring as self_monitoring
 from redis.asyncio import Redis
 
 from . import config, database
 from .grpc import servicers
 from .proto import auth_pb2_grpc
-from .services import connector_secrets, self_monitoring
+from .services import connector_secrets
 
 logging.basicConfig(
     level=getattr(logging, config.settings.LOG_LEVEL),
@@ -28,7 +29,7 @@ async def _encrypt_stored_connector_secrets() -> None:
 async def serve():
     """Start gRPC server."""
 
-    self_monitoring.start("auth")
+    self_monitoring.start("auth", config.settings)
     await _encrypt_stored_connector_secrets()
 
     redis = Redis.from_url(

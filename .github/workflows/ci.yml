@@ -33,6 +33,29 @@ jobs:
       - name: ruff check
         run: ruff check .
 
+  # ==================== Tests: shared library (no infrastructure) ====================
+  test-common:
+    name: Test (ledger_common)
+    needs: lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: libs/ledger_common
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: services/gateway/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r ../../services/gateway/requirements.txt -e .
+
+      - name: Run tests
+        run: pytest tests/ -v
+
   # ==================== Tests: gateway (mocked gRPC, real Redis) ====================
   # gateway mocks gRPC (tests/mocks.py) and Redis for every test except
   # test_quota_atomicity.py, which exercises real Redis atomicity under
@@ -66,7 +89,7 @@ jobs:
           cache-dependency-path: services/gateway/requirements.txt
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt -e ../../libs/ledger_common
 
       - name: Run tests
         run: pytest tests/ -v
@@ -121,7 +144,7 @@ jobs:
           cache-dependency-path: services/analytics/requirements.txt
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt -e ../../libs/ledger_common
 
       - name: Run tests
         run: pytest tests/ -v
@@ -179,7 +202,7 @@ jobs:
           cache-dependency-path: services/${{ matrix.service }}/requirements.txt
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt -e ../../libs/ledger_common
 
       - name: Run tests
         run: pytest tests/ -v
@@ -243,7 +266,7 @@ jobs:
           cache-dependency-path: services/ingestion/requirements.txt
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt -e ../../libs/ledger_common
 
       - name: Run tests
         run: pytest tests/ -v
@@ -308,7 +331,7 @@ jobs:
           cache-dependency-path: services/migrations/requirements.txt
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt -e ../../libs/ledger_common
 
       - name: Run tests
         run: pytest tests/ -v
@@ -338,4 +361,4 @@ jobs:
           docker build \
             --file services/${{ matrix.service }}/Dockerfile \
             --tag ledger-${{ matrix.service }}:ci \
-            services/${{ matrix.service }}
+            .

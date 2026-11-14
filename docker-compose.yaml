@@ -133,8 +133,8 @@ services:
   # database waits for this container to exit 0 before it starts.
   ledger-migrations:
     build:
-      context: ./services/migrations
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/migrations/Dockerfile
     container_name: ledger-migrations
     restart: "no"
     env_file: .env
@@ -157,8 +157,8 @@ services:
   # ==================== Auth Service (gRPC) ====================
   ledger-auth-service:
     build:
-      context: ./services/auth
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/auth/Dockerfile
     container_name: ledger-auth-service
     restart: unless-stopped
     env_file: .env
@@ -196,8 +196,8 @@ services:
   # ==================== Gateway Service (REST) ====================
   ledger-gateway:
     build:
-      context: ./services/gateway
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/gateway/Dockerfile
     container_name: ledger-gateway
     restart: unless-stopped
     env_file: .env
@@ -238,8 +238,8 @@ services:
   # ==================== Ingestion Service (gRPC) ====================
   ledger-ingestion:
     build:
-      context: ./services/ingestion
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/ingestion/Dockerfile
     container_name: ledger-ingestion
     restart: unless-stopped
     env_file: .env
@@ -278,8 +278,8 @@ services:
   # ==================== Storage Workers ====================
   ledger-ingestion-worker:
     build:
-      context: ./services/ingestion
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/ingestion/Dockerfile
     container_name: ledger-ingestion-worker
     restart: unless-stopped
     env_file: .env
@@ -314,8 +314,8 @@ services:
   # ==================== Analytics Workers ====================
   ledger-analytics-workers:
     build:
-      context: ./services/analytics
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/analytics/Dockerfile
     container_name: ledger-analytics-workers
     restart: unless-stopped
     env_file: .env
@@ -354,8 +354,8 @@ services:
   # ==================== Query Service (gRPC) ====================
   ledger-query:
     build:
-      context: ./services/query
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/query/Dockerfile
     container_name: ledger-query
     restart: unless-stopped
     env_file: .env

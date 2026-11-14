@@ -21,7 +21,7 @@ import ingestion_service.services.partition_manager as partition_manager
 import ingestion_service.services.partition_scheduler as partition_scheduler
 import ingestion_service.services.rabbitmq_client as rabbitmq_client
 import ingestion_service.services.redis_client as redis_client
-import ingestion_service.services.self_monitoring as self_monitoring
+import ledger_common.self_monitoring as self_monitoring
 
 logging.basicConfig(
     level=getattr(logging, config.settings.LOG_LEVEL),
@@ -1188,7 +1188,7 @@ async def _refresh_ip_country_loop() -> None:
 
 
 async def main():
-    self_monitoring.start("ingestion-worker")
+    self_monitoring.start("ingestion-worker", config.settings)
     database.get_engine()
 
     try:

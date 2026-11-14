@@ -1,26 +1,17 @@
 import logging
-import pathlib
 import sys
+import types
 
 import grpc
 import pytest
 
-import gateway_service.services.self_monitoring as self_monitoring
+import ledger_common.self_monitoring as self_monitoring
 
-_SERVICES_DIR = pathlib.Path(__file__).resolve().parents[2]
 
-# Every service ships its own copy of the module (they share no package); only
-# the config import differs.
-_COPIES = {
-    "auth/auth_service/services/self_monitoring.py": "import auth_service.config as config",
-    "ingestion/ingestion_service/services/self_monitoring.py": (
-        "import ingestion_service.config as config"
-    ),
-    "query/query_service/services/self_monitoring.py": "import query_service.config as config",
-    "analytics/analytics_workers/services/self_monitoring.py": (
-        "import analytics_workers.config as config"
-    ),
-}
+def _settings(api_key: str) -> types.SimpleNamespace:
+    return types.SimpleNamespace(
+        SELF_MONITORING_API_KEY=api_key, SELF_MONITORING_URL="http://gateway:8000", ENV="test"
+    )
 
 
 class _FakeClient:
@@ -52,12 +43,11 @@ def fake_client(monkeypatch):
 
 class TestDisabled:
     def test_start_without_api_key_never_imports_the_sdk(self, monkeypatch):
-        monkeypatch.setattr(self_monitoring.config.settings, "SELF_MONITORING_API_KEY", "")
         monkeypatch.setattr(self_monitoring, "_client", None)
         # A None entry makes `import ledger` raise ImportError.
         monkeypatch.setitem(sys.modules, "ledger", None)
 
-        assert self_monitoring.start("gateway") is None
+        assert self_monitoring.start("gateway", _settings(api_key="")) is None
         assert self_monitoring.client() is None
         assert self_monitoring.rpc_interceptors("gateway") == []
 
@@ -67,6 +57,35 @@ class TestDisabled:
         self_monitoring.increment("ledger.otlp.items", 5, {"signal": "logs"})
         self_monitoring.record("ledger.storage.batch_ms", 12.5)
         self_monitoring.stop()
+
+
+class TestEnabled:
+    def test_start_builds_a_client_named_after_the_service(self, monkeypatch):
+        created = {}
+
+        class _Client:
+            def __init__(self, **kwargs):
+                created.update(kwargs)
+
+            def instrument_logging(self):
+                pass
+
+            def capture_uncaught(self):
+                pass
+
+        monkeypatch.setattr(self_monitoring, "_client", None)
+        monkeypatch.setitem(sys.modules, "ledger", types.SimpleNamespace(LedgerClient=_Client))
+
+        client = self_monitoring.start("auth", _settings(api_key="ledger_key"))
+
+        assert client is self_monitoring.client()
+        assert created == {
+            "api_key": "ledger_key",
+            "base_url": "http://gateway:8000",
+            "service_name": "ledger-auth",
+            "environment": "test",
+        }
+        monkeypatch.setattr(self_monitoring, "_client", None)
 
 
 class _CapturingHandler(logging.Handler):
@@ -192,17 +211,3 @@ class TestRpcTiming:
             method = "/query.QueryService/Tail"
 
         assert await interceptor.intercept_service(continuation, Details()) is original
-
-
-class TestServiceCopiesInSync:
-    @pytest.mark.parametrize("relative_path", sorted(_COPIES))
-    def test_copy_matches_the_gateway_module(self, relative_path):
-        copy = _SERVICES_DIR / relative_path
-        if not copy.exists():
-            pytest.skip(f"{relative_path} not checked out")
-
-        gateway_source = pathlib.Path(self_monitoring.__file__).read_text(encoding="utf-8")
-        expected = gateway_source.replace(
-            "import gateway_service.config as config", _COPIES[relative_path]
-        )
-        assert copy.read_text(encoding="utf-8") == expected

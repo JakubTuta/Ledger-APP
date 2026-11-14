@@ -7,7 +7,7 @@ import ingestion_service.grpc.servicers as servicers
 import ingestion_service.proto.ingestion_pb2_grpc as ingestion_pb2_grpc
 import ingestion_service.services.rabbitmq_client as rabbitmq_client
 import ingestion_service.services.redis_client as redis_client
-import ingestion_service.services.self_monitoring as self_monitoring
+import ledger_common.self_monitoring as self_monitoring
 
 logging.basicConfig(
     level=getattr(logging, config.settings.LOG_LEVEL),
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 async def serve():
-    self_monitoring.start("ingestion")
+    self_monitoring.start("ingestion", config.settings)
     redis = redis_client.get_redis_client()
     await redis.ping()
 

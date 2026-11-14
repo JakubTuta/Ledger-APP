@@ -15,6 +15,7 @@ help:
 	@echo "  up          - Build and start all dev services"
 	@echo "  down        - Stop all dev services"
 	@echo "  test        - Run all tests"
+	@echo "  test-common - Run shared library (libs/ledger_common) tests"
 	@echo "  test-auth   - Run auth service tests"
 	@echo "  test-gateway - Run gateway service tests"
 	@echo "  test-ingestion - Run ingestion service tests"
@@ -43,6 +44,7 @@ setup:
 	@if [ ! -f .env ]; then cp .env.example .env; echo "Created .env"; fi
 	@if [ ! -d "venv" ]; then python3 -m venv venv; fi
 	@bash -c "source venv/bin/activate && \
+		pip install -e libs/ledger_common && \
 		cd services/auth && pip install -r requirements.txt && \
 		cd ../gateway && pip install -r requirements.txt && \
 		cd ../ingestion && pip install -r requirements.txt && \
@@ -109,7 +111,11 @@ bench-up-prod-parity:
 # ==================== Testing ====================
 
 .PHONY: test
-test: test-auth test-gateway test-ingestion test-analytics test-query test-migrations
+test: test-common test-auth test-gateway test-ingestion test-analytics test-query test-migrations
+
+.PHONY: test-common
+test-common:
+	@bash -c "source venv/bin/activate && cd libs/ledger_common && pytest tests/ -v"
 
 .PHONY: test-auth
 test-auth:
@@ -176,7 +182,7 @@ SERVICES := auth gateway ingestion analytics query migrations
 prod-deploy:
 	@for service in $(SERVICES); do \
 		echo "Building $$service..."; \
-		docker build --file services/$$service/Dockerfile --tag $(PROD_REGISTRY)/$$service:$(PROD_TAG) --tag $(PROD_REGISTRY)/$$service:$(PROD_SHA) --platform linux/amd64 services/$$service || exit 1; \
+		docker build --file services/$$service/Dockerfile --tag $(PROD_REGISTRY)/$$service:$(PROD_TAG) --tag $(PROD_REGISTRY)/$$service:$(PROD_SHA) --platform linux/amd64 . || exit 1; \
 		echo "Pushing $$service..."; \
 		docker push $(PROD_REGISTRY)/$$service:$(PROD_TAG) || exit 1; \n		docker push $(PROD_REGISTRY)/$$service:$(PROD_SHA) || exit 1; \
 	done

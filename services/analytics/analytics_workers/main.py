@@ -7,7 +7,7 @@ import analytics_workers.database as database
 import analytics_workers.health as health
 import analytics_workers.jobs as jobs
 import analytics_workers.redis_client as redis_client
-import analytics_workers.services.self_monitoring as self_monitoring
+import ledger_common.self_monitoring as self_monitoring
 import analytics_workers.utils.logging as logging_utils
 import apscheduler.events as scheduler_events
 import apscheduler.schedulers.asyncio as async_scheduler
@@ -247,7 +247,7 @@ def _parse_cron_expression(cron_expr: str) -> dict:
 async def main() -> None:
     global scheduler
 
-    self_monitoring.start("analytics")
+    self_monitoring.start("analytics", config.settings)
     await startup()
 
     scheduler = async_scheduler.AsyncIOScheduler(

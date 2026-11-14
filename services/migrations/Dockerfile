@@ -9,9 +9,13 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+COPY services/migrations/requirements.txt .
 
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+# Shared code (ledger_common); requirements.txt already pins everything it imports.
+COPY libs/ledger_common /build/ledger_common
+RUN pip install --no-cache-dir --no-deps --prefix=/install /build/ledger_common
 
 # ==================== Stage 2: Runtime ====================
 FROM python:3.12-slim
@@ -24,7 +28,7 @@ RUN apt-get update && apt-get install -y \
 
 COPY --from=builder /install /usr/local
 
-COPY . .
+COPY services/migrations/ .
 
 RUN useradd -m -u 1000 appuser && \
     chown -R appuser:appuser /app

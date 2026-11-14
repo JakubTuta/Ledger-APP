@@ -1,0 +1,16 @@
+# Build context is the repo root (services install libs/ledger_common), so keep the context lean.
+.git/
+venv/
+**/venv/
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+.ruff-cache/
+benchmark_result/
+project_overview/
+diagrams/
+node_modules/
+**/*.egg-info/
+.env
+.env.*
+*.log

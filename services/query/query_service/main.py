@@ -9,7 +9,7 @@ import query_service.database as database
 import query_service.grpc.servicers as servicers
 import query_service.proto.query_pb2_grpc as query_pb2_grpc
 import query_service.redis_client as redis_client
-import query_service.services.self_monitoring as self_monitoring
+import ledger_common.self_monitoring as self_monitoring
 
 logging.basicConfig(
     level=getattr(logging, config.settings.LOG_LEVEL),
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 async def serve():
-    self_monitoring.start("query")
+    self_monitoring.start("query", config.settings)
     await database.init_db()
 
     await redis_client.init_redis()

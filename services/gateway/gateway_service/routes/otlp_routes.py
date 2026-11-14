@@ -10,7 +10,7 @@ from opentelemetry.proto.collector.trace.v1 import trace_service_pb2
 import gateway_service.config as config
 import gateway_service.proto.ingestion_pb2 as ingestion_pb2
 import gateway_service.services.otlp_translator as otlp_translator
-import gateway_service.services.self_monitoring as self_monitoring
+import ledger_common.self_monitoring as self_monitoring
 
 router = fastapi.APIRouter(tags=["OTLP"])
 logger = logging.getLogger(__name__)

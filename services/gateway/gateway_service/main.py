@@ -23,7 +23,9 @@ from gateway_service.routes import (
     sharing_routes,
     tracing_routes,
 )
-from gateway_service.services import grpc_pool, pubsub_hub, redis_client, self_monitoring
+from gateway_service.services import grpc_pool, pubsub_hub, redis_client
+
+import ledger_common.self_monitoring as self_monitoring
 
 logging.basicConfig(
     level=getattr(logging, config.settings.LOG_LEVEL),
@@ -337,7 +339,7 @@ add_middleware(
 # too. OTLP ingestion is excluded: those are customers' exports (and this
 # process's own), and tracing them would turn every export into more exports.
 # SSE streams are long-lived and health checks are noise.
-_self_monitoring = self_monitoring.start("gateway")
+_self_monitoring = self_monitoring.start("gateway", config.settings)
 if _self_monitoring is not None:
     import ledger.integrations.fastapi as ledger_fastapi
 

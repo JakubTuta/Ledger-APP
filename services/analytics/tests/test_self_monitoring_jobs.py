@@ -4,7 +4,7 @@ import unittest.mock
 import apscheduler.events as scheduler_events
 
 import analytics_workers.main as main
-import analytics_workers.services.self_monitoring as self_monitoring
+import ledger_common.self_monitoring as self_monitoring
 
 _RUN_TIME = datetime.datetime(2026, 10, 9, 12, 0, tzinfo=datetime.timezone.utc)
 
