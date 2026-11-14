@@ -9,7 +9,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import auth_service.config as config
-import auth_service.models as models
+import ledger_common.models.auth as models
 
 
 async def rewrite_stored_configs(session: AsyncSession) -> int:

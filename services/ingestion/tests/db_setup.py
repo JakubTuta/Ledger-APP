@@ -1,8 +1,7 @@
 import asyncio
 
 import asyncpg
-import ingestion_service.database as database
-import ingestion_service.models  # noqa: F401 - registers tables on database.Base.metadata
+import ledger_common.models.logs as models
 import sqlalchemy
 import sqlalchemy.ext.asyncio as sa_async
 import sqlalchemy.pool as sa_pool
@@ -39,7 +38,7 @@ class TestDatabase:
         async with self.engine.begin() as conn:
 
             def create_all_and_partitions(conn_sync):
-                database.Base.metadata.create_all(conn_sync)
+                models.Base.metadata.create_all(conn_sync)
 
                 try:
                     conn_sync.execute(
@@ -71,14 +70,14 @@ class TestDatabase:
 
     async def drop_tables(self):
         async with self.engine.begin() as conn:
-            await conn.run_sync(database.Base.metadata.drop_all)
+            await conn.run_sync(models.Base.metadata.drop_all)
         print("Logs tables dropped")
 
     async def clear_tables(self):
         if not self.engine:
             return
         async with self.engine.begin() as conn:
-            table_names = [t.name for t in reversed(database.Base.metadata.sorted_tables)]
+            table_names = [t.name for t in reversed(models.Base.metadata.sorted_tables)]
             if table_names:
                 await conn.execute(
                     sqlalchemy.text(

@@ -1,7 +1,7 @@
 import asyncio
 
 import asyncpg
-import query_service.models as models
+import ledger_common.models.logs as models
 import sqlalchemy
 import sqlalchemy.ext.asyncio as sa_async
 import sqlalchemy.pool as sa_pool
@@ -40,35 +40,8 @@ class TestDatabase:
             def create_all_and_partitions(conn_sync):
                 models.Base.metadata.create_all(conn_sync)
 
-                # metric_points / metric_points_1h have no ORM model in
-                # query_service (it only ever reads them via raw SQL - see
-                # services/metric_points.py), so they're not covered by
-                # Base.metadata.create_all above. Mirrors ingestion's
-                # migration 014 schema exactly.
-                conn_sync.execute(
-                    sqlalchemy.text("""
-                        CREATE TABLE IF NOT EXISTS metric_points (
-                            project_id      BIGINT NOT NULL,
-                            name            TEXT NOT NULL,
-                            type            SMALLINT NOT NULL,
-                            ts              TIMESTAMPTZ NOT NULL,
-                            value           DOUBLE PRECISION,
-                            count           BIGINT,
-                            sum             DOUBLE PRECISION,
-                            bucket_counts   JSONB,
-                            explicit_bounds JSONB,
-                            tags            JSONB NOT NULL DEFAULT '{}'::jsonb,
-                            tags_hash       CHAR(16) NOT NULL,
-                            service_name    TEXT,
-                            temporality     SMALLINT,
-                            resource_hash   BIGINT,
-                            exp_histogram   JSONB,
-                            quantiles       JSONB,
-                            exemplars       JSONB,
-                            PRIMARY KEY (project_id, name, tags_hash, ts)
-                        ) PARTITION BY RANGE (ts)
-                    """)
-                )
+                # The rollup tables have no ORM model (analytics writes them with raw SQL), so
+                # they are mirrored here; the partitioned base tables come from the shared models.
                 conn_sync.execute(
                     sqlalchemy.text("""
                         CREATE TABLE IF NOT EXISTS metric_points_1h (
@@ -105,30 +78,6 @@ class TestDatabase:
                     """)
                 )
 
-                # spans have no ORM model here either (read via raw SQL in
-                # services/tracing.py and services/correlation.py).
-                conn_sync.execute(
-                    sqlalchemy.text("""
-                        CREATE TABLE IF NOT EXISTS spans (
-                            span_id           CHAR(16) NOT NULL,
-                            trace_id          CHAR(32) NOT NULL,
-                            parent_span_id    CHAR(16),
-                            project_id        BIGINT NOT NULL,
-                            service_name      TEXT NOT NULL,
-                            name              TEXT NOT NULL,
-                            kind              SMALLINT NOT NULL DEFAULT 0,
-                            start_time        TIMESTAMPTZ NOT NULL,
-                            duration_ns       BIGINT NOT NULL DEFAULT 0,
-                            status_code       SMALLINT NOT NULL DEFAULT 0,
-                            status_message    TEXT,
-                            attributes        JSONB NOT NULL DEFAULT '{}'::jsonb,
-                            events            JSONB,
-                            error_fingerprint CHAR(64),
-                            resource_hash     BIGINT,
-                            PRIMARY KEY (span_id, start_time)
-                        ) PARTITION BY RANGE (start_time)
-                    """)
-                )
                 conn_sync.execute(
                     sqlalchemy.text("""
                         CREATE TABLE IF NOT EXISTS spans_test_partition PARTITION OF spans
@@ -166,8 +115,6 @@ class TestDatabase:
 
             def drop_all(conn_sync):
                 conn_sync.execute(sqlalchemy.text("DROP TABLE IF EXISTS metric_points_1h"))
-                conn_sync.execute(sqlalchemy.text("DROP TABLE IF EXISTS metric_points CASCADE"))
-                conn_sync.execute(sqlalchemy.text("DROP TABLE IF EXISTS spans CASCADE"))
                 conn_sync.execute(sqlalchemy.text("DROP TABLE IF EXISTS service_edges_1h"))
                 models.Base.metadata.drop_all(conn_sync)
 

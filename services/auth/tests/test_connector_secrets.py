@@ -3,7 +3,7 @@ import unittest.mock
 
 import auth_service.config as config
 import auth_service.database as database
-import auth_service.models as models
+import ledger_common.models.auth as models
 import auth_service.services.connector_secrets_backfill as connector_secrets_backfill
 import ledger_common.connector_secrets as connector_secrets
 import pytest

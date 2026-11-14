@@ -12,7 +12,7 @@ import typing
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import query_service.models as models
+import ledger_common.models.logs as models
 import query_service.schemas as schemas
 
 
@@ -31,9 +31,9 @@ async def fetch_resource_attributes(
     if not hashes:
         return {}
     result = await session.execute(
-        sa.select(models.resources.c.resource_hash, models.resources.c.attributes).where(
-            models.resources.c.project_id == project_id,
-            models.resources.c.resource_hash.in_(hashes),
+        sa.select(models.Resource.resource_hash, models.Resource.attributes).where(
+            models.Resource.project_id == project_id,
+            models.Resource.resource_hash.in_(hashes),
         )
     )
     return {row.resource_hash: row.attributes for row in result}

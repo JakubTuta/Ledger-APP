@@ -2,7 +2,8 @@ import datetime
 
 import pytest
 import sqlalchemy
-from ingestion_service import database, models
+from ingestion_service import database
+import ledger_common.models.logs as models
 from ingestion_service.worker import (
     _LOG_COPY_COLUMNS,
     StorageWorker,

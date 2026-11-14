@@ -1,7 +1,7 @@
 import asyncio
 
 import asyncpg
-import auth_service.database as database
+import ledger_common.models.auth as models
 import sqlalchemy
 import sqlalchemy.ext.asyncio as sa_async
 import sqlalchemy.pool as sa_pool
@@ -36,19 +36,19 @@ class TestDatabase:
 
     async def create_tables(self):
         async with self.engine.begin() as conn:
-            await conn.run_sync(database.Base.metadata.create_all)
+            await conn.run_sync(models.Base.metadata.create_all)
         print("Tables created")
 
     async def drop_tables(self):
         async with self.engine.begin() as conn:
-            await conn.run_sync(database.Base.metadata.drop_all)
+            await conn.run_sync(models.Base.metadata.drop_all)
         print("Tables dropped")
 
     async def clear_tables(self):
         if not self.engine:
             return
         async with self.engine.begin() as conn:
-            table_names = [t.name for t in reversed(database.Base.metadata.sorted_tables)]
+            table_names = [t.name for t in reversed(models.Base.metadata.sorted_tables)]
             if table_names:
                 await conn.execute(
                     sqlalchemy.text(

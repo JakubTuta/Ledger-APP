@@ -1,11 +1,11 @@
 """
 Guards against an Alembic migration silently dropping/renaming an index or
 constraint on the ingestion hot-path tables (logs/spans/metric_points/
-error_groups), or a migration and ingestion_service/models.py drifting apart
+error_groups), or a migration and ledger_common/models/logs.py drifting apart
 on which columns exist.
 
 Every other suite in this repo (ingestion's own tests, query-service's tests)
-builds its schema from `ingestion_service.database.Base.metadata.create_all()`,
+builds its schema from `ledger_common.models.logs.Base.metadata.create_all()`,
 not from the Alembic migrations - see services/ingestion/tests/db_setup.py.
 That path has no idea a migration exists at all, so `DROP INDEX idx_logs_dedup`
 in a migration would pass the entire rest of the test suite. This test
@@ -243,12 +243,9 @@ def test_migrated_schema_columns_match_orm_models(monkeypatch):
 
     metadata = runner.load_metadata(target)
     if metadata is None:
-        # Autogenerate/parity checks that need the owning service's models are
-        # host-only (see DatabaseTarget.models_path) - the migration image
-        # doesn't ship ingestion_service, so this is skipped there by design.
         import pytest
 
-        pytest.skip(f"{target.models_module} not importable - not running from a repo checkout")
+        pytest.skip(f"{target.models_module} not importable - is ledger_common installed?")
 
     asyncio.run(_recreate_scratch_db(target))
     try:

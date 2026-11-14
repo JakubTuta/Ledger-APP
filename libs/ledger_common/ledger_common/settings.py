@@ -123,6 +123,23 @@ class GrpcServerSettings(GrpcKeepaliveSettings):
     GRPC_MAX_CONNECTION_AGE_MS: typing.ClassVar[int] = 86400000
     GRPC_HTTP2_MIN_RECV_PING_INTERVAL_WITHOUT_DATA_MS: typing.ClassVar[int] = 120000
 
+    @property
+    def grpc_server_options(self) -> list[tuple[str, int]]:
+        """Channel arguments for `grpc.aio.server(options=...)`; every gRPC service uses these."""
+        return [
+            ("grpc.max_send_message_length", 100 * 1024 * 1024),
+            ("grpc.max_receive_message_length", 100 * 1024 * 1024),
+            ("grpc.keepalive_time_ms", self.GRPC_KEEPALIVE_TIME_MS),
+            ("grpc.keepalive_timeout_ms", self.GRPC_KEEPALIVE_TIMEOUT_MS),
+            ("grpc.keepalive_permit_without_calls", self.GRPC_KEEPALIVE_PERMIT_WITHOUT_CALLS),
+            ("grpc.max_connection_idle_ms", self.GRPC_MAX_CONNECTION_IDLE_MS),
+            ("grpc.max_connection_age_ms", self.GRPC_MAX_CONNECTION_AGE_MS),
+            (
+                "grpc.http2.min_recv_ping_interval_without_data_ms",
+                self.GRPC_HTTP2_MIN_RECV_PING_INTERVAL_WITHOUT_DATA_MS,
+            ),
+        ]
+
 
 class SmtpSettings(pydantic.BaseModel):
     EMAIL_ENABLED: bool = pydantic.Field(

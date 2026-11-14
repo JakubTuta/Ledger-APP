@@ -1,38 +1,19 @@
 import asyncio
-import pathlib
-import sys
 
 import asyncpg
+import ledger_common.models.auth as auth_models
+import ledger_common.models.logs as logs_models
 import sqlalchemy
 import sqlalchemy.ext.asyncio as sa_async
 import sqlalchemy.pool as sa_pool
 
 import tests.infra as infra
 
-# analytics_workers owns no ORM models of its own (every job is raw SQL
-# against tables owned by auth_service and ingestion_service - see
-# database.py's get_auth_session()/get_logs_session()). Reusing those
-# services' real Base.metadata for test table creation (rather than
-# hand-duplicating DDL here) keeps this harness from drifting out of sync
-# with their migrations. This is a test-only sys.path trick - it does not
-# touch production imports, Docker build contexts, or the "light dedupe
-# only" decision (no shared runtime package).
-_SERVICES_ROOT = pathlib.Path(__file__).resolve().parents[2]
-for _service in ("auth", "ingestion"):
-    _path = str(_SERVICES_ROOT / _service)
-    if _path not in sys.path:
-        sys.path.insert(0, _path)
-
-import auth_service.database as auth_db_module  # noqa: E402
-import auth_service.models  # noqa: E402,F401
-import ingestion_service.database as logs_db_module  # noqa: E402
-import ingestion_service.models  # noqa: E402,F401
-
 TEST_AUTH_DB_NAME = infra.require_test_database_name("test_auth_db")
 TEST_LOGS_DB_NAME = infra.require_test_database_name("test_logs_db")
 
-# Rollup tables live in logs_db (created by ingestion's migrations), mirrored
-# here since analytics has no ORM model for them either.
+# analytics' rollup tables live in logs_db (created by the migrations) and have no ORM model,
+# so they are mirrored here.
 _LOGS_ROLLUP_DDL = [
     # Every rollup job reads and writes its watermark through get_logs_session(),
     # and the table lives in logs_db - so it belongs here, and
@@ -166,8 +147,8 @@ class AnalyticsTestDatabases:
         async with self.auth.engine.begin() as conn:
 
             def create_auth(conn_sync):
-                auth_db_module.Base.metadata.create_all(conn_sync)
-                # auth_service.models declares created_at with a Python-side
+                auth_models.Base.metadata.create_all(conn_sync)
+                # ledger_common.models.auth declares created_at with a Python-side
                 # default= (applied by the ORM, not raw SQL); production
                 # tables get NOW() via the migration's server_default
                 # instead, which create_all() does not reproduce. Analytics
@@ -184,7 +165,7 @@ class AnalyticsTestDatabases:
         async with self.logs.engine.begin() as conn:
 
             def create_logs(conn_sync):
-                logs_db_module.Base.metadata.create_all(conn_sync)
+                logs_models.Base.metadata.create_all(conn_sync)
                 for ddl in _LOGS_ROLLUP_DDL:
                     conn_sync.execute(sqlalchemy.text(ddl))
                 try:
@@ -224,7 +205,7 @@ class AnalyticsTestDatabases:
         async with self.auth.engine.begin() as conn:
 
             def drop_auth(conn_sync):
-                auth_db_module.Base.metadata.drop_all(conn_sync)
+                auth_models.Base.metadata.drop_all(conn_sync)
 
             await conn.run_sync(drop_auth)
 
@@ -242,7 +223,7 @@ class AnalyticsTestDatabases:
                     "log_volume_5m",
                 ):
                     conn_sync.execute(sqlalchemy.text(f"DROP TABLE IF EXISTS {table}"))
-                logs_db_module.Base.metadata.drop_all(conn_sync)
+                logs_models.Base.metadata.drop_all(conn_sync)
 
             await conn.run_sync(drop_logs)
 
@@ -250,13 +231,13 @@ class AnalyticsTestDatabases:
 
     async def clear_tables(self) -> None:
         async with self.auth.engine.begin() as conn:
-            table_names = [t.name for t in reversed(auth_db_module.Base.metadata.sorted_tables)]
+            table_names = [t.name for t in reversed(auth_models.Base.metadata.sorted_tables)]
             await conn.execute(
                 sqlalchemy.text(f"TRUNCATE TABLE {', '.join(table_names)} RESTART IDENTITY CASCADE")
             )
 
         async with self.logs.engine.begin() as conn:
-            table_names = [t.name for t in reversed(logs_db_module.Base.metadata.sorted_tables)]
+            table_names = [t.name for t in reversed(logs_models.Base.metadata.sorted_tables)]
             table_names += [
                 "rollup_job_state",
                 "log_volume_5m",

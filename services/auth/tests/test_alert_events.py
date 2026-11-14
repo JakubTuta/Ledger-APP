@@ -1,7 +1,7 @@
 import datetime
 
 import auth_service.database as database
-import auth_service.models as models
+import ledger_common.models.auth as models
 import pytest
 from auth_service.proto import auth_pb2
 

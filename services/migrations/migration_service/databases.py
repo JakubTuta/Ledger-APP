@@ -5,7 +5,6 @@ import migration_service.config as config
 
 PACKAGE_ROOT = pathlib.Path(__file__).resolve().parent
 ALEMBIC_ROOT = PACKAGE_ROOT / "alembic"
-REPO_ROOT = PACKAGE_ROOT.parent.parent.parent
 
 
 @dataclasses.dataclass(frozen=True)
@@ -15,9 +14,7 @@ class DatabaseTarget:
     key: str
     description: str
     url_setting: str
-    owner_service: str
     models_module: str
-    metadata_module: str
 
     @property
     def url(self) -> str:
@@ -31,37 +28,21 @@ class DatabaseTarget:
     def versions_location(self) -> pathlib.Path:
         return self.script_location / "versions"
 
-    @property
-    def models_path(self) -> pathlib.Path:
-        """Repo checkout path holding the ORM models autogenerate diffs against.
-
-        Only present when this service runs from the repo (dev host); the
-        container image ships migration scripts, not the owning service's code,
-        so autogenerate is a host-only operation.
-        """
-        return REPO_ROOT / self.owner_service
-
 
 TARGETS: tuple[DatabaseTarget, ...] = (
     DatabaseTarget(
         key="auth",
         description="Auth DB (accounts, projects, API keys, alerts, monitors)",
         url_setting="AUTH_DATABASE_URL",
-        owner_service="services/auth",
-        models_module="auth_service.models",
-        metadata_module="auth_service.database",
+        models_module="ledger_common.models.auth",
     ),
-    # Autogenerate against the logs DB sees ingestion's models only - query owns
-    # a second overlapping set and the rollup tables exist in migrations alone,
-    # so a diff here reports tables it cannot see as dropped. Review before
-    # applying; every revision so far was authored under the same constraint.
+    # The rollup tables exist in migrations alone (analytics reads and writes them with raw SQL),
+    # so autogenerate against the logs DB reports them as dropped. Review before applying.
     DatabaseTarget(
         key="logs",
         description="Logs DB (logs, spans, metric points, rollups, error groups)",
         url_setting="LOGS_DATABASE_URL",
-        owner_service="services/ingestion",
-        models_module="ingestion_service.models",
-        metadata_module="ingestion_service.database",
+        models_module="ledger_common.models.logs",
     ),
 )
 

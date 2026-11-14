@@ -3,7 +3,7 @@ import secrets
 from datetime import datetime, timezone
 
 import auth_service.config as config
-import auth_service.models as models
+import ledger_common.models.auth as models
 from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession

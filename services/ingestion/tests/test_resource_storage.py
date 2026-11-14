@@ -7,7 +7,7 @@ import json
 import pytest
 import sqlalchemy
 
-import ingestion_service.models as models
+import ledger_common.models.logs as models
 import ingestion_service.proto.ingestion_pb2 as ingestion_pb2
 import ingestion_service.worker as worker_module
 

@@ -7,7 +7,7 @@ import ledger_common.connector_secrets as connector_secrets
 import sqlalchemy as sa
 import sqlalchemy.dialects.postgresql as sa_postgresql
 from auth_service import config, database
-from auth_service import models
+import ledger_common.models.auth as models
 from auth_service.proto import auth_pb2, auth_pb2_grpc
 from auth_service.services import auth_service, dashboard_service
 from auth_service.utils import jwt_utils

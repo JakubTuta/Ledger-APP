@@ -48,10 +48,10 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: services/gateway/requirements.txt
+          cache-dependency-path: services/auth/requirements.txt
 
       - name: Install dependencies
-        run: pip install -r ../../services/gateway/requirements.txt -e .
+        run: pip install -r ../../services/auth/requirements.txt -e .
 
       - name: Run tests
         run: pytest tests/ -v

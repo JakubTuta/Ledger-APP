@@ -6,7 +6,7 @@ import typing
 import sqlalchemy as sa
 
 import query_service.database as database
-import query_service.models as models
+import ledger_common.models.logs as models
 import query_service.schemas as schemas
 import query_service.services.log_resources as log_resources
 

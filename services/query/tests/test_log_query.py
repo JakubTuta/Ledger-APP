@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-import query_service.models as models
+import ledger_common.models.logs as models
 import query_service.proto.query_pb2 as query_pb2
 import query_service.services.log_query as log_query
 import tests.test_base as test_base
@@ -877,7 +877,7 @@ class TestResourcesStoredOnce(_LogFactoryMixin, test_base.BaseQueryTest):
     async def _store_resource(self, attributes: dict) -> None:
         async with self.test_db_manager.session_factory() as session:
             await session.execute(
-                models.resources.insert().values(
+                models.Resource.__table__.insert().values(
                     project_id=1, resource_hash=_RESOURCE_HASH, attributes=attributes
                 )
             )

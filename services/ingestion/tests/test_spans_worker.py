@@ -4,7 +4,7 @@ import time
 import msgpack
 import pytest
 import sqlalchemy
-from ingestion_service import models
+import ledger_common.models.logs as models
 from ingestion_service.services import queue_service
 from ingestion_service.worker import StorageWorker
 

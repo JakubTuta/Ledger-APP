@@ -6,7 +6,7 @@ import pytest
 import sqlalchemy as sa
 
 import query_service.database as database
-import query_service.models as models
+import ledger_common.models.logs as models
 import query_service.proto.query_pb2 as query_pb2
 import tests.test_base as test_base
 

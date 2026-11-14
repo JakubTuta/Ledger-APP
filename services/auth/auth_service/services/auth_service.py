@@ -6,7 +6,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 import auth_service.config as config
-import auth_service.models as models
+import ledger_common.models.auth as models
 import auth_service.utils.jwt_utils as jwt_utils
 import bcrypt
 import pyotp

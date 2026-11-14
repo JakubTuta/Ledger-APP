@@ -1,24 +1,35 @@
+"""ORM models of the Logs DB, shared by ingestion (writes), query (reads) and analytics tests.
+
+Migrations: services/migrations/.../alembic/logs.
+"""
+
 import datetime
 
-import ingestion_service.database as database
 from sqlalchemy import (
     CHAR,
     VARCHAR,
     BigInteger,
     CheckConstraint,
+    Column,
     DateTime,
     Float,
     Index,
     Integer,
     SmallInteger,
+    Table,
     Text,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
-class Log(database.Base):
+class Base(DeclarativeBase):
+    """Declarative base of every Logs DB table."""
+
+
+class Log(Base):
     __tablename__ = "logs"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -161,7 +172,7 @@ class Log(database.Base):
         )
 
 
-class ErrorGroup(database.Base):
+class ErrorGroup(Base):
     __tablename__ = "error_groups"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -243,7 +254,7 @@ class ErrorGroup(database.Base):
         )
 
 
-class Span(database.Base):
+class Span(Base):
     __tablename__ = "spans"
 
     span_id: Mapped[str] = mapped_column(CHAR(16), primary_key=True, nullable=False)
@@ -305,7 +316,7 @@ class Span(database.Base):
         )
 
 
-class MetricPoint(database.Base):
+class MetricPoint(Base):
     __tablename__ = "metric_points"
 
     project_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, nullable=False)
@@ -355,7 +366,7 @@ class MetricPoint(database.Base):
         return f"<MetricPoint(project_id={self.project_id}, name={self.name}, ts={self.ts})>"
 
 
-class Resource(database.Base):
+class Resource(Base):
     """One distinct OTLP resource of a project, referenced by resource_hash."""
 
     __tablename__ = "resources"
@@ -372,3 +383,163 @@ class Resource(database.Base):
 
     def __repr__(self) -> str:
         return f"<Resource(project_id={self.project_id}, resource_hash={self.resource_hash})>"
+
+
+# Analytics rollup feeding the Explore filter sidebar (written by
+# analytics_workers.jobs.log_facets_1h). A Core table rather than a declarative
+# model: it has no identity beyond its composite key and is only ever read as an
+# aggregate. Absent environment/client_channel/status_class are stored as '' so
+# the composite primary key can carry them.
+log_facets_1h = Table(
+    "log_facets_1h",
+    Base.metadata,
+    Column("project_id", BigInteger, primary_key=True),
+    Column("bucket", DateTime(timezone=True), primary_key=True),
+    Column("level", VARCHAR(20), primary_key=True),
+    Column("log_type", VARCHAR(30), primary_key=True),
+    Column(
+        "status_class",
+        VARCHAR(3),
+        primary_key=True,
+        server_default=text("''"),
+    ),
+    Column(
+        "environment",
+        VARCHAR(20),
+        primary_key=True,
+        server_default=text("''"),
+    ),
+    Column(
+        "client_channel",
+        VARCHAR(20),
+        primary_key=True,
+        server_default=text("''"),
+    ),
+    Column("count", BigInteger, nullable=False),
+)
+
+
+class AggregatedMetric(Base):
+    __tablename__ = "aggregated_metrics"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    date: Mapped[str] = mapped_column(VARCHAR(8), nullable=False)
+    hour: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    metric_type: Mapped[str] = mapped_column(VARCHAR(20), nullable=False)
+
+    endpoint_method: Mapped[str | None] = mapped_column(VARCHAR(10), nullable=True)
+    endpoint_path: Mapped[str | None] = mapped_column(VARCHAR(500), nullable=True)
+
+    log_level: Mapped[str | None] = mapped_column(VARCHAR(20), nullable=True)
+    log_type: Mapped[str | None] = mapped_column(VARCHAR(30), nullable=True)
+
+    log_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    avg_duration_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    min_duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    p95_duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    p99_duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    extra_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.datetime.now(datetime.timezone.utc),
+        onupdate=datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        Index(
+            "idx_aggregated_metrics_lookup",
+            "project_id",
+            "metric_type",
+            "date",
+        ),
+        Index(
+            "idx_aggregated_metrics_endpoint",
+            "project_id",
+            "endpoint_path",
+            "date",
+            postgresql_where=text("metric_type = 'endpoint'"),
+        ),
+        CheckConstraint(
+            "metric_type IN ('exception', 'endpoint', 'log_volume')",
+            name="check_metric_type",
+        ),
+        CheckConstraint("hour >= 0 AND hour <= 23", name="check_hour_range"),
+        CheckConstraint(
+            "log_level IS NULL OR log_level IN ('debug', 'info', 'warning', 'error', 'critical')",
+            name="check_log_level",
+        ),
+        CheckConstraint(
+            "log_type IS NULL OR log_type IN ('console', 'logger', 'exception', 'network', 'database', 'endpoint', 'custom')",
+            name="check_log_type",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<AggregatedMetric(id={self.id}, project_id={self.project_id}, "
+            f"date={self.date}, hour={self.hour}, type={self.metric_type})>"
+        )
+
+
+class BottleneckMetric(Base):
+    __tablename__ = "bottleneck_metrics"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    date: Mapped[str] = mapped_column(VARCHAR(8), nullable=False)
+    hour: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+
+    route: Mapped[str] = mapped_column(VARCHAR(500), nullable=False)
+
+    log_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    min_duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True, default=0)
+    max_duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True, default=0)
+    avg_duration_ms: Mapped[float | None] = mapped_column(Float, nullable=True, default=0)
+    median_duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True, default=0)
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.datetime.now(datetime.timezone.utc),
+        onupdate=datetime.datetime.now(datetime.timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        # Reads go through uq_bottleneck_metrics (project_id, date, hour, route),
+        # whose leading prefix already covers the only filter shape in use.
+        Index(
+            "uq_bottleneck_metrics",
+            "project_id",
+            "date",
+            "hour",
+            "route",
+            unique=True,
+        ),
+        CheckConstraint("hour >= 0 AND hour <= 23", name="check_bottleneck_hour_range"),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<BottleneckMetric(id={self.id}, project_id={self.project_id}, "
+            f"date={self.date}, hour={self.hour}, route={self.route})>"
+        )

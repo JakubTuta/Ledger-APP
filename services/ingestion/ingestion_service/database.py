@@ -7,13 +7,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy.orm import DeclarativeBase
-
 import ingestion_service.config as config
-
-
-class Base(DeclarativeBase):
-    pass
 
 
 _engine: AsyncEngine | None = None

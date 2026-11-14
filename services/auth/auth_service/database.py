@@ -7,15 +7,8 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy.orm import DeclarativeBase
 
 from . import config
-
-
-class Base(DeclarativeBase):
-    """Base class for all models."""
-
-    pass
 
 
 _engine: AsyncEngine | None = None

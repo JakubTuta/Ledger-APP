@@ -5,7 +5,8 @@ import unittest.mock
 import msgpack
 import pytest
 import sqlalchemy
-from ingestion_service import models, schemas
+from ingestion_service import schemas
+import ledger_common.models.logs as models
 import ledger_common.self_monitoring as self_monitoring
 from ingestion_service.services import queue_service
 from ingestion_service.worker import StorageWorker

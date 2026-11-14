@@ -2,7 +2,6 @@ import asyncio
 import importlib
 import logging
 import pathlib
-import sys
 import time
 
 import alembic.command
@@ -121,9 +120,8 @@ def create_revision(
     """Write a new revision file into the target's versions directory."""
     if autogenerate and load_metadata(target) is None:
         raise MigrationError(
-            f"Cannot autogenerate for '{target.key}': {target.models_module} is not importable. "
-            f"Autogenerate needs {target.owner_service} checked out next to this service "
-            f"(it is not shipped in the image) - or use --no-autogenerate and write the "
+            f"Cannot autogenerate for '{target.key}': {target.models_module} is not importable "
+            f"(is ledger_common installed?) - or use --no-autogenerate and write the "
             f"revision by hand."
         )
 
@@ -135,23 +133,17 @@ def create_revision(
 
 
 def load_metadata(target: databases.DatabaseTarget) -> sqlalchemy.MetaData | None:
-    """Owning service's `Base.metadata`, or None when its code is not available.
+    """The `Base.metadata` autogenerate diffs against, or None if the models can't be imported.
 
-    Only autogenerate needs it - `upgrade`/`downgrade` replay revision scripts
-    and run fine without the models, which is what the container does.
+    Only autogenerate needs it - `upgrade`/`downgrade` replay revision scripts.
     """
-    models_path = str(target.models_path)
-    if models_path not in sys.path and target.models_path.is_dir():
-        sys.path.insert(0, models_path)
-
     try:
-        importlib.import_module(target.models_module)
-        metadata_module = importlib.import_module(target.metadata_module)
+        models = importlib.import_module(target.models_module)
     except (ImportError, pydantic.ValidationError):
         logger.debug("[%s] models not importable, autogenerate unavailable", target.key)
         return None
 
-    return metadata_module.Base.metadata
+    return models.Base.metadata
 
 
 async def _fetch_current_heads(target: databases.DatabaseTarget) -> tuple[str, ...]:

@@ -25,22 +25,7 @@ async def serve():
 
     server = grpc.aio.server(
         interceptors=self_monitoring.rpc_interceptors("ingestion"),
-        options=[
-            ("grpc.max_send_message_length", 100 * 1024 * 1024),
-            ("grpc.max_receive_message_length", 100 * 1024 * 1024),
-            ("grpc.keepalive_time_ms", config.settings.GRPC_KEEPALIVE_TIME_MS),
-            ("grpc.keepalive_timeout_ms", config.settings.GRPC_KEEPALIVE_TIMEOUT_MS),
-            (
-                "grpc.keepalive_permit_without_calls",
-                config.settings.GRPC_KEEPALIVE_PERMIT_WITHOUT_CALLS,
-            ),
-            ("grpc.max_connection_idle_ms", config.settings.GRPC_MAX_CONNECTION_IDLE_MS),
-            ("grpc.max_connection_age_ms", config.settings.GRPC_MAX_CONNECTION_AGE_MS),
-            (
-                "grpc.http2.min_recv_ping_interval_without_data_ms",
-                config.settings.GRPC_HTTP2_MIN_RECV_PING_INTERVAL_WITHOUT_DATA_MS,
-            ),
-        ],
+        options=config.settings.grpc_server_options,
     )
     ingestion_pb2_grpc.add_IngestionServiceServicer_to_server(
         servicers.IngestionServicer(redis_client=redis), server

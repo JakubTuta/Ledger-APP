@@ -4,7 +4,7 @@ from typing import Literal
 import sqlalchemy as sa
 
 import query_service.database as database
-import query_service.models as models
+import ledger_common.models.logs as models
 import query_service.schemas as schemas
 from query_service.services.aggregated_metrics import _parse_period
 

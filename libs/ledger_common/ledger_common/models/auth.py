@@ -1,6 +1,7 @@
+"""ORM models of the Auth DB. Migrations: services/migrations/.../alembic/auth."""
+
 import datetime
 
-import auth_service.database as database
 from sqlalchemy import (
     CHAR,
     VARCHAR,
@@ -16,10 +17,14 @@ from sqlalchemy import (
     Text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
-class Account(database.Base):
+class Base(DeclarativeBase):
+    """Declarative base of every Auth DB table."""
+
+
+class Account(Base):
     """
     User accounts table.
 
@@ -98,7 +103,7 @@ class Account(database.Base):
         return f"<Account(id={self.id}, email={self.email}, plan={self.plan})>"
 
 
-class RefreshToken(database.Base):
+class RefreshToken(Base):
     """
     Refresh tokens table for JWT token refresh.
 
@@ -169,7 +174,7 @@ class RefreshToken(database.Base):
         return f"<RefreshToken(id={self.id}, account_id={self.account_id}, revoked={self.revoked})>"
 
 
-class Project(database.Base):
+class Project(Base):
     """
     Projects table for multi-tenancy.
 
@@ -264,7 +269,7 @@ class Project(database.Base):
         return f"<Project(id={self.id}, slug={self.slug}, environment={self.environment})>"
 
 
-class ApiKey(database.Base):
+class ApiKey(Base):
     """
     API keys table for authentication.
 
@@ -339,7 +344,7 @@ class ApiKey(database.Base):
         return f"<ApiKey(id={self.id}, prefix={self.key_prefix}, status={self.status})>"
 
 
-class DailyUsage(database.Base):
+class DailyUsage(Base):
     """
     Daily usage tracking for quota enforcement and billing.
 
@@ -395,7 +400,7 @@ class DailyUsage(database.Base):
         return f"<DailyUsage(project_id={self.project_id}, date={self.date}, logs={self.logs_ingested})>"
 
 
-class ProjectMember(database.Base):
+class ProjectMember(Base):
     __tablename__ = "project_members"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -434,7 +439,7 @@ class ProjectMember(database.Base):
         return f"<ProjectMember(project_id={self.project_id}, account_id={self.account_id}, role={self.role})>"
 
 
-class ProjectInviteCode(database.Base):
+class ProjectInviteCode(Base):
     __tablename__ = "project_invite_codes"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -484,7 +489,7 @@ class ProjectInviteCode(database.Base):
         return f"<ProjectInviteCode(project_id={self.project_id}, expires_at={self.expires_at})>"
 
 
-class UserDashboard(database.Base):
+class UserDashboard(Base):
     """
     User dashboard configuration table.
 
@@ -546,7 +551,7 @@ class UserDashboard(database.Base):
         return f"<UserDashboard(id={self.id}, user_id={self.user_id}, panels={len(self.panels)})>"
 
 
-class Notification(database.Base):
+class Notification(Base):
     __tablename__ = "notifications"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -593,7 +598,7 @@ class Notification(database.Base):
         return f"<Notification(id={self.id}, user_id={self.user_id}, kind={self.kind})>"
 
 
-class AlertRule(database.Base):
+class AlertRule(Base):
     __tablename__ = "alert_rules"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -681,7 +686,7 @@ class AlertRule(database.Base):
         return f"<AlertRule(id={self.id}, project_id={self.project_id}, name={self.name}, state={self.state})>"
 
 
-class Connector(database.Base):
+class Connector(Base):
     __tablename__ = "connectors"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -720,7 +725,7 @@ class Connector(database.Base):
         return f"<Connector(id={self.id}, account_id={self.account_id}, kind={self.kind})>"
 
 
-class AlertRuleConnector(database.Base):
+class AlertRuleConnector(Base):
     __tablename__ = "alert_rule_connectors"
 
     rule_id: Mapped[int] = mapped_column(
@@ -740,7 +745,7 @@ class AlertRuleConnector(database.Base):
         return f"<AlertRuleConnector(rule_id={self.rule_id}, connector_id={self.connector_id})>"
 
 
-class AlertEvent(database.Base):
+class AlertEvent(Base):
     __tablename__ = "alert_events"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -794,7 +799,7 @@ class AlertEvent(database.Base):
         return f"<AlertEvent(id={self.id}, rule_id={self.rule_id}, state={self.state})>"
 
 
-class MaintenanceWindow(database.Base):
+class MaintenanceWindow(Base):
     """
     A time range (optionally recurring) during which alert dispatch for a
     project is suppressed. Rule state is still evaluated/updated as normal;
@@ -841,7 +846,7 @@ class MaintenanceWindow(database.Base):
         return f"<MaintenanceWindow(id={self.id}, project_id={self.project_id}, name={self.name})>"
 
 
-class Monitor(database.Base):
+class Monitor(Base):
     """
     Uptime (HTTP) and heartbeat (dead-man's-switch) monitors.
 
@@ -922,7 +927,7 @@ class Monitor(database.Base):
         return f"<Monitor(id={self.id}, project_id={self.project_id}, kind={self.kind}, state={self.state})>"
 
 
-class MonitorCheck(database.Base):
+class MonitorCheck(Base):
     __tablename__ = "monitor_checks"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -954,7 +959,7 @@ class MonitorCheck(database.Base):
         return f"<MonitorCheck(id={self.id}, monitor_id={self.monitor_id}, ok={self.ok})>"
 
 
-class NotificationPreference(database.Base):
+class NotificationPreference(Base):
     __tablename__ = "notification_preferences"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
