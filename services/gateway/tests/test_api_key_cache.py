@@ -156,6 +156,32 @@ class TestStaleFallbackWhenAuthServiceIsDown:
         assert exc_info.value.status_code == 503
 
 
+class _RecordingAuthStub:
+    def __init__(self):
+        self.timeouts = []
+
+    async def ValidateApiKey(self, request, timeout=None):
+        self.timeouts.append(timeout)
+        raise _RpcError(grpc.StatusCode.UNAVAILABLE)
+
+
+@pytest.mark.asyncio
+class TestAuthLookupDeadline:
+    async def test_key_validation_uses_the_short_deadline(self):
+        stub = _RecordingAuthStub()
+
+        class _Pool:
+            def get_stub(self, name, stub_cls):
+                return stub
+
+        middleware = auth_middleware.AuthMiddleware(app=None)
+        with pytest.raises(fastapi.HTTPException):
+            await middleware._validate_api_key(_client(_FakeRedis()), _Pool(), "k")
+
+        assert stub.timeouts == [config.settings.AUTH_VALIDATE_TIMEOUT]
+        assert config.settings.AUTH_VALIDATE_TIMEOUT < config.settings.GRPC_TIMEOUT
+
+
 class TestRetryableGrpcErrorsMapTo503:
     @pytest.mark.parametrize(
         "code",

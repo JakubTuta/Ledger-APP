@@ -279,7 +279,9 @@ class AuthMiddleware:
 
             request = auth_pb2.ValidateApiKeyRequest(api_key=api_key)
 
-            response = await stub.ValidateApiKey(request, timeout=config.settings.GRPC_TIMEOUT)
+            response = await stub.ValidateApiKey(
+                request, timeout=config.settings.AUTH_VALIDATE_TIMEOUT
+            )
 
             if not response.valid:
                 self._auth_failures += 1

@@ -116,6 +116,10 @@ class Settings(pydantic_settings.BaseSettings):
     GRPC_HTTP2_MIN_TIME_BETWEEN_PINGS_MS: typing.ClassVar[int] = 300000
     GRPC_HTTP2_MIN_PING_INTERVAL_WITHOUT_DATA_MS: typing.ClassVar[int] = 300000
     GRPC_TIMEOUT: typing.ClassVar[float] = 30.0
+    # ValidateApiKey is one indexed lookup. Channels wait for ready, so with the auth service
+    # down a call blocks for its whole deadline - short here so the stale-cache fallback (or a
+    # retryable 503) answers before an OTLP exporter gives up on the request.
+    AUTH_VALIDATE_TIMEOUT: typing.ClassVar[float] = 3.0
 
     JWT_SECRET: str = pydantic.Field(
         default="your-secret-key-change-this-in-production",
