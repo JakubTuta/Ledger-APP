@@ -1,164 +1,26 @@
 import functools
-import os
 import typing
 
 import pydantic
-import pydantic_settings
+import ledger_common.settings
 
 
-class Settings(pydantic_settings.BaseSettings):
-    model_config = pydantic_settings.SettingsConfigDict(
-        env_file=os.getenv("ENV_FILE_PATH", "../../.env"),
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="ignore",
-    )
-
-    ENV: typing.Literal["development", "staging", "production", "test"] = pydantic.Field(
-        default="development",
-        description="Application environment",
-    )
-
-    SELF_MONITORING_API_KEY: str = pydantic.Field(
-        default="",
-        description="API key of the project Ledger reports its own telemetry to; empty disables it",
-    )
-
-    SELF_MONITORING_URL: str = pydantic.Field(
-        default="http://ledger-gateway:8000",
-        description="Gateway the services export their own telemetry to",
-    )
-
-    DEBUG: bool = pydantic.Field(
-        default=False,
-        description="Enable debug mode",
-    )
-
-    LOGS_DB_HOST: str = pydantic.Field(
-        default="localhost",
-        description="Logs database host",
-    )
-
-    LOGS_DB_PORT: int = pydantic.Field(
-        default=5432,
-        description="Logs database port",
-    )
-
-    LOGS_DB_NAME: str = pydantic.Field(
-        default="logs_db",
-        description="Logs database name",
-    )
-
-    LOGS_DB_USER: str = pydantic.Field(
-        default="postgres",
-        description="Logs database user",
-    )
-
-    LOGS_DB_PASSWORD: str = pydantic.Field(
-        default="postgres",
-        description="Logs database password",
-    )
-
-    AUTH_DB_HOST: str = pydantic.Field(
-        default="localhost",
-        description="Auth database host",
-    )
-
-    AUTH_DB_PORT: int = pydantic.Field(
-        default=5432,
-        description="Auth database port",
-    )
-
-    AUTH_DB_NAME: str = pydantic.Field(
-        default="auth_db",
-        description="Auth database name",
-    )
-
-    AUTH_DB_USER: str = pydantic.Field(
-        default="postgres",
-        description="Auth database user",
-    )
-
-    AUTH_DB_PASSWORD: str = pydantic.Field(
-        default="postgres",
-        description="Auth database password",
-    )
-
+class Settings(
+    ledger_common.settings.RedisSettings,
+    ledger_common.settings.AuthDatabaseSettings,
+    ledger_common.settings.LogsDatabaseSettings,
+    ledger_common.settings.SmtpSettings,
+    ledger_common.settings.DailyQuotaDefaults,
+    ledger_common.settings.ConnectorSecretsSettings,
+    ledger_common.settings.ServiceSettings,
+):
     # Per database (one pool each for the logs and auth DBs). Jobs that fire on
     # the same minute queue for a connection rather than opening more; see the
     # connection budget in ingestion_service.config.
     DB_POOL_SIZE: typing.ClassVar[int] = 4
     DB_MAX_OVERFLOW: typing.ClassVar[int] = 2
 
-    @property
-    def LOGS_DATABASE_URL(self) -> str:
-        return (
-            f"postgresql+asyncpg://{self.LOGS_DB_USER}:{self.LOGS_DB_PASSWORD}"
-            f"@{self.LOGS_DB_HOST}:{self.LOGS_DB_PORT}/{self.LOGS_DB_NAME}"
-        )
-
-    @property
-    def AUTH_DATABASE_URL(self) -> str:
-        return (
-            f"postgresql+asyncpg://{self.AUTH_DB_USER}:{self.AUTH_DB_PASSWORD}"
-            f"@{self.AUTH_DB_HOST}:{self.AUTH_DB_PORT}/{self.AUTH_DB_NAME}"
-        )
-
-    REDIS_HOST: str = pydantic.Field(
-        default="localhost",
-        description="Redis host",
-    )
-
-    REDIS_PORT: int = pydantic.Field(
-        default=6379,
-        description="Redis port",
-    )
-
-    REDIS_DB: typing.ClassVar[int] = 0
     REDIS_MAX_CONNECTIONS: typing.ClassVar[int] = 10
-
-    REDIS_PASSWORD: str | None = pydantic.Field(
-        default=None,
-        description="Redis password (optional)",
-    )
-
-    @property
-    def REDIS_URL(self) -> str:
-        if self.REDIS_PASSWORD:
-            return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
-        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
-
-    EMAIL_ENABLED: bool = pydantic.Field(
-        default=False,
-        description="Enable outbound email alert delivery",
-    )
-
-    SMTP_HOST: str = pydantic.Field(
-        default="smtp.gmail.com",
-        description="SMTP server hostname",
-    )
-
-    SMTP_PORT: int = pydantic.Field(
-        default=587,
-        description="SMTP server port (587 = STARTTLS)",
-    )
-
-    SMTP_USER: str = pydantic.Field(
-        default="",
-        description="SMTP username (Gmail address)",
-    )
-
-    SMTP_PASSWORD: str = pydantic.Field(
-        default="",
-        description="SMTP password (Gmail App Password, not account password)",
-    )
-
-    SMTP_FROM: str = pydantic.Field(
-        default="",
-        description="From address; falls back to SMTP_USER when empty",
-    )
-
-    SMTP_USE_TLS: typing.ClassVar[bool] = True
 
     ANALYTICS_LOG_METRICS_CRON: str = pydantic.Field(
         default="*/10 * * * *",
@@ -233,11 +95,6 @@ class Settings(pydantic_settings.BaseSettings):
         description="Allow plain-http webhook URLs (dev/testing only; https required otherwise)",
     )
 
-    CONNECTOR_SECRETS_KEY: str = pydantic.Field(
-        default="",
-        description="Fernet key(s) the auth service encrypts connector credentials with",
-    )
-
     ANALYTICS_NOTIFICATION_CLEANUP_CRON: str = pydantic.Field(
         default="0 3 * * *",
         description="Expired notification cleanup cron schedule (daily at 03:00)",
@@ -258,16 +115,8 @@ class Settings(pydantic_settings.BaseSettings):
 
     ANALYTICS_MAX_SERIES_PER_PROJECT: typing.ClassVar[int] = 500
     ANALYTICS_USAGE_STATS_TTL: typing.ClassVar[int] = 3600
-    DEFAULT_LOGS_DAILY_QUOTA: typing.ClassVar[int] = 100_000
-    DEFAULT_SPANS_DAILY_QUOTA: typing.ClassVar[int] = 300_000
-    DEFAULT_METRICS_DAILY_QUOTA: typing.ClassVar[int] = 100_000
     ANALYTICS_JOB_MISFIRE_GRACE_TIME: typing.ClassVar[int] = 60
     ANALYTICS_QUERY_TIMEOUT: typing.ClassVar[int] = 60
-
-    LOG_LEVEL: typing.Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = pydantic.Field(
-        default="INFO",
-        description="Logging level",
-    )
 
     def get_log_config(self) -> dict:
         return {
