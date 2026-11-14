@@ -19,8 +19,8 @@ def _parsed_cron_names(setup_jobs: ast.FunctionDef) -> set[str]:
         if (
             isinstance(node, ast.Assign)
             and isinstance(node.value, ast.Call)
-            and isinstance(node.value.func, ast.Name)
-            and node.value.func.id == "_parse_cron_expression"
+            and isinstance(node.value.func, ast.Attribute)
+            and node.value.func.attr == "parse_cron_expression"
             and isinstance(node.targets[0], ast.Name)
         ):
             names.add(node.targets[0].id)
@@ -45,7 +45,7 @@ class TestSchedulerWiring:
     """Guards against cron schedules that are parsed but never registered.
 
     Commit 581318a dropped ten still-live `add_job` calls while removing two
-    retired rollups, leaving their `_parse_cron_expression` results as orphaned
+    retired rollups, leaving their `parse_cron_expression` results as orphaned
     locals. Ruff cannot catch that - F841 (unused variable) is in the ignore
     list - so the parity is asserted structurally instead.
     """

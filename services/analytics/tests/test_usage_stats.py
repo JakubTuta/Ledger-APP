@@ -53,7 +53,7 @@ async def test_generate_usage_stats_empty_database():
     mock_logs_session.__aenter__ = AsyncMock(return_value=mock_logs_session)
     mock_logs_session.__aexit__ = AsyncMock()
 
-    with patch("analytics_workers.redis_client.get_redis", return_value=mock_redis):
+    with patch("ledger_common.redis_client.get_redis", return_value=mock_redis):
         with patch("analytics_workers.database.get_logs_session") as mock_get_logs_session:
             with patch("analytics_workers.database.get_auth_session") as mock_get_auth_session:
                 mock_get_logs_session.return_value = mock_logs_session
@@ -89,7 +89,7 @@ async def test_generate_usage_stats_with_data():
     mock_logs_session.__aenter__ = AsyncMock(return_value=mock_logs_session)
     mock_logs_session.__aexit__ = AsyncMock()
 
-    with patch("analytics_workers.redis_client.get_redis", return_value=mock_redis):
+    with patch("ledger_common.redis_client.get_redis", return_value=mock_redis):
         with patch("analytics_workers.database.get_logs_session") as mock_get_logs_session:
             with patch("analytics_workers.database.get_auth_session") as mock_get_auth_session:
                 mock_get_logs_session.return_value = mock_logs_session
@@ -136,7 +136,7 @@ async def test_generate_usage_stats_quota_calculations():
     mock_logs_session.__aenter__ = AsyncMock(return_value=mock_logs_session)
     mock_logs_session.__aexit__ = AsyncMock()
 
-    with patch("analytics_workers.redis_client.get_redis", return_value=mock_redis):
+    with patch("ledger_common.redis_client.get_redis", return_value=mock_redis):
         with patch("analytics_workers.database.get_logs_session") as mock_get_logs_session:
             with patch("analytics_workers.database.get_auth_session") as mock_get_auth_session:
                 mock_get_logs_session.return_value = mock_logs_session
@@ -172,7 +172,7 @@ async def test_generate_usage_stats_multiple_days():
     mock_logs_session.__aenter__ = AsyncMock(return_value=mock_logs_session)
     mock_logs_session.__aexit__ = AsyncMock()
 
-    with patch("analytics_workers.redis_client.get_redis", return_value=mock_redis):
+    with patch("ledger_common.redis_client.get_redis", return_value=mock_redis):
         with patch("analytics_workers.database.get_logs_session") as mock_get_logs_session:
             with patch("analytics_workers.database.get_auth_session") as mock_get_auth_session:
                 mock_get_logs_session.return_value = mock_logs_session
@@ -206,7 +206,7 @@ async def test_generate_usage_stats_spans_only_day_yields_zero_log_count():
     mock_logs_session.__aenter__ = AsyncMock(return_value=mock_logs_session)
     mock_logs_session.__aexit__ = AsyncMock()
 
-    with patch("analytics_workers.redis_client.get_redis", return_value=mock_redis):
+    with patch("ledger_common.redis_client.get_redis", return_value=mock_redis):
         with patch("analytics_workers.database.get_logs_session") as mock_get_logs_session:
             with patch("analytics_workers.database.get_auth_session") as mock_get_auth_session:
                 mock_get_logs_session.return_value = mock_logs_session
@@ -245,7 +245,7 @@ async def test_generate_usage_stats_keeps_persisted_counts_outside_recompute_win
     mock_logs_session.__aenter__ = AsyncMock(return_value=mock_logs_session)
     mock_logs_session.__aexit__ = AsyncMock()
 
-    with patch("analytics_workers.redis_client.get_redis", return_value=mock_redis):
+    with patch("ledger_common.redis_client.get_redis", return_value=mock_redis):
         with patch("analytics_workers.database.get_logs_session") as mock_get_logs_session:
             with patch("analytics_workers.database.get_auth_session") as mock_get_auth_session:
                 mock_get_logs_session.return_value = mock_logs_session
@@ -311,7 +311,7 @@ async def test_generate_usage_stats_caches_counts_read_from_the_real_rollup(test
         await logs_session.commit()
 
     mock_redis = AsyncMock()
-    with patch("analytics_workers.redis_client.get_redis", return_value=mock_redis):
+    with patch("ledger_common.redis_client.get_redis", return_value=mock_redis):
         await usage_stats_job.generate_usage_stats()
 
     cache_key, _ttl, payload = mock_redis.setex.call_args[0]

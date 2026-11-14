@@ -4,7 +4,7 @@ import redis.asyncio as redis_async
 
 import query_service.database as database
 import query_service.grpc.servicers as servicers
-import query_service.redis_client as redis_client
+import ledger_common.redis_client as redis_client
 import query_service.proto.query_pb2_grpc as query_pb2_grpc
 import tests.infra as infra
 

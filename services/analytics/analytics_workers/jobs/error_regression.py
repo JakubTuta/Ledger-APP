@@ -3,7 +3,7 @@ import json
 import time
 
 import analytics_workers.database as database
-import analytics_workers.redis_client as redis_client
+import ledger_common.redis_client as redis_client
 import analytics_workers.utils.logging as logging
 import sqlalchemy as sa
 

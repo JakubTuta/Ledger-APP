@@ -3,6 +3,7 @@ import logging
 import ingestion_service.config as config
 import ingestion_service.database as database
 import ingestion_service.services.partition_manager as partition_manager
+import ledger_common.cron as cron
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -33,7 +34,7 @@ class PartitionScheduler:
             logger.warning("Partition scheduler is already running")
             return
 
-        check_cron = self._parse_cron_expression(config.settings.PARTITION_CHECK_CRON)
+        check_cron = cron.parse_cron_expression(config.settings.PARTITION_CHECK_CRON)
 
         self.scheduler.add_job(
             self.create_future_partitions,
@@ -48,22 +49,6 @@ class PartitionScheduler:
 
         self.scheduler.start()
         self.running = True
-
-    @staticmethod
-    def _parse_cron_expression(cron_expr: str) -> dict:
-        parts = cron_expr.split()
-        if len(parts) != 5:
-            raise ValueError(
-                f"Invalid cron expression: {cron_expr}. Expected 5 parts (minute hour day month day_of_week)"
-            )
-
-        return {
-            "minute": parts[0],
-            "hour": parts[1],
-            "day": parts[2],
-            "month": parts[3],
-            "day_of_week": parts[4],
-        }
 
     def stop(self) -> None:
         if not self.running:

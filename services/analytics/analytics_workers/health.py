@@ -6,7 +6,7 @@ import pathlib
 import sqlalchemy as sa
 
 import analytics_workers.database as database
-import analytics_workers.redis_client as redis_client
+import ledger_common.redis_client as redis_client
 import analytics_workers.utils.logging as logging
 
 logger = logging.get_logger("health")

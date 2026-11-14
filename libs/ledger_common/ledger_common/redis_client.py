@@ -1,14 +1,23 @@
-import redis.asyncio as redis
+"""Process-wide async Redis client for the services that open one connection pool at startup.
 
-import query_service.config as config
+Call `init_redis(settings)` once from the service's main; everything else uses `get_redis()`.
+`settings` needs REDIS_URL and REDIS_MAX_CONNECTIONS (see ledger_common.settings.RedisSettings).
+"""
+
+import typing
+
+import redis.asyncio as redis
 
 redis_client: redis.Redis | None = None
 
 
-async def init_redis() -> None:
-    global redis_client
+class RedisConfig(typing.Protocol):
+    REDIS_URL: str
+    REDIS_MAX_CONNECTIONS: int
 
-    settings = config.get_settings()
+
+async def init_redis(settings: RedisConfig) -> None:
+    global redis_client
 
     redis_client = redis.from_url(
         settings.REDIS_URL,
@@ -25,6 +34,7 @@ async def close_redis() -> None:
 
     if redis_client:
         await redis_client.aclose()
+        redis_client = None
 
 
 def get_redis() -> redis.Redis:

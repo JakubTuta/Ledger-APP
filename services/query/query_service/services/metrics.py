@@ -1,7 +1,7 @@
 import datetime
 import json
 
-import query_service.redis_client as redis_client
+import ledger_common.redis_client as redis_client
 import query_service.schemas as schemas
 
 

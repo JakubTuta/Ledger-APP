@@ -13,7 +13,7 @@ import aiosmtplib
 
 import analytics_workers.config as config
 import analytics_workers.database as database
-import analytics_workers.redis_client as redis_client
+import ledger_common.redis_client as redis_client
 import analytics_workers.services.guarded_http as guarded_http
 import analytics_workers.utils.logging as logging
 import ledger_common.connector_secrets as connector_secrets

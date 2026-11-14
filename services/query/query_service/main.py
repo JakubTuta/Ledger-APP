@@ -8,7 +8,7 @@ import query_service.config as config
 import query_service.database as database
 import query_service.grpc.servicers as servicers
 import query_service.proto.query_pb2_grpc as query_pb2_grpc
-import query_service.redis_client as redis_client
+import ledger_common.redis_client as redis_client
 import ledger_common.self_monitoring as self_monitoring
 
 logging.basicConfig(
@@ -22,7 +22,7 @@ async def serve():
     self_monitoring.start("query", config.settings)
     await database.init_db()
 
-    await redis_client.init_redis()
+    await redis_client.init_redis(config.get_settings())
 
     server = grpc.aio.server(
         concurrent.futures.ThreadPoolExecutor(max_workers=config.settings.GRPC_MAX_WORKERS),

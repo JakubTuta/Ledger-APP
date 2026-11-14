@@ -6,7 +6,8 @@ import analytics_workers.config as config
 import analytics_workers.database as database
 import analytics_workers.health as health
 import analytics_workers.jobs as jobs
-import analytics_workers.redis_client as redis_client
+import ledger_common.redis_client as redis_client
+import ledger_common.cron as cron
 import ledger_common.self_monitoring as self_monitoring
 import analytics_workers.utils.logging as logging_utils
 import apscheduler.events as scheduler_events
@@ -23,7 +24,7 @@ async def startup() -> None:
     try:
         await database.init_db()
 
-        await redis_client.init_redis()
+        await redis_client.init_redis(config.get_settings())
 
     except Exception as e:
         logger.error(f"Startup failed: {e}", exc_info=True)
@@ -63,22 +64,26 @@ def _count_job_run(event: scheduler_events.JobEvent) -> None:
 
 
 def setup_jobs() -> None:
-    log_metrics_cron = _parse_cron_expression(settings.ANALYTICS_LOG_METRICS_CRON)
-    usage_stats_cron = _parse_cron_expression(settings.ANALYTICS_USAGE_STATS_CRON)
-    hourly_metrics_cron = _parse_cron_expression(settings.ANALYTICS_HOURLY_METRICS_CRON)
-    available_routes_cron = _parse_cron_expression(settings.ANALYTICS_AVAILABLE_ROUTES_CRON)
-    bottleneck_metrics_cron = _parse_cron_expression(settings.ANALYTICS_BOTTLENECK_METRICS_CRON)
-    lv1h_rollup_cron = _parse_cron_expression(settings.ANALYTICS_LOG_VOLUME_1H_ROLLUP_CRON)
-    lv1d_rollup_cron = _parse_cron_expression(settings.ANALYTICS_LOG_VOLUME_1D_ROLLUP_CRON)
-    log_facets_1h_cron = _parse_cron_expression(settings.ANALYTICS_LOG_FACETS_1H_ROLLUP_CRON)
-    metric_points_1h_cron = _parse_cron_expression(settings.ANALYTICS_METRIC_POINTS_1H_ROLLUP_CRON)
-    service_edges_1h_cron = _parse_cron_expression(settings.ANALYTICS_SERVICE_EDGES_1H_ROLLUP_CRON)
-    alert_cron = _parse_cron_expression(settings.ANALYTICS_ALERT_EVALUATOR_CRON)
-    notif_cleanup_cron = _parse_cron_expression(settings.ANALYTICS_NOTIFICATION_CLEANUP_CRON)
-    retention_cron = _parse_cron_expression(settings.ANALYTICS_RETENTION_CRON)
-    monitor_check_cron = _parse_cron_expression(settings.ANALYTICS_MONITOR_CHECK_CRON)
-    error_regression_cron = _parse_cron_expression(settings.ANALYTICS_ERROR_REGRESSION_CRON)
-    rir_refresh_cron = _parse_cron_expression(settings.ANALYTICS_RIR_REFRESH_CRON)
+    log_metrics_cron = cron.parse_cron_expression(settings.ANALYTICS_LOG_METRICS_CRON)
+    usage_stats_cron = cron.parse_cron_expression(settings.ANALYTICS_USAGE_STATS_CRON)
+    hourly_metrics_cron = cron.parse_cron_expression(settings.ANALYTICS_HOURLY_METRICS_CRON)
+    available_routes_cron = cron.parse_cron_expression(settings.ANALYTICS_AVAILABLE_ROUTES_CRON)
+    bottleneck_metrics_cron = cron.parse_cron_expression(settings.ANALYTICS_BOTTLENECK_METRICS_CRON)
+    lv1h_rollup_cron = cron.parse_cron_expression(settings.ANALYTICS_LOG_VOLUME_1H_ROLLUP_CRON)
+    lv1d_rollup_cron = cron.parse_cron_expression(settings.ANALYTICS_LOG_VOLUME_1D_ROLLUP_CRON)
+    log_facets_1h_cron = cron.parse_cron_expression(settings.ANALYTICS_LOG_FACETS_1H_ROLLUP_CRON)
+    metric_points_1h_cron = cron.parse_cron_expression(
+        settings.ANALYTICS_METRIC_POINTS_1H_ROLLUP_CRON
+    )
+    service_edges_1h_cron = cron.parse_cron_expression(
+        settings.ANALYTICS_SERVICE_EDGES_1H_ROLLUP_CRON
+    )
+    alert_cron = cron.parse_cron_expression(settings.ANALYTICS_ALERT_EVALUATOR_CRON)
+    notif_cleanup_cron = cron.parse_cron_expression(settings.ANALYTICS_NOTIFICATION_CLEANUP_CRON)
+    retention_cron = cron.parse_cron_expression(settings.ANALYTICS_RETENTION_CRON)
+    monitor_check_cron = cron.parse_cron_expression(settings.ANALYTICS_MONITOR_CHECK_CRON)
+    error_regression_cron = cron.parse_cron_expression(settings.ANALYTICS_ERROR_REGRESSION_CRON)
+    rir_refresh_cron = cron.parse_cron_expression(settings.ANALYTICS_RIR_REFRESH_CRON)
 
     scheduler.add_job(
         jobs.aggregate_log_metrics,
@@ -226,22 +231,6 @@ def setup_jobs() -> None:
     logger.info(f"  - Check Monitors: {settings.ANALYTICS_MONITOR_CHECK_CRON}")
     logger.info(f"  - Error Regression Detection: {settings.ANALYTICS_ERROR_REGRESSION_CRON}")
     logger.info(f"  - Refresh RIR IP-to-Country Ranges: {settings.ANALYTICS_RIR_REFRESH_CRON}")
-
-
-def _parse_cron_expression(cron_expr: str) -> dict:
-    parts = cron_expr.split()
-    if len(parts) != 5:
-        raise ValueError(
-            f"Invalid cron expression: {cron_expr}. Expected 5 parts (minute hour day month day_of_week)"
-        )
-
-    return {
-        "minute": parts[0],
-        "hour": parts[1],
-        "day": parts[2],
-        "month": parts[3],
-        "day_of_week": parts[4],
-    }
 
 
 async def main() -> None:
