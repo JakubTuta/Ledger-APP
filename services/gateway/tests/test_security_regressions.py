@@ -12,7 +12,8 @@ import pytest
 
 import gateway_service.proto.auth_pb2 as auth_pb2
 import gateway_service.proto.query_pb2 as query_pb2
-import gateway_service.services.net_guard as net_guard
+import gateway_service.services.guarded_http as guarded_http
+import ledger_common.net_guard as net_guard
 import tests.test_base as test_base
 
 API_KEY = "ledger_test_key"
@@ -315,7 +316,7 @@ class TestConnectorTestFirePinning:
         loop = asyncio.get_running_loop()
         with patch.object(loop, "getaddrinfo", _resolves_to("93.184.215.14")):
             async with httpx.AsyncClient(transport=httpx.MockTransport(record)) as http:
-                response = await net_guard.post_to_public_host(
+                response = await guarded_http.post_to_public_host(
                     http, "https://hooks.example.com:8443/notify?x=1", json={"a": 1}
                 )
 
@@ -333,4 +334,4 @@ class TestConnectorTestFirePinning:
         with patch.object(loop, "getaddrinfo", _resolves_to("93.184.215.14", "10.0.0.5")):
             async with httpx.AsyncClient(transport=transport) as http:
                 with pytest.raises(net_guard.UnsafeWebhookURLError):
-                    await net_guard.post_to_public_host(http, "https://hooks.example.com/x")
+                    await guarded_http.post_to_public_host(http, "https://hooks.example.com/x")

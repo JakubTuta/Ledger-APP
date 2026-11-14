@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import analytics_workers.jobs.alert_evaluator as alert_evaluator
-import analytics_workers.jobs.net_guard as net_guard
+import ledger_common.net_guard as net_guard
 
 
 def _now() -> datetime.datetime:
@@ -569,24 +569,3 @@ class TestSendEmail:
 
         assert delivered is False
         assert error == "SMTP credentials not configured"
-
-
-@pytest.mark.asyncio
-class TestNetGuard:
-    async def test_blocks_loopback(self):
-        with pytest.raises(net_guard.UnsafeWebhookURLError):
-            await net_guard.validate_webhook_url("https://127.0.0.1/hook")
-
-    async def test_blocks_link_local_metadata_address(self):
-        with pytest.raises(net_guard.UnsafeWebhookURLError):
-            await net_guard.validate_webhook_url("https://169.254.169.254/hook")
-
-    async def test_rejects_plain_http_by_default(self):
-        with pytest.raises(net_guard.UnsafeWebhookURLError):
-            await net_guard.validate_webhook_url("http://example.com/hook")
-
-    async def test_allows_plain_http_when_explicitly_enabled(self):
-        try:
-            await net_guard.validate_webhook_url("http://example.com/hook", allow_http=True)
-        except net_guard.UnsafeWebhookURLError as e:
-            pytest.fail(f"Unexpected rejection with allow_http=True: {e}")

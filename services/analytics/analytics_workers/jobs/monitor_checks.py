@@ -9,9 +9,10 @@ import sqlalchemy as sa
 
 import analytics_workers.config as config
 import analytics_workers.database as database
-import analytics_workers.jobs.net_guard as net_guard
+import analytics_workers.services.guarded_http as guarded_http
 import analytics_workers.redis_client as redis_client
 import analytics_workers.utils.logging as logging
+import ledger_common.net_guard as net_guard
 
 logger = logging.get_logger("jobs.monitor_checks")
 
@@ -71,7 +72,7 @@ async def _check_http_monitors(auth_session: sa.ext.asyncio.AsyncSession) -> Non
     settings = config.get_settings()
     semaphore = asyncio.Semaphore(_HTTP_CONCURRENCY)
 
-    async with net_guard.guarded_session() as http:
+    async with guarded_http.guarded_session() as http:
 
         async def _probe(m: typing.Any):
             async with semaphore:
@@ -99,7 +100,7 @@ async def _probe_http(
     try:
         # Every redirect hop is re-validated: following a Location blindly would
         # let a public monitor URL bounce the probe onto the internal network.
-        status = await net_guard.get_following_safe_redirects(
+        status = await guarded_http.get_following_safe_redirects(
             http,
             target_url,
             allow_http=settings.ALERT_WEBHOOK_ALLOW_HTTP,

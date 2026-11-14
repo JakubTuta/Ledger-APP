@@ -7,7 +7,8 @@ import gateway_service.proto.auth_pb2_grpc as auth_pb2_grpc
 import grpc
 import httpx
 from gateway_service import dependencies
-from gateway_service.services import net_guard
+from gateway_service.services import guarded_http
+import ledger_common.net_guard as net_guard
 from pydantic import BaseModel, Field
 
 router = fastapi.APIRouter(tags=["Alerts"])
@@ -434,7 +435,7 @@ async def _guarded_post(url: str, **kwargs) -> None:
     """
     try:
         async with httpx.AsyncClient(timeout=10.0) as http:
-            response = await net_guard.post_to_public_host(http, url, **kwargs)
+            response = await guarded_http.post_to_public_host(http, url, **kwargs)
             if response.status_code >= 400:
                 raise fastapi.HTTPException(
                     status_code=502, detail=f"Delivery returned HTTP {response.status_code}"

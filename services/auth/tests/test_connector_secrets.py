@@ -4,7 +4,8 @@ import unittest.mock
 import auth_service.config as config
 import auth_service.database as database
 import auth_service.models as models
-import auth_service.services.connector_secrets as connector_secrets
+import auth_service.services.connector_secrets_backfill as connector_secrets_backfill
+import ledger_common.connector_secrets as connector_secrets
 import pytest
 import sqlalchemy as sa
 from auth_service.proto import auth_pb2
@@ -102,7 +103,9 @@ class TestConnectorSecretsAtRest(BaseGrpcTest):
             )
         )
 
-        stored = connector_secrets.decrypt_config(await _stored_config(connector_id))
+        stored = connector_secrets.decrypt_config(
+            await _stored_config(connector_id), config.settings.CONNECTOR_SECRETS_KEY
+        )
         assert stored == {"url": "https://hooks.example.com/new", "hmac_secret": "s3cr3t-value"}
 
     async def test_startup_pass_encrypts_rows_saved_before_encryption(self):
@@ -120,15 +123,17 @@ class TestConnectorSecretsAtRest(BaseGrpcTest):
             legacy_id = legacy.id
 
         async with database.get_session() as session:
-            first_pass = await connector_secrets.rewrite_stored_configs(session)
+            first_pass = await connector_secrets_backfill.rewrite_stored_configs(session)
         async with database.get_session() as session:
-            second_pass = await connector_secrets.rewrite_stored_configs(session)
+            second_pass = await connector_secrets_backfill.rewrite_stored_configs(session)
 
         stored = await _stored_config(legacy_id)
         assert first_pass == 1
         assert second_pass == 0
         assert stored["api_key"].startswith("enc:v1:")
-        assert connector_secrets.decrypt_config(stored) == {"api_key": "plain-key"}
+        assert connector_secrets.decrypt_config(stored, config.settings.CONNECTOR_SECRETS_KEY) == {
+            "api_key": "plain-key"
+        }
 
     async def test_rotation_moves_secrets_to_the_new_key(self):
         account_id = await self._account_id()
@@ -139,10 +144,12 @@ class TestConnectorSecretsAtRest(BaseGrpcTest):
             config.settings, "CONNECTOR_SECRETS_KEY", f"{_NEW_KEY},{_OLD_KEY}"
         ):
             async with database.get_session() as session:
-                rotated = await connector_secrets.rewrite_stored_configs(session)
+                rotated = await connector_secrets_backfill.rewrite_stored_configs(session)
 
         with unittest.mock.patch.object(config.settings, "CONNECTOR_SECRETS_KEY", _NEW_KEY):
-            stored = connector_secrets.decrypt_config(await _stored_config(connector_id))
+            stored = connector_secrets.decrypt_config(
+                await _stored_config(connector_id), config.settings.CONNECTOR_SECRETS_KEY
+            )
 
         assert rotated == 1
         assert stored == {"api_key": "og-key"}

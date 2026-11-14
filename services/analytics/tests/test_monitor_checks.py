@@ -110,7 +110,7 @@ async def _insert_heartbeat_monitor(
 @pytest.fixture
 def bypass_ssrf_guard():
     with patch(
-        "analytics_workers.jobs.net_guard.validate_webhook_url",
+        "ledger_common.net_guard.validate_webhook_url",
         return_value=None,
     ):
         yield

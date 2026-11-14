@@ -2,11 +2,11 @@ import datetime
 from unittest.mock import AsyncMock, patch
 
 import cryptography.fernet as fernet
+import ledger_common.connector_secrets as connector_secrets
 import pytest
 
 import analytics_workers.config as config
 import analytics_workers.jobs.alert_evaluator as alert_evaluator
-import analytics_workers.services.connector_secrets as connector_secrets
 
 _KEY = "IFmJbAUZIllVQ4ShSzg7B4tGgQ2R1A_wQzzMmlqSUMI="
 _OTHER_KEY = "2jxIqg-faRcqQOw4cyaxD0Vbw9kYy4JJSU9rF6oVIks="
@@ -21,7 +21,9 @@ class TestDecryptConfig:
         stored = {"url": _encrypted("https://hooks.example.com/x"), "address": "ops@example.com"}
 
         with patch.object(config.settings, "CONNECTOR_SECRETS_KEY", _KEY):
-            decrypted = connector_secrets.decrypt_config(stored)
+            decrypted = connector_secrets.decrypt_config(
+                stored, config.settings.CONNECTOR_SECRETS_KEY
+            )
 
         assert decrypted == {"url": "https://hooks.example.com/x", "address": "ops@example.com"}
 
@@ -29,14 +31,16 @@ class TestDecryptConfig:
         stored = {"api_key": _encrypted("og-key", key=_KEY)}
 
         with patch.object(config.settings, "CONNECTOR_SECRETS_KEY", f"{_OTHER_KEY},{_KEY}"):
-            assert connector_secrets.decrypt_config(stored) == {"api_key": "og-key"}
+            assert connector_secrets.decrypt_config(
+                stored, config.settings.CONNECTOR_SECRETS_KEY
+            ) == {"api_key": "og-key"}
 
     def test_a_wrong_key_is_reported_not_returned_as_ciphertext(self):
         stored = {"api_key": _encrypted("og-key", key=_KEY)}
 
         with patch.object(config.settings, "CONNECTOR_SECRETS_KEY", _OTHER_KEY):
             with pytest.raises(connector_secrets.ConnectorSecretsError):
-                connector_secrets.decrypt_config(stored)
+                connector_secrets.decrypt_config(stored, config.settings.CONNECTOR_SECRETS_KEY)
 
 
 @pytest.mark.asyncio

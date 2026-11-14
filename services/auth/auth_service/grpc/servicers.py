@@ -3,12 +3,13 @@ import json
 import secrets
 
 import grpc
+import ledger_common.connector_secrets as connector_secrets
 import sqlalchemy as sa
 import sqlalchemy.dialects.postgresql as sa_postgresql
 from auth_service import config, database
 from auth_service import models
 from auth_service.proto import auth_pb2, auth_pb2_grpc
-from auth_service.services import auth_service, connector_secrets, dashboard_service
+from auth_service.services import auth_service, dashboard_service
 from auth_service.utils import jwt_utils
 from redis.asyncio import Redis
 
@@ -1689,7 +1690,9 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     account_id=request.account_id,
                     kind=request.kind,
                     name=request.name or request.kind,
-                    config=connector_secrets.encrypt_config(config_dict),
+                    config=connector_secrets.encrypt_config(
+                        config_dict, config.settings.CONNECTOR_SECRETS_KEY
+                    ),
                     enabled=True,
                 )
                 session.add(connector)
@@ -1729,7 +1732,9 @@ class AuthServicer(auth_pb2_grpc.AuthServiceServicer):
                     for field in _WRITE_ONLY_CONNECTOR_FIELDS:
                         if field in existing and field not in new_config:
                             new_config[field] = existing[field]
-                    connector.config = connector_secrets.encrypt_config(new_config)
+                    connector.config = connector_secrets.encrypt_config(
+                        new_config, config.settings.CONNECTOR_SECRETS_KEY
+                    )
                 await session.commit()
                 await session.refresh(connector)
                 return auth_pb2.UpdateConnectorResponse(connector=_connector_to_proto(connector))
@@ -2201,7 +2206,9 @@ _WRITE_ONLY_CONNECTOR_FIELDS = ("hmac_secret", "integration_key", "api_key")
 
 
 def _connector_to_proto(c: models.Connector, include_secrets: bool = False) -> auth_pb2.Connector:
-    config_safe = connector_secrets.decrypt_config(c.config or {})
+    config_safe = connector_secrets.decrypt_config(
+        c.config or {}, config.settings.CONNECTOR_SECRETS_KEY
+    )
     if not include_secrets:
         for field in _WRITE_ONLY_CONNECTOR_FIELDS:
             config_safe.pop(field, None)

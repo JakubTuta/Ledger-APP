@@ -1,7 +1,6 @@
 """Regression tests for outbound-request hardening and connector ownership."""
 
 import datetime
-import ipaddress
 import json
 import urllib.parse
 from unittest.mock import AsyncMock, patch
@@ -14,31 +13,10 @@ from aiohttp.test_utils import TestServer
 
 import analytics_workers.database as database
 import analytics_workers.jobs.alert_evaluator as alert_evaluator
-import analytics_workers.jobs.net_guard as net_guard
+import analytics_workers.services.guarded_http as guarded_http
+import ledger_common.net_guard as net_guard
 
 
-class TestBlockedAddresses:
-    @pytest.mark.parametrize(
-        "address",
-        [
-            "127.0.0.1",
-            "::ffff:127.0.0.1",  # IPv4-mapped loopback
-            "::ffff:169.254.169.254",  # IPv4-mapped cloud metadata
-            "100.64.0.1",  # shared address space (CGNAT)
-            "172.20.0.5",  # docker bridge
-            "0.0.0.0",
-            "224.0.0.1",
-        ],
-    )
-    def test_non_public_addresses_are_blocked(self, address):
-        assert net_guard.is_blocked_address(ipaddress.ip_address(address))
-
-    @pytest.mark.parametrize("address", ["93.184.215.14", "2606:4700:4700::1111"])
-    def test_public_addresses_are_allowed(self, address):
-        assert not net_guard.is_blocked_address(ipaddress.ip_address(address))
-
-
-@pytest.mark.asyncio
 class TestRedirectHops:
     async def _local_server(self) -> TestServer:
         app = web.Application()
@@ -55,8 +33,8 @@ class TestRedirectHops:
         server = await self._local_server()
         try:
             with patch.object(net_guard, "validate_webhook_url", AsyncMock(return_value=None)):
-                async with net_guard.guarded_session() as http:
-                    status = await net_guard.get_following_safe_redirects(
+                async with guarded_http.guarded_session() as http:
+                    status = await guarded_http.get_following_safe_redirects(
                         http,
                         f"http://127.0.0.1:{server.port}/start",
                         True,
@@ -77,9 +55,9 @@ class TestRedirectHops:
 
         try:
             with patch.object(net_guard, "validate_webhook_url", allow_only_test_server):
-                async with net_guard.guarded_session() as http:
+                async with guarded_http.guarded_session() as http:
                     with pytest.raises(net_guard.UnsafeWebhookURLError):
-                        await net_guard.get_following_safe_redirects(
+                        await guarded_http.get_following_safe_redirects(
                             http,
                             f"http://127.0.0.1:{server.port}/to-metadata",
                             True,

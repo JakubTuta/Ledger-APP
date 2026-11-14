@@ -1,18 +1,14 @@
-"""
-SSRF guard for connector test-fire delivery (webhook / slack / discord).
+"""SSRF guard for outbound requests to user-supplied URLs (webhook / Slack / Discord / monitors).
 
-Vendored from analytics_workers.jobs.net_guard (Phase 4.1): the gateway
-service and the analytics worker are separate deployable services with no
-shared package, so this is a deliberate, small, dependency-free copy rather
-than a cross-service import. Keep the two in sync if the blocklist changes.
+The address checks live here; the HTTP-client-specific parts that keep a connection on the vetted
+address (aiohttp in analytics, httpx in the gateway) are each service's `guarded_http` module.
+Stdlib only, so every service can import it.
 """
 
 import asyncio
 import ipaddress
 import socket
 import urllib.parse
-
-import httpx
 
 
 class UnsafeWebhookURLError(Exception):
@@ -64,22 +60,3 @@ async def validate_webhook_url(
                 f"Webhook host {hostname} resolves to a private/reserved address ({ip})"
             )
     return addresses[0]
-
-
-async def post_to_public_host(http: httpx.AsyncClient, url: str, **kwargs) -> httpx.Response:
-    """POST `url` over a connection pinned to the address that was validated.
-
-    Letting httpx resolve the name again at connect time leaves a window in
-    which a DNS record can answer public for the check and private for the
-    connection. The original hostname still drives the Host header and the TLS
-    SNI/certificate check, so pinning changes only which IP is dialled.
-    """
-    address = await validate_webhook_url(url)
-    target = httpx.URL(url)
-    headers = {**kwargs.pop("headers", {}), "Host": target.netloc.decode("ascii")}
-    return await http.post(
-        target.copy_with(host=str(address)),
-        headers=headers,
-        extensions={"sni_hostname": target.host},
-        **kwargs,
-    )

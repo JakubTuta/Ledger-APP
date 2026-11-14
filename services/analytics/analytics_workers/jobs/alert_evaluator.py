@@ -13,10 +13,11 @@ import aiosmtplib
 
 import analytics_workers.config as config
 import analytics_workers.database as database
-import analytics_workers.jobs.net_guard as net_guard
 import analytics_workers.redis_client as redis_client
-import analytics_workers.services.connector_secrets as connector_secrets
+import analytics_workers.services.guarded_http as guarded_http
 import analytics_workers.utils.logging as logging
+import ledger_common.connector_secrets as connector_secrets
+import ledger_common.net_guard as net_guard
 import sqlalchemy as sa
 
 logger = logging.get_logger("jobs.alert_evaluator")
@@ -794,7 +795,9 @@ async def _dispatch_to_connectors(
         connector_kind = connector[1]
         connector_name = connector[2]
         try:
-            connector_config = connector_secrets.decrypt_config(connector[3] or {})
+            connector_config = connector_secrets.decrypt_config(
+                connector[3] or {}, config.settings.CONNECTOR_SECRETS_KEY
+            )
         except connector_secrets.ConnectorSecretsError as e:
             logger.error(f"Rule {rule_id} connector {connector_id}: {e}")
             connectors_sent.append(
@@ -1103,7 +1106,7 @@ async def _post_webhook(url: str, secret: str, payload: dict) -> tuple[bool, str
     sig = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
 
     try:
-        async with net_guard.guarded_session() as http:
+        async with guarded_http.guarded_session() as http:
             response = await http.post(
                 url,
                 data=body,
@@ -1134,7 +1137,7 @@ async def _post_chat_webhook(url: str, json_body: dict, label: str) -> tuple[boo
         return False, str(e)
 
     try:
-        async with net_guard.guarded_session() as http:
+        async with guarded_http.guarded_session() as http:
             response = await http.post(
                 url,
                 json=json_body,
