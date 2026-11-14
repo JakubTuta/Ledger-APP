@@ -35,8 +35,8 @@ class TestLoadTesting(BaseIngestionTest):
                 "message": f"Rapid log {i}",
             }
             proto_log = create_proto_log(log_dict)
-            request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
-            return await self.stub.IngestLog(request)
+            request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
+            return await self.stub.IngestLogBatch(request)
 
         start = time.time()
 
@@ -99,9 +99,9 @@ class TestLoadTesting(BaseIngestionTest):
             }
 
             proto_log = create_proto_log(log_dict)
-            request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
+            request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
 
-            response = await self.stub.IngestLog(request)
+            response = await self.stub.IngestLogBatch(request)
             assert response.success is True
             logs_sent += 1
 
@@ -162,8 +162,8 @@ class TestLoadTesting(BaseIngestionTest):
                     "message": f"Single log {i}",
                 }
                 proto_log = create_proto_log(log_dict)
-                request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
-                results.append(await self.stub.IngestLog(request))
+                request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
+                results.append(await self.stub.IngestLogBatch(request))
             return results
 
         async def send_batch_logs(count, batch_size):
@@ -211,8 +211,8 @@ class TestLoadTesting(BaseIngestionTest):
                 "message": f"Concurrent log {i}",
             }
             proto_log = create_proto_log(log_dict)
-            request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
-            return await self.stub.IngestLog(request)
+            request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
+            return await self.stub.IngestLogBatch(request)
 
         start = time.time()
 
@@ -375,8 +375,8 @@ class TestLoadTesting(BaseIngestionTest):
                     "message": f"Burst {burst_num} log {i}",
                 }
                 proto_log = create_proto_log(log_dict)
-                request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
-                return await self.stub.IngestLog(request)
+                request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
+                return await self.stub.IngestLogBatch(request)
 
             tasks = [send_log(i) for i in range(logs_per_burst)]
             results = await asyncio.gather(*tasks)

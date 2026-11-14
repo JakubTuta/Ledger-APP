@@ -84,7 +84,7 @@ class TestStorageWorker(BaseIngestionTest):
         """Reprocessing the same log_id (e.g. after a lost ACK) inserts only one row."""
         log = self._make_log(message="Redelivered log")
         log.log_entry.log_id = "fixed-idempotency-key"
-        await queue_service.enqueue_log(log)
+        await queue_service.enqueue_logs_batch([log])
 
         payload = await self.consume_one_payload()
         assert payload is not None
@@ -102,7 +102,7 @@ class TestStorageWorker(BaseIngestionTest):
     async def test_worker_assigns_fallback_log_id_when_absent(self):
         """Logs without a client log_id get a deterministic server-computed fallback."""
         log = self._make_log(message="No client log_id")
-        await queue_service.enqueue_log(log)
+        await queue_service.enqueue_logs_batch([log])
 
         payload = await self.consume_one_payload()
         assert payload is not None
@@ -121,7 +121,7 @@ class TestStorageWorker(BaseIngestionTest):
     async def test_worker_processes_single_log(self):
         """Worker inserts a single log payload into the database."""
         log = self._make_log(message="Test worker log")
-        await queue_service.enqueue_log(log)
+        await queue_service.enqueue_logs_batch([log])
 
         payload = await self.consume_one_payload()
         assert payload is not None
@@ -169,7 +169,7 @@ class TestStorageWorker(BaseIngestionTest):
             ingested_at=datetime.datetime.now(datetime.timezone.utc),
             error_fingerprint="a" * 64,
         )
-        await queue_service.enqueue_log(log)
+        await queue_service.enqueue_logs_batch([log])
 
         payload = await self.consume_one_payload()
         assert payload is not None
@@ -242,7 +242,7 @@ class TestStorageWorker(BaseIngestionTest):
             ),
             ingested_at=datetime.datetime.now(datetime.timezone.utc),
         )
-        await queue_service.enqueue_log(log)
+        await queue_service.enqueue_logs_batch([log])
 
         payload = await self.consume_one_payload()
         assert payload is not None
@@ -277,7 +277,7 @@ class TestStorageWorker(BaseIngestionTest):
             ),
             ingested_at=now,
         )
-        await queue_service.enqueue_log(log)
+        await queue_service.enqueue_logs_batch([log])
 
         payload = await self.consume_one_payload()
         assert payload is not None

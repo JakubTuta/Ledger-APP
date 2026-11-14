@@ -5,9 +5,6 @@ package ingestion;
 // ==================== Log Ingestion Service ====================
 
 service IngestionService {
-    // Ingest a single log entry
-    rpc IngestLog(IngestLogRequest) returns (IngestLogResponse);
-
     // Ingest a batch of log entries
     rpc IngestLogBatch(IngestLogBatchRequest) returns (IngestLogBatchResponse);
 
@@ -62,17 +59,6 @@ message LogEntry {
     // W3C trace context of the record (32 / 16 lowercase hex chars).
     optional string trace_id = 20;
     optional string span_id = 21;
-}
-
-message IngestLogRequest {
-    int64 project_id = 1;
-    LogEntry log = 2;
-}
-
-message IngestLogResponse {
-    bool success = 1;
-    string message = 2;
-    optional string error = 3;
 }
 
 message IngestLogBatchRequest {

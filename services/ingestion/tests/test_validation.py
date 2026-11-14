@@ -1,6 +1,5 @@
 import datetime
 
-import grpc
 import pytest
 
 import ingestion_service.proto.ingestion_pb2 as ingestion_pb2
@@ -28,9 +27,9 @@ class TestValidation(BaseIngestionTest):
         }
 
         proto_log = create_proto_log(log_dict)
-        request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
+        request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
 
-        response = await self.stub.IngestLog(request)
+        response = await self.stub.IngestLogBatch(request)
         assert response.success is True
         print("✅ Valid single log accepted")
 
@@ -42,12 +41,12 @@ class TestValidation(BaseIngestionTest):
         }
 
         proto_log = create_proto_log(log_dict)
-        request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
+        request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
 
-        with pytest.raises(grpc.RpcError) as exc_info:
-            await self.stub.IngestLog(request)
+        response = await self.stub.IngestLogBatch(request)
 
-        assert exc_info.value.code() == grpc.StatusCode.INVALID_ARGUMENT
+        assert response.queued == 0
+        assert response.failed == 1
         print("✅ Missing required fields rejected")
 
     async def test_invalid_level(self):
@@ -61,13 +60,13 @@ class TestValidation(BaseIngestionTest):
         }
 
         proto_log = create_proto_log(log_dict)
-        request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
+        request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
 
-        with pytest.raises(grpc.RpcError) as exc_info:
-            await self.stub.IngestLog(request)
+        response = await self.stub.IngestLogBatch(request)
 
-        assert exc_info.value.code() == grpc.StatusCode.INVALID_ARGUMENT
-        assert "level" in str(exc_info.value.details()).lower()
+        assert response.queued == 0
+        assert response.failed == 1
+        assert "level" in response.error.lower()
         print("✅ Invalid level rejected")
 
     async def test_invalid_log_type(self):
@@ -81,12 +80,12 @@ class TestValidation(BaseIngestionTest):
         }
 
         proto_log = create_proto_log(log_dict)
-        request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
+        request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
 
-        with pytest.raises(grpc.RpcError) as exc_info:
-            await self.stub.IngestLog(request)
+        response = await self.stub.IngestLogBatch(request)
 
-        assert exc_info.value.code() == grpc.StatusCode.INVALID_ARGUMENT
+        assert response.queued == 0
+        assert response.failed == 1
         print("✅ Invalid log type rejected")
 
     async def test_invalid_importance(self):
@@ -100,12 +99,12 @@ class TestValidation(BaseIngestionTest):
         }
 
         proto_log = create_proto_log(log_dict)
-        request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
+        request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
 
-        with pytest.raises(grpc.RpcError) as exc_info:
-            await self.stub.IngestLog(request)
+        response = await self.stub.IngestLogBatch(request)
 
-        assert exc_info.value.code() == grpc.StatusCode.INVALID_ARGUMENT
+        assert response.queued == 0
+        assert response.failed == 1
         print("✅ Invalid importance rejected")
 
     async def test_future_timestamp_within_tolerance(self):
@@ -121,9 +120,9 @@ class TestValidation(BaseIngestionTest):
         }
 
         proto_log = create_proto_log(log_dict)
-        request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
+        request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
 
-        response = await self.stub.IngestLog(request)
+        response = await self.stub.IngestLogBatch(request)
         assert response.success is True
         print("✅ Future timestamp within tolerance accepted")
 
@@ -140,16 +139,13 @@ class TestValidation(BaseIngestionTest):
         }
 
         proto_log = create_proto_log(log_dict)
-        request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
+        request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
 
-        with pytest.raises(grpc.RpcError) as exc_info:
-            await self.stub.IngestLog(request)
+        response = await self.stub.IngestLogBatch(request)
 
-        assert exc_info.value.code() == grpc.StatusCode.INVALID_ARGUMENT
-        assert (
-            "timestamp" in str(exc_info.value.details()).lower()
-            or "future" in str(exc_info.value.details()).lower()
-        )
+        assert response.queued == 0
+        assert response.failed == 1
+        assert "timestamp" in response.error.lower() or "future" in response.error.lower()
         print("✅ Future timestamp beyond tolerance rejected")
 
     async def test_message_too_long(self):
@@ -163,12 +159,12 @@ class TestValidation(BaseIngestionTest):
         }
 
         proto_log = create_proto_log(log_dict)
-        request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
+        request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
 
-        with pytest.raises(grpc.RpcError) as exc_info:
-            await self.stub.IngestLog(request)
+        response = await self.stub.IngestLogBatch(request)
 
-        assert exc_info.value.code() == grpc.StatusCode.INVALID_ARGUMENT
+        assert response.queued == 0
+        assert response.failed == 1
         print("✅ Message too long rejected")
 
     async def test_attributes_too_large(self):
@@ -185,12 +181,12 @@ class TestValidation(BaseIngestionTest):
         }
 
         proto_log = create_proto_log(log_dict)
-        request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
+        request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
 
-        with pytest.raises(grpc.RpcError) as exc_info:
-            await self.stub.IngestLog(request)
+        response = await self.stub.IngestLogBatch(request)
 
-        assert exc_info.value.code() == grpc.StatusCode.INVALID_ARGUMENT
+        assert response.queued == 0
+        assert response.failed == 1
         print("✅ Attributes too large rejected")
 
     async def test_exception_fields_validation(self):
@@ -207,9 +203,9 @@ class TestValidation(BaseIngestionTest):
         }
 
         proto_log = create_proto_log(log_dict)
-        request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
+        request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
 
-        response = await self.stub.IngestLog(request)
+        response = await self.stub.IngestLogBatch(request)
         assert response.success is True
         print("✅ Exception log with all fields accepted")
 
@@ -224,12 +220,12 @@ class TestValidation(BaseIngestionTest):
         }
 
         proto_log = create_proto_log(log_dict)
-        request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
+        request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
 
-        with pytest.raises(grpc.RpcError) as exc_info:
-            await self.stub.IngestLog(request)
+        response = await self.stub.IngestLogBatch(request)
 
-        assert exc_info.value.code() == grpc.StatusCode.INVALID_ARGUMENT
+        assert response.queued == 0
+        assert response.failed == 1
         print("✅ Exception missing required fields rejected")
 
     async def test_batch_validation_all_valid(self):
@@ -330,9 +326,9 @@ class TestValidation(BaseIngestionTest):
         }
 
         proto_log = create_proto_log(log_dict)
-        request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
+        request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
 
-        response = await self.stub.IngestLog(request)
+        response = await self.stub.IngestLogBatch(request)
         assert response.success is True
         print("✅ Log with optional fields accepted")
 
@@ -346,9 +342,9 @@ class TestValidation(BaseIngestionTest):
         }
 
         proto_log = create_proto_log(log_dict)
-        request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
+        request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
 
-        response = await self.stub.IngestLog(request)
+        response = await self.stub.IngestLogBatch(request)
         assert response.success is True
         print("✅ Minimal log with only required fields accepted")
 
@@ -366,12 +362,12 @@ class TestValidation(BaseIngestionTest):
         }
 
         proto_log = create_proto_log(log_dict)
-        request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
+        request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
 
-        with pytest.raises(grpc.RpcError) as exc_info:
-            await self.stub.IngestLog(request)
+        response = await self.stub.IngestLogBatch(request)
 
-        assert exc_info.value.code() == grpc.StatusCode.INVALID_ARGUMENT
+        assert response.queued == 0
+        assert response.failed == 1
         print("✅ Stack trace too long rejected")
 
     async def test_all_log_levels(self):
@@ -388,9 +384,9 @@ class TestValidation(BaseIngestionTest):
             }
 
             proto_log = create_proto_log(log_dict)
-            request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
+            request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
 
-            response = await self.stub.IngestLog(request)
+            response = await self.stub.IngestLogBatch(request)
             assert response.success is True
 
         print("✅ All log levels accepted")
@@ -414,9 +410,9 @@ class TestValidation(BaseIngestionTest):
                 log_dict["stack_trace"] = "Test stack trace"
 
             proto_log = create_proto_log(log_dict)
-            request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
+            request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
 
-            response = await self.stub.IngestLog(request)
+            response = await self.stub.IngestLogBatch(request)
             assert response.success is True
 
         print("✅ All log types accepted")
@@ -435,9 +431,9 @@ class TestValidation(BaseIngestionTest):
             }
 
             proto_log = create_proto_log(log_dict)
-            request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
+            request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
 
-            response = await self.stub.IngestLog(request)
+            response = await self.stub.IngestLogBatch(request)
             assert response.success is True
 
         print("✅ All importance levels accepted")

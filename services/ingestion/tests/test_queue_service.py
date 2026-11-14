@@ -31,7 +31,7 @@ class TestQueueService(BaseIngestionTest):
         """Enqueueing a single log publishes one message to the queue."""
         log = self._make_log()
 
-        await queue_service.enqueue_log(log)
+        await queue_service.enqueue_logs_batch([log])
 
         count = await self.get_queue_message_count()
         assert count == 1
@@ -102,7 +102,7 @@ class TestQueueService(BaseIngestionTest):
             error_fingerprint="a" * 64,
         )
 
-        await queue_service.enqueue_log(original)
+        await queue_service.enqueue_logs_batch([original])
 
         unpacked = await self.consume_one_payload()
         assert unpacked is not None
@@ -119,8 +119,8 @@ class TestQueueService(BaseIngestionTest):
         log_p1 = self._make_log(project_id=1, message="Project 1 log")
         log_p2 = self._make_log(project_id=2, message="Project 2 log")
 
-        await queue_service.enqueue_log(log_p1)
-        await queue_service.enqueue_log(log_p2)
+        await queue_service.enqueue_logs_batch([log_p1])
+        await queue_service.enqueue_logs_batch([log_p2])
 
         payloads = await self.consume_all_payloads(2)
         messages = {p["message"] for p in payloads}
@@ -151,7 +151,7 @@ class TestQueueService(BaseIngestionTest):
                 )
 
         with pytest.raises(QueueFullError):
-            await queue_service.enqueue_log(log)
+            await queue_service.enqueue_logs_batch([log])
 
     async def test_complex_attributes_preserved(self):
         """Nested JSONB attributes survive the queue round-trip."""
@@ -172,7 +172,7 @@ class TestQueueService(BaseIngestionTest):
             ingested_at=datetime.datetime.now(datetime.timezone.utc),
         )
 
-        await queue_service.enqueue_log(log)
+        await queue_service.enqueue_logs_batch([log])
 
         unpacked = await self.consume_one_payload()
         assert unpacked is not None

@@ -36,11 +36,6 @@ class IngestionServiceStub(object):
         Args:
             channel: A grpc.Channel.
         """
-        self.IngestLog = channel.unary_unary(
-                '/ingestion.IngestionService/IngestLog',
-                request_serializer=ingestion__pb2.IngestLogRequest.SerializeToString,
-                response_deserializer=ingestion__pb2.IngestLogResponse.FromString,
-                _registered_method=True)
         self.IngestLogBatch = channel.unary_unary(
                 '/ingestion.IngestionService/IngestLogBatch',
                 request_serializer=ingestion__pb2.IngestLogBatchRequest.SerializeToString,
@@ -62,13 +57,6 @@ class IngestionServiceServicer(object):
     """==================== Log Ingestion Service ====================
 
     """
-
-    def IngestLog(self, request, context):
-        """Ingest a single log entry
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
 
     def IngestLogBatch(self, request, context):
         """Ingest a batch of log entries
@@ -96,11 +84,6 @@ class IngestionServiceServicer(object):
 
 def add_IngestionServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'IngestLog': grpc.unary_unary_rpc_method_handler(
-                    servicer.IngestLog,
-                    request_deserializer=ingestion__pb2.IngestLogRequest.FromString,
-                    response_serializer=ingestion__pb2.IngestLogResponse.SerializeToString,
-            ),
             'IngestLogBatch': grpc.unary_unary_rpc_method_handler(
                     servicer.IngestLogBatch,
                     request_deserializer=ingestion__pb2.IngestLogBatchRequest.FromString,
@@ -128,33 +111,6 @@ class IngestionService(object):
     """==================== Log Ingestion Service ====================
 
     """
-
-    @staticmethod
-    def IngestLog(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/ingestion.IngestionService/IngestLog',
-            ingestion__pb2.IngestLogRequest.SerializeToString,
-            ingestion__pb2.IngestLogResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
 
     @staticmethod
     def IngestLogBatch(request,

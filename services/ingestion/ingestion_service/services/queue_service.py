@@ -85,16 +85,6 @@ async def _publish_envelope(
         raise QueueFullError(f"Queue full for project {project_id}: broker rejected message") from e
 
 
-async def enqueue_log(enriched_log: schemas.EnrichedLogEntry) -> None:
-    pool = await rabbitmq_client.get_channel_pool()
-
-    async with pool.acquire() as channel:
-        exchange = await channel.get_exchange(config.settings.RABBITMQ_EXCHANGE)
-        await _publish_envelope(
-            channel, exchange, enriched_log.project_id, [_build_log_dict(enriched_log)], {}
-        )
-
-
 async def enqueue_logs_batch(
     enriched_logs: list[schemas.EnrichedLogEntry], resources: dict[int, str] | None = None
 ) -> None:

@@ -76,55 +76,6 @@ class IngestionServicer(ingestion_pb2_grpc.IngestionServiceServicer):
                 redis_client, enabled=config.settings.NOTIFICATIONS_ENABLED
             )
 
-    async def IngestLog(
-        self, request: ingestion_pb2.IngestLogRequest, context: grpc.aio.ServicerContext
-    ) -> ingestion_pb2.IngestLogResponse:
-        try:
-            log_entry = _proto_to_log_entry(request.log, resources={})
-
-            enriched_log = enricher.enrich_log_entry(log_entry, request.project_id)
-
-            await queue_service.enqueue_log(enriched_log)
-
-            if self.notification_publisher:
-                log = enriched_log.log_entry
-                if self.notification_publisher.should_notify(
-                    log.level,
-                    log.log_type,
-                    config.settings.NOTIFICATIONS_PUBLISH_ERRORS,
-                    config.settings.NOTIFICATIONS_PUBLISH_CRITICAL,
-                ):
-                    notification = _build_error_notification(enriched_log)
-                    await self.notification_publisher.publish_error_notification(
-                        enriched_log.project_id, notification
-                    )
-
-            return ingestion_pb2.IngestLogResponse(
-                success=True,
-                message="Log accepted for processing",
-            )
-
-        except queue_service.QueueFullError as e:
-            logger.warning(f"Queue full for project {request.project_id}: {e}")
-            await context.abort(
-                grpc.StatusCode.RESOURCE_EXHAUSTED,
-                "Service temporarily unavailable - queue full",
-            )
-
-        except ValueError as e:
-            logger.warning(f"Validation error for project {request.project_id}: {e}")
-            await context.abort(
-                grpc.StatusCode.INVALID_ARGUMENT,
-                f"Invalid log entry: {str(e)}",
-            )
-
-        except Exception as e:
-            logger.error(f"Failed to ingest log: {e}", exc_info=True)
-            await context.abort(
-                grpc.StatusCode.INTERNAL,
-                "Failed to ingest log",
-            )
-
     async def IngestLogBatch(
         self,
         request: ingestion_pb2.IngestLogBatchRequest,

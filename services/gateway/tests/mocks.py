@@ -527,18 +527,9 @@ class MockAuthStub:
 
 class MockIngestionStub:
     def __init__(self):
-        self.ingest_log_response = None
         self.ingest_log_batch_response = None
         self.ingest_spans_batch_response = None
         self.ingest_metric_points_batch_response = None
-
-    async def IngestLog(self, request, timeout=None):
-        if self.ingest_log_response:
-            return self.ingest_log_response
-        return ingestion_pb2.IngestLogResponse(
-            success=True,
-            message="Log accepted for processing",
-        )
 
     async def IngestLogBatch(self, request, timeout=None):
         if self.ingest_log_batch_response:

@@ -97,24 +97,6 @@ class LogEntry(_message.Message):
     span_id: str
     def __init__(self, timestamp: _Optional[str] = ..., level: _Optional[str] = ..., log_type: _Optional[str] = ..., importance: _Optional[str] = ..., message: _Optional[str] = ..., error_type: _Optional[str] = ..., error_message: _Optional[str] = ..., stack_trace: _Optional[str] = ..., environment: _Optional[str] = ..., release: _Optional[str] = ..., sdk_version: _Optional[str] = ..., platform: _Optional[str] = ..., platform_version: _Optional[str] = ..., attributes: _Optional[str] = ..., log_id: _Optional[str] = ..., client_channel: _Optional[str] = ..., client_country: _Optional[str] = ..., resource_hash: _Optional[int] = ..., service_name: _Optional[str] = ..., trace_id: _Optional[str] = ..., span_id: _Optional[str] = ...) -> None: ...
 
-class IngestLogRequest(_message.Message):
-    __slots__ = ("project_id", "log")
-    PROJECT_ID_FIELD_NUMBER: _ClassVar[int]
-    LOG_FIELD_NUMBER: _ClassVar[int]
-    project_id: int
-    log: LogEntry
-    def __init__(self, project_id: _Optional[int] = ..., log: _Optional[_Union[LogEntry, _Mapping]] = ...) -> None: ...
-
-class IngestLogResponse(_message.Message):
-    __slots__ = ("success", "message", "error")
-    SUCCESS_FIELD_NUMBER: _ClassVar[int]
-    MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    ERROR_FIELD_NUMBER: _ClassVar[int]
-    success: bool
-    message: str
-    error: str
-    def __init__(self, success: bool = ..., message: _Optional[str] = ..., error: _Optional[str] = ...) -> None: ...
-
 class IngestLogBatchRequest(_message.Message):
     __slots__ = ("project_id", "logs", "resources")
     class ResourcesEntry(_message.Message):

@@ -24,9 +24,9 @@ class TestSingleLogIngestion(BaseIngestionTest):
         }
 
         proto_log = create_proto_log(log_dict)
-        request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
+        request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
 
-        response = await self.stub.IngestLog(request)
+        response = await self.stub.IngestLogBatch(request)
         assert response.success is True
         print("✅ Simple log ingested successfully")
 
@@ -47,9 +47,9 @@ class TestSingleLogIngestion(BaseIngestionTest):
         }
 
         proto_log = create_proto_log(log_dict)
-        request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
+        request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
 
-        response = await self.stub.IngestLog(request)
+        response = await self.stub.IngestLogBatch(request)
         assert response.success is True
         print("✅ Log with attributes ingested successfully")
 
@@ -74,9 +74,9 @@ ConnectionError: Unable to connect to database server""",
         }
 
         proto_log = create_proto_log(log_dict)
-        request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
+        request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
 
-        response = await self.stub.IngestLog(request)
+        response = await self.stub.IngestLogBatch(request)
         assert response.success is True
         print("✅ Error log with exception ingested successfully")
 
@@ -91,9 +91,9 @@ ConnectionError: Unable to connect to database server""",
         }
 
         proto_log1 = create_proto_log(log_dict1)
-        request1 = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log1)
+        request1 = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log1])
 
-        response1 = await self.stub.IngestLog(request1)
+        response1 = await self.stub.IngestLogBatch(request1)
         assert response1.success is True
 
         await infra.reset_redis(self.redis)
@@ -107,9 +107,9 @@ ConnectionError: Unable to connect to database server""",
         }
 
         proto_log2 = create_proto_log(log_dict2)
-        request2 = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log2)
+        request2 = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log2])
 
-        response2 = await self.stub.IngestLog(request2)
+        response2 = await self.stub.IngestLogBatch(request2)
         assert response2.success is True
 
         print("✅ Log correctly enqueued to Redis")
@@ -128,9 +128,9 @@ ConnectionError: Unable to connect to database server""",
         }
 
         proto_log = create_proto_log(log_dict)
-        request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
+        request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
 
-        response = await self.stub.IngestLog(request)
+        response = await self.stub.IngestLogBatch(request)
         assert response.success is True
         print("✅ Log with environment and release ingested successfully")
 
@@ -152,9 +152,9 @@ ConnectionError: Unable to connect to database server""",
         }
 
         proto_log = create_proto_log(log_dict)
-        request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
+        request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
 
-        response = await self.stub.IngestLog(request)
+        response = await self.stub.IngestLogBatch(request)
         assert response.success is True
         print("✅ Network log ingested successfully")
 
@@ -175,9 +175,9 @@ ConnectionError: Unable to connect to database server""",
         }
 
         proto_log = create_proto_log(log_dict)
-        request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
+        request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
 
-        response = await self.stub.IngestLog(request)
+        response = await self.stub.IngestLogBatch(request)
         assert response.success is True
         print("✅ Database log ingested successfully")
 
@@ -196,9 +196,9 @@ ConnectionError: Unable to connect to database server""",
         }
 
         proto_log = create_proto_log(log_dict)
-        request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
+        request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
 
-        response = await self.stub.IngestLog(request)
+        response = await self.stub.IngestLogBatch(request)
         assert response.success is True
         print("✅ Critical log ingested successfully")
 
@@ -214,9 +214,9 @@ ConnectionError: Unable to connect to database server""",
         }
 
         proto_log = create_proto_log(log_dict)
-        request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
+        request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
 
-        response = await self.stub.IngestLog(request)
+        response = await self.stub.IngestLogBatch(request)
         assert response.success is True
         print("✅ Debug log ingested successfully")
 
@@ -236,9 +236,9 @@ ConnectionError: Unable to connect to database server""",
         }
 
         proto_log = create_proto_log(log_dict)
-        request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
+        request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
 
-        response = await self.stub.IngestLog(request)
+        response = await self.stub.IngestLogBatch(request)
         assert response.success is True
         print("✅ Log with SDK metadata ingested successfully")
 
@@ -268,9 +268,9 @@ ConnectionError: Unable to connect to database server""",
         }
 
         proto_log = create_proto_log(log_dict)
-        request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
+        request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
 
-        response = await self.stub.IngestLog(request)
+        response = await self.stub.IngestLogBatch(request)
         assert response.success is True
         print("✅ Log with nested attributes ingested successfully")
 
@@ -294,9 +294,9 @@ ConnectionError: Unable to connect to database server""",
         }
 
         proto_log = create_proto_log(log_dict)
-        request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
+        request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
 
-        response = await self.stub.IngestLog(request)
+        response = await self.stub.IngestLogBatch(request)
         assert response.success is True
         print("✅ JavaScript error ingested successfully")
 
@@ -319,9 +319,9 @@ KeyError: 'user_id'""",
         }
 
         proto_log = create_proto_log(log_dict)
-        request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
+        request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
 
-        response = await self.stub.IngestLog(request)
+        response = await self.stub.IngestLogBatch(request)
         assert response.success is True
         print("✅ Python traceback ingested successfully")
 
@@ -344,9 +344,9 @@ KeyError: 'user_id'""",
         }
 
         proto_log = create_proto_log(log_dict)
-        request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
+        request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
 
-        response = await self.stub.IngestLog(request)
+        response = await self.stub.IngestLogBatch(request)
         assert response.success is True
         print("✅ Java exception ingested successfully")
 
@@ -361,9 +361,9 @@ KeyError: 'user_id'""",
         }
 
         proto_log = create_proto_log(log_dict)
-        request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
+        request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
 
-        response = await self.stub.IngestLog(request)
+        response = await self.stub.IngestLogBatch(request)
         assert response.success is True
         print("✅ Response format is correct")
 
@@ -380,8 +380,8 @@ KeyError: 'user_id'""",
                 "message": f"Concurrent log {i}",
             }
             proto_log = create_proto_log(log_dict)
-            request = ingestion_pb2.IngestLogRequest(project_id=1, log=proto_log)
-            return await self.stub.IngestLog(request)
+            request = ingestion_pb2.IngestLogBatchRequest(project_id=1, logs=[proto_log])
+            return await self.stub.IngestLogBatch(request)
 
         tasks = [ingest_log(i) for i in range(50)]
         results = await asyncio.gather(*tasks)
