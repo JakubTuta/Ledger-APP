@@ -115,10 +115,11 @@ services:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
       RABBITMQ_DEFAULT_VHOST: "/"
+    entrypoint: ["sh", "/usr/local/bin/ledger-rabbitmq-entrypoint.sh"]
     volumes:
       - ledger-rabbitmq-data:/var/lib/rabbitmq
       - ./rabbitmq/rabbitmq.prod.conf:/etc/rabbitmq/rabbitmq.conf:ro
-      - ./rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+      - ./rabbitmq/entrypoint.sh:/usr/local/bin/ledger-rabbitmq-entrypoint.sh:ro
     ports:
       - "127.0.0.1:5672:5672"
     deploy:
