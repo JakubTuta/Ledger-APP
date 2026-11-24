@@ -5,8 +5,10 @@ import os
 import sys
 import time
 
+import asyncpg
 import httpx
 
+import cleanup
 import config as benchmark_config
 import drain as drain_module
 import load_engine
@@ -95,6 +97,12 @@ def _parse_args() -> argparse.Namespace:
         "--no-db-verify", action="store_true", help="Skip Logs DB row count verification"
     )
     parser.add_argument(
+        "--keep-data",
+        action="store_true",
+        help="Leave the provisioned account, project and ingested logs in the DBs after the run "
+        "(by default they are deleted and the disk space reclaimed)",
+    )
+    parser.add_argument(
         "--destructive-reset",
         action="store_true",
         help="Delete this project's rows before each stage/run (requires --expect-db)",
@@ -168,6 +176,8 @@ def _build_config(args: argparse.Namespace) -> benchmark_config.BenchmarkConfig:
         kwargs["respect_limits"] = True
     if args.no_db_verify:
         kwargs["no_db_verify"] = True
+    if args.keep_data:
+        kwargs["keep_data"] = True
     if args.destructive_reset:
         kwargs["destructive_reset"] = True
     if args.expect_db:
@@ -361,6 +371,24 @@ async def _run_steady_mode(
     )
 
 
+async def _cleanup_provisioned(cfg: benchmark_config.BenchmarkConfig, email: str) -> None:
+    print(
+        f"[bench] Cleaning up {email}: deleting its logs and reclaiming disk space ...", flush=True
+    )
+    try:
+        result = await cleanup.remove_provisioned_data(cfg, email)
+    except (RuntimeError, asyncpg.PostgresError, OSError) as e:
+        print(
+            f"[bench] CLEANUP FAILED, {email} and its data remain in the DBs: {e}", file=sys.stderr
+        )
+        return
+    print(
+        f"[bench] Cleanup done: {sum(result.rows_deleted.values()):,} rows deleted, "
+        f"{result.bytes_freed / 1_048_576:,.0f} MB reclaimed (use --keep-data to skip)",
+        flush=True,
+    )
+
+
 async def orchestrate(cfg: benchmark_config.BenchmarkConfig) -> models.RunReport:
     wall_start = time.time()
     started_at_utc = datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -389,155 +417,167 @@ async def orchestrate(cfg: benchmark_config.BenchmarkConfig) -> models.RunReport
                 project_id = await provisioning.resolve_existing_key(cfg, api_key)
             print(f"[bench] Using existing key | Project ID: {project_id}", flush=True)
 
-    api_key_prefix = (api_key[:16] + "...") if api_key else None
-    report: models.RunReport
+    try:
+        api_key_prefix = (api_key[:16] + "...") if api_key else None
+        report: models.RunReport
 
-    if cfg.mode == "steady":
-        print(
-            f"[bench] Steady-state: wire={cfg.wire} log_id_mode={cfg.log_id_mode} "
-            f"find_max={cfg.find_max} offered_rate={cfg.offered_rate} "
-            f"warmup={cfg.warmup_seconds}s hold={cfg.hold_seconds}s",
-            flush=True,
-        )
-        report = await _run_steady_mode(cfg, api_key, project_id)
-        report.provisioned_email = provisioned_email
-        report.provisioned_project_id = project_id
-        report.api_key_prefix = api_key_prefix
-        report.limits_bumped = limits_bumped
-
-    elif cfg.mode == "ramp":
-        print(
-            f"[bench] Auto-ramp (legacy): c={cfg.ramp_start}..{cfg.ramp_max} step={cfg.ramp_step} "
-            f"stage={cfg.ramp_stage_seconds}s gzip={cfg.gzip} wire={cfg.wire}",
-            flush=True,
-        )
-        stages = await ramp_module.run_ramp(cfg, api_key, project_id)
-
-        best_stage = max((s for s in stages if s.healthy), key=lambda s: s.drain_rate, default=None)
-        headline_rate = best_stage.drain_rate if best_stage else None
-        headline_conc = best_stage.concurrency if best_stage else None
-
-        if best_stage is not None:
-            verdict = (
-                f"SUSTAINABLE at {headline_rate:.0f} logs/s (concurrency={headline_conc}) "
-                f"[legacy ramp mode - drain_rate is a haircut on ingress, not a direct "
-                f"measurement; use --mode steady --find-max for a trustworthy headline]"
+        if cfg.mode == "steady":
+            print(
+                f"[bench] Steady-state: wire={cfg.wire} log_id_mode={cfg.log_id_mode} "
+                f"find_max={cfg.find_max} offered_rate={cfg.offered_rate} "
+                f"warmup={cfg.warmup_seconds}s hold={cfg.hold_seconds}s",
+                flush=True,
             )
+            report = await _run_steady_mode(cfg, api_key, project_id)
+            report.provisioned_email = provisioned_email
+            report.provisioned_project_id = project_id
+            report.api_key_prefix = api_key_prefix
+            report.limits_bumped = limits_bumped
+
+        elif cfg.mode == "ramp":
+            print(
+                f"[bench] Auto-ramp (legacy): c={cfg.ramp_start}..{cfg.ramp_max} step={cfg.ramp_step} "
+                f"stage={cfg.ramp_stage_seconds}s gzip={cfg.gzip} wire={cfg.wire}",
+                flush=True,
+            )
+            stages = await ramp_module.run_ramp(cfg, api_key, project_id)
+
+            best_stage = max(
+                (s for s in stages if s.healthy), key=lambda s: s.drain_rate, default=None
+            )
+            headline_rate = best_stage.drain_rate if best_stage else None
+            headline_conc = best_stage.concurrency if best_stage else None
+
+            if best_stage is not None:
+                verdict = (
+                    f"SUSTAINABLE at {headline_rate:.0f} logs/s (concurrency={headline_conc}) "
+                    f"[legacy ramp mode - drain_rate is a haircut on ingress, not a direct "
+                    f"measurement; use --mode steady --find-max for a trustworthy headline]"
+                )
+            else:
+                verdict = "OVERLOADED at lowest tested concurrency"
+
+            report = models.RunReport(
+                mode="ramp",
+                provisioned_email=provisioned_email,
+                provisioned_project_id=project_id,
+                api_key_prefix=api_key_prefix,
+                limits_bumped=limits_bumped,
+                stages=stages,
+                best_stage=best_stage,
+                headline_logs_per_second=headline_rate,
+                headline_concurrency=headline_conc,
+                verdict=verdict,
+                started_at_utc=started_at_utc,
+            )
+
         else:
-            verdict = "OVERLOADED at lowest tested concurrency"
+            template_pool = payload_module.build_template_pool(max(2000, cfg.batch_size * 2))
+            print(
+                f"[bench] Single run: c={cfg.concurrency} gzip={cfg.gzip} wire={cfg.wire} "
+                f"duration={cfg.duration_seconds}s total_logs={cfg.total_logs}",
+                flush=True,
+            )
 
-        report = models.RunReport(
-            mode="ramp",
-            provisioned_email=provisioned_email,
-            provisioned_project_id=project_id,
-            api_key_prefix=api_key_prefix,
-            limits_bumped=limits_bumped,
-            stages=stages,
-            best_stage=best_stage,
-            headline_logs_per_second=headline_rate,
-            headline_concurrency=headline_conc,
-            verdict=verdict,
-            started_at_utc=started_at_utc,
-        )
+            phase = await load_engine.run_phase(
+                cfg=cfg,
+                api_key=api_key,
+                concurrency=cfg.concurrency,
+                template_pool=template_pool,
+                duration_seconds=float(cfg.duration_seconds) if cfg.duration_seconds else None,
+                total_logs=cfg.total_logs,
+            )
 
-    else:
-        template_pool = payload_module.build_template_pool(max(2000, cfg.batch_size * 2))
-        print(
-            f"[bench] Single run: c={cfg.concurrency} gzip={cfg.gzip} wire={cfg.wire} "
-            f"duration={cfg.duration_seconds}s total_logs={cfg.total_logs}",
-            flush=True,
-        )
+            drain_client_limits = httpx.Limits(max_connections=4, max_keepalive_connections=2)
+            async with httpx.AsyncClient(
+                http2=False,
+                timeout=httpx.Timeout(30.0),
+                limits=drain_client_limits,
+            ) as monitor_client:
+                print("[bench] Draining queue ...", flush=True)
+                drain = await drain_module.wait_for_drain(monitor_client, cfg, timeout=120.0)
 
-        phase = await load_engine.run_phase(
-            cfg=cfg,
-            api_key=api_key,
-            concurrency=cfg.concurrency,
-            template_pool=template_pool,
-            duration_seconds=float(cfg.duration_seconds) if cfg.duration_seconds else None,
-            total_logs=cfg.total_logs,
-        )
+                db_delta: int | None = None
+                if not cfg.no_db_verify:
+                    try:
+                        if phase.run_id is not None:
+                            db_delta = await drain_module.count_log_rows_by_id_prefix(
+                                cfg.logs_db_dsn, project_id, phase.run_id
+                            )
+                        else:
+                            db_delta = await drain_module.count_log_rows(
+                                cfg.logs_db_dsn, project_id, phase.started_at
+                            )
+                    except Exception as e:
+                        print(f"[bench] DB verify error: {e}", flush=True)
 
-        drain_client_limits = httpx.Limits(max_connections=4, max_keepalive_connections=2)
-        async with httpx.AsyncClient(
-            http2=False,
-            timeout=httpx.Timeout(30.0),
-            limits=drain_client_limits,
-        ) as monitor_client:
-            print("[bench] Draining queue ...", flush=True)
-            drain = await drain_module.wait_for_drain(monitor_client, cfg, timeout=120.0)
+            total_time = phase.duration_s + drain.drain_seconds
+            drain_rate = phase.accepted / total_time if total_time > 0 else 0.0
 
-            db_delta: int | None = None
-            if not cfg.no_db_verify:
-                try:
-                    if phase.run_id is not None:
-                        db_delta = await drain_module.count_log_rows_by_id_prefix(
-                            cfg.logs_db_dsn, project_id, phase.run_id
-                        )
-                    else:
-                        db_delta = await drain_module.count_log_rows(
-                            cfg.logs_db_dsn, project_id, phase.started_at
-                        )
-                except Exception as e:
-                    print(f"[bench] DB verify error: {e}", flush=True)
+            db_match = db_delta is None or db_delta >= int(phase.accepted * 0.99)
+            verdict_parts: list[str] = []
+            if phase.errors.total > 0:
+                verdict_parts.append(f"errors={phase.errors.total}")
+            if not drain.drained:
+                verdict_parts.append("queue-not-drained")
+            if not db_match:
+                verdict_parts.append(f"db-mismatch(accepted={phase.accepted},db={db_delta})")
 
-        total_time = phase.duration_s + drain.drain_seconds
-        drain_rate = phase.accepted / total_time if total_time > 0 else 0.0
+            if not verdict_parts:
+                verdict = f"SUSTAINABLE at {drain_rate:.0f} logs/s"
+            else:
+                verdict = "OVERLOADED (" + ", ".join(verdict_parts) + ")"
 
-        db_match = db_delta is None or db_delta >= int(phase.accepted * 0.99)
-        verdict_parts: list[str] = []
-        if phase.errors.total > 0:
-            verdict_parts.append(f"errors={phase.errors.total}")
-        if not drain.drained:
-            verdict_parts.append("queue-not-drained")
-        if not db_match:
-            verdict_parts.append(f"db-mismatch(accepted={phase.accepted},db={db_delta})")
+            report = models.RunReport(
+                mode="single",
+                provisioned_email=provisioned_email,
+                provisioned_project_id=project_id,
+                api_key_prefix=api_key_prefix,
+                limits_bumped=limits_bumped,
+                single_phase=phase,
+                single_drain=drain,
+                single_db_delta=db_delta,
+                headline_logs_per_second=drain_rate,
+                headline_concurrency=cfg.concurrency,
+                verdict=verdict,
+                started_at_utc=started_at_utc,
+            )
 
-        if not verdict_parts:
-            verdict = f"SUSTAINABLE at {drain_rate:.0f} logs/s"
-        else:
-            verdict = "OVERLOADED (" + ", ".join(verdict_parts) + ")"
-
-        report = models.RunReport(
-            mode="single",
-            provisioned_email=provisioned_email,
-            provisioned_project_id=project_id,
-            api_key_prefix=api_key_prefix,
-            limits_bumped=limits_bumped,
-            single_phase=phase,
-            single_drain=drain,
-            single_db_delta=db_delta,
-            headline_logs_per_second=drain_rate,
-            headline_concurrency=cfg.concurrency,
-            verdict=verdict,
-            started_at_utc=started_at_utc,
-        )
-
-    report.finished_at_utc = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    report.total_wall_seconds = time.time() - wall_start
-    report.started_at_utc = report.started_at_utc or started_at_utc
-    report.config_summary = {
-        "mode": cfg.mode,
-        "base_url": cfg.base_url,
-        "batch_size": cfg.batch_size,
-        "gzip": cfg.gzip,
-        "wire": cfg.wire,
-        "log_id_mode": cfg.log_id_mode,
-        "offered_rate": cfg.offered_rate,
-        "find_max": cfg.find_max,
-        "warmup_seconds": cfg.warmup_seconds,
-        "hold_seconds": cfg.hold_seconds,
-        "max_inflight": cfg.max_inflight,
-        "slo_p50_ms": cfg.slo_p50_ms,
-        "slo_p99_ms": cfg.slo_p99_ms,
-        "client_cpu_budget": cfg.client_cpu_budget,
-        "ramp_start": cfg.ramp_start,
-        "ramp_step": cfg.ramp_step,
-        "ramp_max": cfg.ramp_max,
-        "ramp_stage_seconds": cfg.ramp_stage_seconds,
-        "limits_bypassed": limits_bumped,
-        "destructive_reset": cfg.destructive_reset,
-    }
-    return report
+        report.finished_at_utc = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        report.total_wall_seconds = time.time() - wall_start
+        report.started_at_utc = report.started_at_utc or started_at_utc
+        report.config_summary = {
+            "mode": cfg.mode,
+            "base_url": cfg.base_url,
+            "batch_size": cfg.batch_size,
+            "gzip": cfg.gzip,
+            "wire": cfg.wire,
+            "log_id_mode": cfg.log_id_mode,
+            "offered_rate": cfg.offered_rate,
+            "find_max": cfg.find_max,
+            "warmup_seconds": cfg.warmup_seconds,
+            "hold_seconds": cfg.hold_seconds,
+            "max_inflight": cfg.max_inflight,
+            "slo_p50_ms": cfg.slo_p50_ms,
+            "slo_p99_ms": cfg.slo_p99_ms,
+            "client_cpu_budget": cfg.client_cpu_budget,
+            "ramp_start": cfg.ramp_start,
+            "ramp_step": cfg.ramp_step,
+            "ramp_max": cfg.ramp_max,
+            "ramp_stage_seconds": cfg.ramp_stage_seconds,
+            "limits_bypassed": limits_bumped,
+            "destructive_reset": cfg.destructive_reset,
+        }
+        return report
+    finally:
+        if provisioned_email is not None:
+            if cfg.keep_data:
+                print(
+                    f"[bench] --keep-data: leaving {provisioned_email} and its logs in the DBs",
+                    flush=True,
+                )
+            else:
+                await _cleanup_provisioned(cfg, provisioned_email)
 
 
 def main() -> None:

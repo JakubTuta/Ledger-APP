@@ -101,6 +101,20 @@ class SteadyResult(pydantic.BaseModel):
     run_id: str | None = None
 
 
+class CleanupResult(pydantic.BaseModel):
+    """What removing a run's provisioned account and telemetry deleted, and the disk it freed."""
+
+    email: str
+    project_ids: list[int]
+    rows_deleted: dict[str, int]
+    logs_db_bytes_before: int
+    logs_db_bytes_after: int
+
+    @property
+    def bytes_freed(self) -> int:
+        return self.logs_db_bytes_before - self.logs_db_bytes_after
+
+
 class RunReport(pydantic.BaseModel):
     mode: str
     provisioned_email: str | None = None

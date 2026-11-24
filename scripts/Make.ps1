@@ -50,8 +50,8 @@ function Show-Help {
     Write-Host "  test-query   - Run query service tests"
     Write-Host "  test-migrations - Run migration service tests"
     Write-Host "  test-e2e     - Run the end-to-end suite against a live stack (requires 'up' first)"
-    Write-Host "  benchmark    - Measure max sustainable ingestion logs/s (steady-state --find-max, protobuf, exact DB verify)"
-    Write-Host "  bench-up     - Start the stack unlimited (no CPU caps, SYS_PTRACE) - use for all A/B benchmark work"
+    Write-Host "  benchmark    - Measure max sustainable ingestion logs/s (steady-state --find-max, protobuf, exact DB verify), then deletes its test data and reclaims the disk"
+    Write-Host "  bench-up    - Start the stack unlimited (no CPU caps, SYS_PTRACE) - use for all A/B benchmark work"
     Write-Host "  bench-up-prod-parity - Start the stack capped exactly like docker-compose.prod.yaml"
     Write-Host ""
     Write-Host "Database (migration service, run against the local infra containers):" -ForegroundColor Yellow

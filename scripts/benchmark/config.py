@@ -91,6 +91,7 @@ class BenchmarkConfig(pydantic.BaseModel):
     api_key: str | None = None
     project_id: int | None = None
     respect_limits: bool = False
+    keep_data: bool = False
     per_minute_limit: int = 1_000_000
     per_hour_limit: int = 1_000_000_000
     # Ceiling applied to all three per-signal quotas (logs/spans/metrics) during

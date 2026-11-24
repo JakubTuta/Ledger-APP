@@ -22,7 +22,7 @@ help:
 	@echo "  test-analytics - Run analytics workers tests"
 	@echo "  test-query  - Run query service tests"
 	@echo "  test-migrations - Run migration service tests"
-	@echo "  benchmark   - Measure max sustainable ingestion logs/s (auto-ramp, gzip, fresh key, DB verify)"
+	@echo "  benchmark   - Measure max sustainable ingestion logs/s (steady-state --find-max, fresh key, DB verify), then deletes its test data and reclaims the disk"
 	@echo ""
 	@echo "Database Commands (migration service, ARGS=... is passed through):"
 	@echo "  db-status   - Show schema version, current revision and pending revisions"
